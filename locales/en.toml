@@ -270,7 +270,7 @@ title_challenge = "DAILY CHALLENGE"
 title_arcade = "ARCADE MODE"
 go = "GO!"
 pause_hint = "[Esc] Pause"
-recording = "[q: REC]"
+recording = "[Q: REC]"
 queue_empty = "NEXT: [No more scenarios]"
 queue = "NEXT: %{names}"
 task = "TASK: %{description}"
@@ -564,15 +564,15 @@ description = "Complete %{target} scenarios"
 
 [quests.speed_delete_hard]
 name = "Speed Run: Delete Line"
-description = "Complete 'delete_line_001' in under 5 seconds"
+description = "Complete '%{scenario}' in under %{seconds} seconds"
 
 [quests.speed_move_hard]
 name = "Speed Run: Navigation"
-description = "Complete 'move_down_basic_001' in under 3 seconds"
+description = "Complete '%{scenario}' in under %{seconds} seconds"
 
 [quests.speed_word_hard]
 name = "Speed Run: Word Jump"
-description = "Complete 'word_forward_basic_001' in under 3 seconds"
+description = "Complete '%{scenario}' in under %{seconds} seconds"
 
 [quests.time_15_hard]
 name = "Dedicated Practice"

@@ -2,6 +2,7 @@
 
 use crate::helix::error::SimulatorError;
 use crate::helix::indent::TabWidth;
+use crate::helix::simulator::search_state::compile_smart_case;
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use crate::limits::MAX_REGEX_SELECTION_MATCHES;
 use helix_core::comment::toggle_line_comments;
@@ -13,7 +14,7 @@ use helix_core::selection::{
     keep_or_remove_matches, select_on_matches, split_on_matches, split_on_newline,
 };
 use helix_core::{Range, Selection, Transaction};
-use helix_stdx::rope::{Regex, RopeSliceExt};
+use helix_stdx::rope::RopeSliceExt;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 
@@ -320,14 +321,6 @@ fn truncate_matches(selection: Selection, max: usize) -> Selection {
     Selection::new(ranges.into(), 0)
 }
 
-/// Compile `pattern` for the rope-based matchers.
-///
-/// The rope regex engine reports its own build error type, which this crate cannot name,
-/// so the failure is carried as a syntax error with the engine's message.
-fn compile_regex(pattern: &str) -> Result<Regex, SimulatorError> {
-    Regex::new(pattern).map_err(|e| SimulatorError::invalid_pattern(&e))
-}
-
 /// Select regex matches within the current selection (s command)
 ///
 /// `pattern` has already been prompt-validated by `RegexPromptPending`
@@ -342,7 +335,7 @@ pub(crate) fn select_regex<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
 ) -> Result<(), SimulatorError> {
-    let regex = compile_regex(pattern)?;
+    let regex = compile_smart_case(pattern)?;
     let slice = sim.doc.slice(..);
     if let Some(new_selection) = select_on_matches(slice, &sim.selection, &regex) {
         sim.selection = truncate_matches(new_selection, MAX_REGEX_SELECTION_MATCHES);
@@ -362,7 +355,7 @@ pub(crate) fn split_selection<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
     pattern: &str,
 ) -> Result<(), SimulatorError> {
-    let regex = compile_regex(pattern)?;
+    let regex = compile_smart_case(pattern)?;
     let slice = sim.doc.slice(..);
     let new_selection = split_on_matches(slice, &sim.selection, &regex);
     sim.selection = truncate_matches(new_selection, MAX_REGEX_SELECTION_MATCHES);
@@ -425,7 +418,7 @@ fn filter_selections_by_regex<M: EditorMode>(
     pattern: &str,
     remove: bool,
 ) -> Result<(), SimulatorError> {
-    let regex = compile_regex(pattern)?;
+    let regex = compile_smart_case(pattern)?;
     let slice = sim.doc.slice(..);
     let kept = keep_or_remove_matches(slice, &sim.selection, &regex, remove)
         .ok_or(SimulatorError::NoSelections)?;
@@ -1043,6 +1036,71 @@ mod tests {
             select_regex(&mut sim, "("),
             Err(SimulatorError::InvalidRegex(_))
         );
+    }
+
+    fn ranges_of(sim: &HelixSimulator<NormalMode>) -> Vec<(usize, usize)> {
+        sim.selection
+            .ranges()
+            .iter()
+            .map(|r| (r.from(), r.to()))
+            .collect()
+    }
+
+    #[test]
+    fn select_regex_is_case_insensitive_for_lowercase_patterns() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("Foo foo".to_string());
+        sim.selection = Selection::single(0, 7);
+        select_regex(&mut sim, "foo").unwrap();
+        assert_eq!(ranges_of(&sim), vec![(0, 3), (4, 7)]);
+    }
+
+    #[test]
+    fn select_regex_is_case_sensitive_with_an_uppercase_character() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("Foo foo".to_string());
+        sim.selection = Selection::single(0, 7);
+        select_regex(&mut sim, "Foo").unwrap();
+        assert_eq!(ranges_of(&sim), vec![(0, 3)]);
+    }
+
+    #[test]
+    fn uppercase_escape_makes_select_regex_case_sensitive() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("ab aB".to_string());
+        sim.selection = Selection::single(0, 5);
+        select_regex(&mut sim, r"\Sb").unwrap();
+        assert_eq!(ranges_of(&sim), vec![(0, 2)]);
+    }
+
+    #[test]
+    fn split_selection_applies_smart_case() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("aXbxc".to_string());
+        sim.selection = Selection::single(0, 5);
+        split_selection(&mut sim, "x").unwrap();
+        assert_eq!(ranges_of(&sim), vec![(0, 1), (2, 3), (4, 5)]);
+
+        sim.selection = Selection::single(0, 5);
+        split_selection(&mut sim, "X").unwrap();
+        assert_eq!(ranges_of(&sim), vec![(0, 1), (2, 5)]);
+    }
+
+    #[test]
+    fn keep_and_remove_selections_apply_smart_case() {
+        let ranges = vec![Range::new(0, 3), Range::new(4, 7)];
+        let doc = "Foo foo";
+
+        let mut keep: HelixSimulator<NormalMode> = HelixSimulator::new(doc.to_string());
+        keep.selection = Selection::new(ranges.clone().into(), 0);
+        keep_selections_regex(&mut keep, "foo").unwrap();
+        assert_eq!(ranges_of(&keep), vec![(0, 3), (4, 7)]);
+
+        let mut keep_exact: HelixSimulator<NormalMode> = HelixSimulator::new(doc.to_string());
+        keep_exact.selection = Selection::new(ranges.clone().into(), 0);
+        keep_selections_regex(&mut keep_exact, "Foo").unwrap();
+        assert_eq!(ranges_of(&keep_exact), vec![(0, 3)]);
+
+        let mut remove: HelixSimulator<NormalMode> = HelixSimulator::new(doc.to_string());
+        remove.selection = Selection::new(ranges.into(), 0);
+        remove_selections_regex(&mut remove, "Foo").unwrap();
+        assert_eq!(ranges_of(&remove), vec![(4, 7)]);
     }
 
     #[test]

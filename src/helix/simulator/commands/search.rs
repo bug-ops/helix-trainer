@@ -577,5 +577,63 @@ mod tests {
         assert_ne!(first_match, second_match);
     }
 
+    #[test]
+    fn slash_lowercase_pattern_selects_an_uppercase_match() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("Foo".to_string());
+        search_pattern_forward(&mut sim, "foo").unwrap();
+        assert_eq!(sim.selection, Selection::single(0, 3));
+    }
+
+    #[test]
+    fn slash_uppercase_pattern_is_case_sensitive() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("x foo Foo".to_string());
+        search_pattern_forward(&mut sim, "Foo").unwrap();
+        assert_eq!(sim.selection, Selection::single(6, 9));
+    }
+
+    #[test]
+    fn question_mark_applies_smart_case() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("Foo bar".to_string());
+        sim.selection = Selection::point(6);
+        search_pattern_backward(&mut sim, "foo").unwrap();
+        assert_eq!(sim.selection, Selection::single(0, 3));
+    }
+
+    #[test]
+    fn n_and_big_n_follow_smart_case() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("foo Foo FOO".to_string());
+        search_pattern_forward(&mut sim, "foo").unwrap();
+        assert_eq!(sim.selection, Selection::single(4, 7));
+        goto_next_match(&mut sim).unwrap();
+        assert_eq!(sim.selection, Selection::single(8, 11));
+        goto_prev_match(&mut sim).unwrap();
+        assert_eq!(sim.selection, Selection::single(4, 7));
+    }
+
+    #[test]
+    fn star_pattern_is_case_insensitive_when_the_selection_is_lowercase() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("foo Foo".to_string());
+        sim.selection = Selection::single(0, 3);
+        search_selection_detect_word_boundaries(&mut sim).unwrap();
+        goto_next_match(&mut sim).unwrap();
+        assert_eq!(sim.selection, Selection::single(4, 7));
+    }
+
+    #[test]
+    fn alt_star_pattern_is_case_sensitive_when_the_selection_has_uppercase() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("Foo foo Foo".to_string());
+        sim.selection = Selection::single(0, 3);
+        search_selection(&mut sim).unwrap();
+        goto_next_match(&mut sim).unwrap();
+        assert_eq!(sim.selection, Selection::single(8, 11));
+    }
+
+    #[test]
+    fn uppercase_escape_makes_the_search_case_sensitive() {
+        let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("aB ab".to_string());
+        search_pattern_forward(&mut sim, r"\Sb").unwrap();
+        assert_eq!(sim.selection, Selection::single(3, 5));
+    }
+
     // ========== Helper function tests ==========
 }

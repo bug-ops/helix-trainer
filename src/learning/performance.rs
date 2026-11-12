@@ -1422,6 +1422,268 @@ mod tests {
         assert!(all.contains(&&cid("p")));
     }
 
+    fn solid_card() -> CommandPerformance {
+        let mut card = CommandPerformance::new(Utc::now());
+        card.state = CardState::Review;
+        card.stability = Stability(40.0);
+        card.difficulty = Difficulty(4.0);
+        card.reps = 5;
+        card.attempts = 10;
+        card.successes = 10;
+        card
+    }
+
+    fn is_weak(card: CommandPerformance) -> bool {
+        let tracker = PerformanceTracker::from_stats(HashMap::from([(cid("x"), card)]).into());
+        tracker.weak_commands().contains(&cid("x"))
+    }
+
+    #[test]
+    fn weak_commands_skips_a_solid_card() {
+        assert!(!is_weak(solid_card()));
+    }
+
+    #[test]
+    fn weak_commands_difficulty_threshold_is_exclusive() {
+        let mut card = solid_card();
+        card.difficulty = Difficulty(7.0);
+        assert!(!is_weak(card.clone()));
+        card.difficulty = Difficulty(7.5);
+        assert!(is_weak(card));
+    }
+
+    #[test]
+    fn weak_commands_success_rate_threshold_is_exclusive() {
+        let mut card = solid_card();
+        card.successes = 7;
+        assert!(!is_weak(card.clone()));
+        card.successes = 6;
+        assert!(is_weak(card));
+    }
+
+    #[test]
+    fn weak_commands_flags_beginner_level() {
+        let mut card = solid_card();
+        card.state = CardState::Learning;
+        assert!(is_weak(card));
+    }
+
+    #[test]
+    fn weak_commands_lapse_threshold_is_exclusive() {
+        let mut card = solid_card();
+        card.lapses = 2;
+        assert!(!is_weak(card.clone()));
+        card.lapses = 3;
+        assert!(is_weak(card));
+    }
+
+    #[test]
+    fn mastery_thresholds_are_exclusive() {
+        let mut card = solid_card();
+        card.stability = Stability(30.0);
+        assert_eq!(card.mastery_level(), MasteryLevel::Advanced);
+        card.stability = Stability(30.5);
+        assert_eq!(card.mastery_level(), MasteryLevel::Master);
+        card.difficulty = Difficulty(5.0);
+        assert_eq!(card.mastery_level(), MasteryLevel::Advanced);
+        card.stability = Stability(7.0);
+        assert_eq!(card.mastery_level(), MasteryLevel::Intermediate);
+        card.stability = Stability(7.5);
+        assert_eq!(card.mastery_level(), MasteryLevel::Advanced);
+    }
+
+    #[test]
+    fn mastery_level_presentation_and_tiers() {
+        let levels = [
+            (MasteryLevel::Beginner, "🔰", 0, false),
+            (MasteryLevel::Intermediate, "📚", 1, false),
+            (MasteryLevel::Advanced, "⭐", 2, false),
+            (MasteryLevel::Master, "🏆", 3, true),
+        ];
+        for (level, emoji, tier, max) in levels {
+            assert_eq!(level.emoji(), emoji);
+            assert_eq!(level.tier_level(), tier);
+            assert_eq!(level.is_max_tier(), max);
+        }
+    }
+
+    #[test]
+    fn performance_data_accessors_reflect_contents() {
+        let empty = PerformanceData::default();
+        assert!(empty.is_empty());
+        assert_eq!(empty.len(), 0);
+        assert!(!empty.contains_key(&cid("h")));
+        assert_eq!(empty.iter().count(), 0);
+
+        let data = load(&[
+            ("h", card_json("5.0", "6.0", 3, 2)),
+            ("j", card_json("5.0", "6.0", 3, 2)),
+        ]);
+        assert!(!data.is_empty());
+        assert_eq!(data.len(), 2);
+        assert!(data.contains_key(&cid("h")));
+        assert!(!data.contains_key(&cid("k")));
+        assert_eq!(data.iter().count(), 2);
+    }
+
+    #[test]
+    fn loaded_card_exposes_persisted_counters() {
+        let data = load(&[("h", card_json("5.0", "6.0", 4, 3))]);
+        let perf = data.get(&cid("h")).unwrap();
+        assert_eq!(perf.lapses(), 1);
+        assert_eq!(perf.total_time(), Duration::from_secs(3));
+        assert_eq!(perf.attempts(), 4);
+        assert_eq!(perf.successes(), 3);
+    }
+
+    #[test]
+    fn record_attempt_accumulates_counters_and_time() {
+        let mut tracker = PerformanceTracker::new();
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(2),
+            true,
+            Duration::from_secs(1),
+        );
+        tracker.record_attempt(
+            &cid("x"),
+            Duration::from_secs(3),
+            false,
+            Duration::from_secs(1),
+        );
+
+        let perf = tracker.performance(&cid("x")).unwrap();
+        assert_eq!(perf.attempts(), 2);
+        assert_eq!(perf.successes(), 1);
+        assert_eq!(perf.total_time(), Duration::from_secs(5));
+        assert_eq!(perf.avg_time(), Duration::from_millis(2500));
+    }
+
+    fn memory() -> MemoryState {
+        MemoryState {
+            stability: 5.0,
+            difficulty: 5.0,
+            stability_fast: 5.0,
+        }
+    }
+
+    #[test]
+    fn again_counts_a_lapse_and_picks_learning_or_relearning() {
+        let now = Utc::now();
+        let mut fresh = CommandPerformance::new(now);
+        fresh
+            .update_from_next_state(memory(), 1.0, Rating::Again, now)
+            .unwrap();
+        assert_eq!(fresh.state(), CardState::Learning);
+        assert_eq!(fresh.lapses(), 1);
+
+        let mut seasoned = solid_card();
+        seasoned
+            .update_from_next_state(memory(), 1.0, Rating::Again, now)
+            .unwrap();
+        assert_eq!(seasoned.state(), CardState::Relearning);
+        assert_eq!(seasoned.lapses(), 1);
+        assert_eq!(seasoned.reps(), 6);
+    }
+
+    #[test]
+    fn good_review_needs_a_day_of_interval_to_leave_learning() {
+        let now = Utc::now();
+        let mut short = CommandPerformance::new(now);
+        short
+            .update_from_next_state(memory(), 0.5, Rating::Good, now)
+            .unwrap();
+        assert_eq!(short.state(), CardState::Learning);
+
+        let mut long = CommandPerformance::new(now);
+        long.update_from_next_state(memory(), 1.0, Rating::Good, now)
+            .unwrap();
+        assert_eq!(long.state(), CardState::Review);
+    }
+
+    #[test]
+    fn hard_keeps_the_current_state_family() {
+        let now = Utc::now();
+        for (from, to) in [
+            (CardState::New, CardState::Learning),
+            (CardState::Learning, CardState::Learning),
+            (CardState::Relearning, CardState::Relearning),
+            (CardState::Review, CardState::Review),
+        ] {
+            let mut card = CommandPerformance::new(now);
+            card.state = from;
+            card.update_from_next_state(memory(), 3.0, Rating::Hard, now)
+                .unwrap();
+            assert_eq!(card.state(), to, "from {from:?}");
+        }
+    }
+
+    #[test]
+    fn update_schedules_the_due_date_from_the_interval() {
+        let now: DateTime<Utc> = "2026-01-15T12:00:00Z".parse().unwrap();
+        let mut first = CommandPerformance::new(now);
+        first
+            .update_from_next_state(memory(), 4.0, Rating::Good, now)
+            .unwrap();
+        assert_eq!(first.due(), now);
+        assert_eq!(first.scheduled_days(), 4);
+
+        let mut again = solid_card();
+        again
+            .update_from_next_state(memory(), 4.4, Rating::Good, now)
+            .unwrap();
+        assert_eq!(again.scheduled_days(), 4);
+        assert_eq!(again.due(), now + chrono::Duration::days(4));
+        assert_eq!(again.last_review(), now);
+
+        let mut tiny = solid_card();
+        tiny.update_from_next_state(memory(), 0.1, Rating::Good, now)
+            .unwrap();
+        assert_eq!(tiny.scheduled_days(), 1);
+    }
+
+    #[test]
+    fn elapsed_days_counts_whole_days_only_after_the_first_review() {
+        let now: DateTime<Utc> = "2026-01-15T12:00:00Z".parse().unwrap();
+        let mut card = CommandPerformance::new(now - chrono::Duration::days(3));
+        assert_eq!(PerformanceTracker::elapsed_days_since_review(&card, now), 0);
+
+        card.reps = 1;
+        assert_eq!(PerformanceTracker::elapsed_days_since_review(&card, now), 3);
+        assert_eq!(
+            PerformanceTracker::elapsed_days_since_review(&card, now - chrono::Duration::days(10)),
+            0
+        );
+    }
+
+    #[test]
+    fn mastery_change_is_reported_only_on_improvement() {
+        let mut low = solid_card();
+        low.stability = Stability(3.0);
+        low.reps = 1;
+        let mut tracker = PerformanceTracker::from_stats(HashMap::from([(cid("l"), low)]).into());
+        let unchanged = tracker.record_attempt_with_mastery_change(
+            &cid("l"),
+            Duration::from_secs(60),
+            false,
+            ReferenceTime::SINGLE_ACTION,
+        );
+        assert!(unchanged.is_none());
+
+        let mut tracker = PerformanceTracker::new();
+        let promoted = (0..6).find_map(|_| {
+            tracker.record_attempt_with_mastery_change(
+                &cid("x"),
+                Duration::from_millis(100),
+                true,
+                ReferenceTime::SINGLE_ACTION,
+            )
+        });
+        let (command, old, new) = promoted.expect("repeated quick successes promote the card");
+        assert_eq!(command, cid("x"));
+        assert!(new.tier_level() > old.tier_level());
+    }
+
     /// Strategy for one simulated review: (success, duration, optimal duration, days
     /// elapsed since the previous review). `elapsed_days` ranges up to a year so both
     /// properties exercise FSRS's primary scheduling input (`days_elapsed` in

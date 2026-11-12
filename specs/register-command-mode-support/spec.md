@@ -236,11 +236,11 @@ area, shipped after the retroactive documentation above was written:
   `Ctrl-f`/`Ctrl-u`/`Ctrl-d` (half-page/page scroll), `%` (select-all), and
   `R` (replace-selection-with-yanked), plus a bug fix recognizing
   Ctrl-modified keys that previously fell through to their unmodified
-  bare-key command. Explicitly deferred `q`/`Q` (macros — no
+  bare-key command. Explicitly deferred `Q`/`q` (macros — no
   record/replay logic existed) and `s`/`S` (selection-regex — no-op
   stubs) as "from-scratch feature work, not scenario content."
 - **`a4efc2e`** — implemented exactly what `d66278d` deferred: `s`/`S`
-  (regex select/split) and `q`/`Q` (macro record/replay). Fully documented
+  (regex select/split) and `Q`/`q` (macro record/replay). Fully documented
   in its own package, [[../regex-selection-and-macro-commands/spec|Regex
   Selection and Macro Commands]]. This closes issue #198's remaining
   scope; the "still-open content-coverage gap" language in this package's

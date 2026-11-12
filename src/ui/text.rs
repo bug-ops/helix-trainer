@@ -34,7 +34,14 @@ pub fn quest_description(quest: &Quest) -> String {
             command, target, ..
         } => t!(key.as_str(), command = command.as_str(), target = target),
         QuestType::ScenarioCompletion { target, .. } => t!(key.as_str(), target = target),
-        QuestType::SpeedRun { .. } => t!(key.as_str()),
+        QuestType::SpeedRun {
+            scenario_id,
+            time_limit,
+        } => t!(
+            key.as_str(),
+            scenario = scenario_id.as_str(),
+            seconds = time_limit.as_secs()
+        ),
         QuestType::TimeInvested { target_minutes, .. } => {
             t!(key.as_str(), minutes = target_minutes)
         }
@@ -93,5 +100,27 @@ mod tests {
             quest_description(&Quest::from(template)),
             "Move cursor left 10 times using 'h'"
         );
+    }
+
+    #[test]
+    fn speed_run_description_fills_scenario_and_seconds() {
+        let templates = QuestLoader::new().load_from_embedded("en").unwrap();
+        for (id, expected) in [
+            (
+                "speed_delete_hard",
+                "Complete 'delete_line_001' in under 5 seconds",
+            ),
+            (
+                "speed_move_hard",
+                "Complete 'move_down_basic_001' in under 3 seconds",
+            ),
+            (
+                "speed_word_hard",
+                "Complete 'word_forward_basic_001' in under 3 seconds",
+            ),
+        ] {
+            let template = templates.iter().find(|t| t.id.as_str() == id).unwrap();
+            assert_eq!(quest_description(&Quest::from(template)), expected, "{id}");
+        }
     }
 }

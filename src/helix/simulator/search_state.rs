@@ -11,6 +11,26 @@ use std::ops::Range;
 /// Maximum pattern length (prevents regex `DoS` attacks)
 const MAX_PATTERN_LENGTH: usize = 1000;
 
+/// Compile `pattern` as Helix's regex prompt does with the default
+/// `search.smart-case`: per-line anchors, and case-insensitive unless the
+/// pattern contains an uppercase character.
+///
+/// Shared by search and the selection commands (`s`, `S`, `K`, `Alt-K`).
+///
+/// # Errors
+///
+/// Returns a [`SimulatorError`] if `pattern` is not a valid regex.
+pub(crate) fn compile_smart_case(pattern: &str) -> Result<Regex, SimulatorError> {
+    RegexBuilder::new()
+        .syntax(
+            Config::new()
+                .multi_line(true)
+                .case_insensitive(!pattern.chars().any(char::is_uppercase)),
+        )
+        .build(pattern)
+        .map_err(|e| SimulatorError::invalid_pattern(&e))
+}
+
 /// Search direction for forward or backward search
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SearchDirection {
@@ -53,7 +73,8 @@ impl SearchState {
 
     /// Set search pattern and direction
     ///
-    /// Compiles the regex.
+    /// Compiles the regex with Helix's default `search.smart-case`: a pattern
+    /// without uppercase characters matches case-insensitively.
     ///
     /// # Errors
     ///
@@ -70,10 +91,7 @@ impl SearchState {
             });
         }
 
-        let regex = RegexBuilder::new()
-            .syntax(Config::new().multi_line(true))
-            .build(pattern)
-            .map_err(|e| SimulatorError::invalid_pattern(&e))?;
+        let regex = compile_smart_case(pattern)?;
         self.pattern = Some(pattern.to_string());
         self.direction = direction;
         self.regex = Some(regex);
@@ -207,6 +225,23 @@ mod tests {
             find("foo", text, 2, SearchDirection::Backward),
             Some(16..19)
         );
+    }
+
+    #[test]
+    fn lowercase_pattern_is_case_insensitive() {
+        assert_eq!(
+            find("foo", "xx Foo", 0, SearchDirection::Forward),
+            Some(3..6)
+        );
+    }
+
+    #[test]
+    fn pattern_with_uppercase_is_case_sensitive() {
+        assert_eq!(
+            find("Foo", "foo Foo", 0, SearchDirection::Forward),
+            Some(4..7)
+        );
+        assert_eq!(find("Foo", "foo FOO", 0, SearchDirection::Forward), None);
     }
 
     #[test]

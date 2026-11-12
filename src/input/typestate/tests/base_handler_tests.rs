@@ -123,7 +123,7 @@ fn test_base_state_till_backward_prefix() {
 #[test]
 fn test_base_state_unknown_key_stays() {
     // Test that unknown keys stay in base state.
-    // '@' is not bound to anything - unlike 'Q', which is now the macro
+    // '@' is not bound to anything - unlike 'q', which is the macro
     // replay command (see test_base_state_macro_replay_transitions below).
     let result = KeyHandler::handle_key(
         &BaseState,
@@ -136,7 +136,7 @@ fn test_base_state_unknown_key_stays() {
 fn test_base_state_macro_toggle_executes() {
     let result = KeyHandler::handle_key(
         &BaseState,
-        KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
+        KeyEvent::new(KeyCode::Char('Q'), KeyModifiers::SHIFT),
     );
     assert_eq!(
         result,
@@ -148,7 +148,7 @@ fn test_base_state_macro_toggle_executes() {
 fn test_base_state_macro_replay_executes() {
     let result = KeyHandler::handle_key(
         &BaseState,
-        KeyEvent::new(KeyCode::Char('Q'), KeyModifiers::SHIFT),
+        KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
     );
     assert_eq!(result, HandlerResult::Execute(normal(CMD_REPLAY_MACRO)));
 }

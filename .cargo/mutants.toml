@@ -21,6 +21,8 @@ exclude_re = [
     "impl PartialEq for ReviewItem",
     "fmt::Formatter",
     "ratatui::",
+    # The two guards only decide whether a warn! is logged.
+    "(replace > with .*|delete !) in <impl Deserialize<'de> for PerformanceData>::deserialize",
 ]
 
 # A hanging mutant is cut off instead of stalling the job.

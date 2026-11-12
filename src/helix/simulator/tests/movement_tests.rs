@@ -584,3 +584,23 @@ fn test_count_is_ignored_by_flip_selections() {
     run(&mut counted, &["fc", "2Alt-;"]);
     assert_eq!(text_and_ranges(&once), text_and_ranges(&counted));
 }
+
+#[test]
+fn test_flip_selections_flips_every_range() {
+    let mut sim = AnyModeSimulator::new("ab cd ef".to_string());
+    run(&mut sim, &[CMD_SELECT_ALL, "s [a-f]+"]);
+    let before = text_and_ranges(&sim).1;
+    assert_eq!(before, vec![(0, 2), (3, 5), (6, 8)]);
+    run(&mut sim, &["Alt-;"]);
+    assert_eq!(text_and_ranges(&sim).1, vec![(2, 0), (5, 3), (8, 6)]);
+    run(&mut sim, &["Alt-;"]);
+    assert_eq!(text_and_ranges(&sim).1, before);
+}
+
+#[test]
+fn test_repeated_delete_with_copied_cursors_keeps_closing_brace() {
+    let mut sim = AnyModeSimulator::new(SCENARIO_14.to_string());
+    run(&mut sim, &["l", "C", "C", "C", CMD_DELETE_SELECTION]);
+    run(&mut sim, &[CMD_DELETE_SELECTION]);
+    assert!(text_and_ranges(&sim).0.ends_with("\n}"));
+}

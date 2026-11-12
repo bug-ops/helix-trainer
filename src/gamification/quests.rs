@@ -1033,4 +1033,125 @@ mod tests {
         let registry = QuestTemplateRegistry::default();
         assert!(registry.is_empty());
     }
+
+    mod mutant_gaps {
+        use super::*;
+        use crate::learning::ProgressTracker;
+
+        fn exploration(target: u32, used: &[&str]) -> QuestType {
+            QuestType::Exploration {
+                target_commands: target,
+                commands_used: used.iter().map(|c| ncmd(c)).collect(),
+            }
+        }
+
+        #[test]
+        fn progress_current_and_target_per_variant() {
+            let practice = QuestType::CommandPractice {
+                command: ncmd(CMD_YANK),
+                target: 4,
+                current: 1,
+            };
+            let scenarios = QuestType::ScenarioCompletion {
+                target: 8,
+                current: 2,
+            };
+            let time = QuestType::TimeInvested {
+                target_minutes: 10,
+                current_minutes: 5,
+            };
+            let explore = exploration(4, &["h", "j"]);
+            let speed = QuestType::SpeedRun {
+                scenario_id: sid("delete_line_001"),
+                time_limit: Duration::from_secs(5),
+            };
+
+            let expected = [
+                (&practice, 0.25, 1, 4),
+                (&scenarios, 0.25, 2, 8),
+                (&time, 0.5, 5, 10),
+                (&explore, 0.5, 2, 4),
+                (&speed, 0.0, 0, 1),
+            ];
+            for (quest, progress, current, target) in expected {
+                assert!(
+                    (quest.progress() - progress).abs() < f64::EPSILON,
+                    "{quest:?}"
+                );
+                assert_eq!(ProgressTracker::current(quest), current, "{quest:?}");
+                assert_eq!(ProgressTracker::target(quest), target, "{quest:?}");
+            }
+        }
+
+        #[test]
+        fn progress_is_capped_at_one() {
+            let over = QuestType::TimeInvested {
+                target_minutes: 5,
+                current_minutes: 50,
+            };
+            assert!((over.progress() - 1.0).abs() < f64::EPSILON);
+            assert!(over.is_completed());
+        }
+
+        #[test]
+        fn completed_quest_reports_full_progress_and_target() {
+            let mut quest = Quest::new(
+                qid("scenario_5_easy"),
+                QuestType::ScenarioCompletion {
+                    target: 5,
+                    current: 1,
+                },
+                QuestDifficulty::Easy,
+            );
+            assert!(!quest.completed);
+            assert!(!quest.is_completed());
+            assert_eq!(ProgressTracker::current(&quest), 1);
+            assert_eq!(ProgressTracker::target(&quest), 5);
+
+            quest.mark_completed();
+
+            assert!(quest.completed);
+            assert!(quest.is_completed());
+            assert!((quest.progress() - 1.0).abs() < f64::EPSILON);
+            assert_eq!(ProgressTracker::current(&quest), 5);
+            assert_eq!(ProgressTracker::target(&quest), 5);
+        }
+
+        #[test]
+        fn registry_lookup_and_size() {
+            let registry = test_registry();
+            assert!(!registry.is_empty());
+            let first = registry
+                .get_by_difficulty(crate::config::quests::QuestDifficulty::Easy)
+                .first()
+                .map(|t| t.id.clone())
+                .expect("an easy template exists");
+
+            assert_eq!(registry.get_by_id(&first).map(|t| &t.id), Some(&first));
+            assert!(registry.get_by_id(&qid("no_such_quest")).is_none());
+            let total: usize = [
+                crate::config::quests::QuestDifficulty::Easy,
+                crate::config::quests::QuestDifficulty::Medium,
+                crate::config::quests::QuestDifficulty::Hard,
+            ]
+            .into_iter()
+            .map(|d| registry.get_by_difficulty(d).len())
+            .sum();
+            assert_eq!(registry.len(), total);
+        }
+
+        #[test]
+        fn speed_run_time_limit_round_trips_as_whole_seconds() {
+            let quest = QuestType::SpeedRun {
+                scenario_id: sid("delete_line_001"),
+                time_limit: Duration::from_secs(7),
+            };
+
+            let json = serde_json::to_value(&quest).unwrap();
+            assert_eq!(json["SpeedRun"]["time_limit"], 7);
+            let back: QuestType = serde_json::from_value(json).unwrap();
+
+            assert_eq!(back, quest);
+        }
+    }
 }

@@ -134,3 +134,11 @@ fn a_search_outside_the_view_centers_it() {
         (&["/ L40", "/ L10", CMD_PAGE_DOWN], "29:0 | lines 70"),
     ]);
 }
+
+#[test]
+fn a_fresh_simulator_pages_by_the_fixed_logical_height() {
+    // The Task screen applies no rendered height (#541 decision B): scenarios such as
+    // `movement/scroll.toml` rely on Ctrl-d moving 12 lines at any terminal size.
+    assert_eq!(after(&[CMD_HALF_PAGE_DOWN]), "12:0 | lines 70");
+    assert_eq!(after(&[CMD_PAGE_DOWN]), "29:0 | lines 70");
+}

@@ -170,10 +170,10 @@ pub(crate) const CMD_ESCAPE: &str = "Escape";
 pub(crate) const CMD_REPEAT: &str = ".";
 
 // Macro recording and replay
-/// Start or stop recording a macro. Key: `q`.
-pub const CMD_TOGGLE_MACRO_RECORDING: &str = "q";
-/// Replay the recorded macro. Key: `Q`.
-pub const CMD_REPLAY_MACRO: &str = "Q";
+/// Start or stop recording a macro. Key: `Q`.
+pub const CMD_TOGGLE_MACRO_RECORDING: &str = "Q";
+/// Replay the recorded macro. Key: `q`.
+pub const CMD_REPLAY_MACRO: &str = "q";
 
 // Replace command prefix (used with character, e.g., "rx")
 /// Replace each selected character with the next typed one (takes a character argument). Key: `r`.

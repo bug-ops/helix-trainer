@@ -228,7 +228,7 @@ where
         && let Some(movement) = arrow_movement(key.code)
         && let Some(keys) = CanonicalKeys::from_event(movement)
     {
-        let typed = keys.to_cow();
+        let typed = Cow::Owned(PhysicalKey::from_event(key).label());
         return Some(make_message(keys.into(), typed));
     }
 
@@ -1607,6 +1607,39 @@ mod tests {
                     assert_eq!(keys.as_str(), CMD_MOVE_DOWN);
                 }
                 _ => panic!("Expected ExecuteCommand with CMD_MOVE_DOWN"),
+            }
+        }
+
+        #[test]
+        fn test_mapped_arrow_keys_record_the_typed_arrow_not_the_movement_letter() {
+            use crate::grammar::commands::{
+                CMD_MOVE_DOWN, CMD_MOVE_LEFT, CMD_MOVE_RIGHT, CMD_MOVE_UP,
+            };
+            use crate::testing::default_test_scenario;
+            use crate::ui::state::screen::TaskData;
+
+            let mut state = create_test_app_state();
+            state.config.persistent.enable_arrow_keys_in_normal_mode = true;
+            let session = GameSession::new(default_test_scenario()).unwrap();
+            state.screen = TypedScreen::Task(TaskData::new(session));
+
+            for (code, label, movement) in [
+                (KeyCode::Left, "Left", CMD_MOVE_LEFT),
+                (KeyCode::Right, "Right", CMD_MOVE_RIGHT),
+                (KeyCode::Up, "Up", CMD_MOVE_UP),
+                (KeyCode::Down, "Down", CMD_MOVE_DOWN),
+            ] {
+                let key = KeyEvent::new(code, KeyModifiers::NONE);
+                let result = handle_gameplay_input(key, &state, |keys, typed| {
+                    Message::ExecuteCommand { keys, typed }
+                });
+                match result {
+                    Some(Message::ExecuteCommand { keys, typed }) => {
+                        assert_eq!(typed, label);
+                        assert_eq!(keys.as_str(), movement);
+                    }
+                    other => panic!("expected ExecuteCommand, got {other:?}"),
+                }
             }
         }
 

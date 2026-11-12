@@ -92,7 +92,7 @@ enum Lineup {
     Adaptive,
     /// Pre-selected seeded list (Challenge): `next` indexes `scenarios`, `limit` caps the run.
     Challenge {
-        scenarios: Vec<Scenario>,
+        scenarios: Vec<Arc<Scenario>>,
         next: usize,
         limit: usize,
     },
@@ -115,7 +115,7 @@ where
 /// including the simulator state, timing information, and action history.
 pub struct ActiveMiniScenario {
     /// The scenario being played
-    pub scenario: Scenario,
+    pub scenario: Arc<Scenario>,
 
     /// Helix simulator instance (source of truth for current state)
     simulator: AnyModeSimulator,
@@ -141,7 +141,7 @@ pub struct ActiveMiniScenario {
 
 impl ActiveMiniScenario {
     /// Create a new active scenario
-    fn new(scenario: Scenario, time_limit: Duration, clock: Arc<dyn MonotonicClock>) -> Self {
+    fn new(scenario: Arc<Scenario>, time_limit: Duration, clock: Arc<dyn MonotonicClock>) -> Self {
         // Use unified ScenarioState helper for initialization
         let state = crate::game::ScenarioState::from_scenario(&scenario);
 
@@ -217,7 +217,7 @@ impl ActiveMiniScenario {
         self.simulator.is_insert_mode()
     }
 
-    /// Check if a `q`/`Q` macro is currently being recorded
+    /// Check if a `Q`/`q` macro is currently being recorded
     pub fn is_recording_macro(&self) -> bool {
         self.simulator.is_recording_macro()
     }
@@ -353,7 +353,7 @@ pub struct MiniGameSession<R: Rng = StdRng> {
     current: Option<ActiveMiniScenario>,
 
     /// Queue of upcoming scenarios (2-3 visible)
-    queue: VecDeque<Scenario>,
+    queue: VecDeque<Arc<Scenario>>,
 
     /// Game statistics
     pub(crate) stats: MiniGameStats,
@@ -988,7 +988,7 @@ impl<R: Rng> MiniGameSession<R> {
     }
 
     /// Get reference to scenario queue
-    pub fn queue(&self) -> &VecDeque<Scenario> {
+    pub fn queue(&self) -> &VecDeque<Arc<Scenario>> {
         &self.queue
     }
 
@@ -1094,7 +1094,7 @@ impl<R: Rng> MiniGameSession<R> {
         )
     }
 
-    /// Check if a `q`/`Q` macro is currently being recorded
+    /// Check if a `Q`/`q` macro is currently being recorded
     pub fn is_recording_macro(&self) -> bool {
         self.current
             .as_ref()
@@ -1267,7 +1267,7 @@ impl<R: Rng> MiniGameSession<R> {
                 limit,
             } => {
                 while self.queue.len() < QUEUE_SIZE && *next < *limit && *next < scenarios.len() {
-                    self.queue.push_back(scenarios[*next].clone());
+                    self.queue.push_back(Arc::clone(&scenarios[*next]));
                     *next += 1;
                 }
             }
@@ -1280,7 +1280,7 @@ impl<R: Rng> MiniGameSession<R> {
                     ) else {
                         break; // No more scenarios available
                     };
-                    self.queue.push_back(scenario);
+                    self.queue.push_back(Arc::new(scenario));
                 }
             }
         }
@@ -1446,7 +1446,7 @@ mod tests {
     fn test_active_scenario_language_defaults_to_rs_when_scenario_omits_it() {
         let scenario = create_test_scenario("s1", Difficulty::Beginner);
         let active = ActiveMiniScenario::new(
-            scenario,
+            Arc::new(scenario),
             Duration::from_secs(60),
             Arc::new(SystemMonotonicClock),
         );
@@ -1465,7 +1465,7 @@ mod tests {
             .optimal_count(1)
             .build();
         let active = ActiveMiniScenario::new(
-            scenario,
+            Arc::new(scenario),
             Duration::from_secs(60),
             Arc::new(SystemMonotonicClock),
         );
@@ -1475,7 +1475,7 @@ mod tests {
     fn active_with_clock() -> (ActiveMiniScenario, Arc<FakeMonotonicClock>) {
         let clock = Arc::new(FakeMonotonicClock::new());
         let active = ActiveMiniScenario::new(
-            create_test_scenario("s1", Difficulty::Beginner),
+            Arc::new(create_test_scenario("s1", Difficulty::Beginner)),
             Duration::from_secs(60),
             clock.clone(),
         );

@@ -79,18 +79,12 @@ impl ViewState {
         self.visible_cols = visible_cols;
     }
 
-    /// Center the viewport vertically on a given line
+    /// Center the viewport vertically on a given line (`hx` `align_view(Center)`)
     ///
-    /// Adjusts `top_line` so that `cursor_line` is in the center of the viewport.
-    pub fn center_on_line(&mut self, cursor_line: usize, total_lines: usize) {
-        let half_viewport = self.visible_lines / 2;
-        if cursor_line < half_viewport {
-            self.top_line = 0;
-        } else if cursor_line + half_viewport >= total_lines {
-            self.top_line = total_lines.saturating_sub(self.visible_lines);
-        } else {
-            self.top_line = cursor_line - half_viewport;
-        }
+    /// The cursor lands on row `(H - 1) / 2`; the view is not clamped at the
+    /// document end, so a cursor near the last line leaves blank rows below.
+    pub fn center_on_line(&mut self, cursor_line: usize) {
+        self.top_line = cursor_line.saturating_sub(self.visible_lines.saturating_sub(1) / 2);
     }
 
     /// Align the viewport so cursor line is at the top
@@ -193,17 +187,15 @@ mod tests {
     fn test_center_on_line() {
         let mut state = sized(10, 80);
 
-        // Cursor in middle of document
-        state.center_on_line(50, 100);
-        assert_eq!(state.top_line(), 45);
+        state.center_on_line(50);
+        assert_eq!(state.top_line(), 46);
 
-        // Cursor near start
-        state.center_on_line(3, 100);
+        state.center_on_line(3);
         assert_eq!(state.top_line(), 0);
 
-        // Cursor near end
-        state.center_on_line(98, 100);
-        assert_eq!(state.top_line(), 90);
+        // No clamp at the document end
+        state.center_on_line(98);
+        assert_eq!(state.top_line(), 94);
     }
 
     #[test]

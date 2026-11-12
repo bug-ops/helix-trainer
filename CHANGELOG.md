@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `profile_load` fuzz target for `profile.json` in the weekly fuzz workflow (#641)
+- `specs/review-event-log/` package and the FSRS-7 real-corpus evaluation protocol (#641)
 - cargo-fuzz targets for config loading and keymap resolution with a weekly workflow, and a fuzz crate compile check in CI (#634)
 - cargo-mutants configuration and weekly workflow for the scoring, FSRS scheduling and quest critical paths (#634)
 - Dev-only `fsrs_model_eval` example comparing FSRS-6 and FSRS-7 on a seeded synthetic corpus; the adoption decision is DEFER (#634)
@@ -24,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Challenge mode shares `Arc<Scenario>` through selection and the queue instead of deep clones (#641)
 - **Breaking**: scenario TOML with unknown `[scenarios.metadata]` keys fails to load (#634)
 - **Breaking**: scenario `language` is the closed `helix::Language` enum (`rs`, `md`, `py`); unknown or empty values are a load error (#634)
 - **Breaking**: quest and achievement text moves to `locales/`; quest templates reject `name` and `description` and saved quests no longer carry `description`, so older builds quarantine a newer profile (#634)
@@ -96,6 +99,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Breaking**: macro keys follow Helix: `Q` records and stops, `q` replays (#641)
+- Dot-repeat replays full Insert sessions; the 1000-char and 100-key caps are removed (#641)
+- Search and the `s`/`S`/`K`/`Alt-K` prompts apply smart-case; `^` and `$` in those prompts are line-anchored (#641)
+- `Alt-;` flips every selection range; repeated `d` keeps the closing brace at document end (#641)
+- `zz`/`zt`/`zb` center like Helix `align_view` using the cursor (#641)
+- The key history shows arrow keys as typed instead of h/j/k/l (#641)
+- Speed-run quest text is filled from the quest scenario and time limit (#641)
 - A malformed `last_challenge_date` no longer resets the daily challenge attempt limit (#634)
 - An unknown future keymap fingerprint tag no longer quarantines the whole profile (#634)
 - `i` on a forward selection inserts at the selection start; `a` merges adjacent ranges and appends after a flipped selection (#593, #596, #618)

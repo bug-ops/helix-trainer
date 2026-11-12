@@ -19,9 +19,9 @@
 //!
 //! # Security
 //!
-//! - Insert mode text is limited to 1000 characters
-//! - Movements are limited to 100 steps
 //! - Pending key sequences limited to 10 keys
+//! - Insert sessions are recorded in full: a cap would silently truncate the
+//!   replayed text and leave later keys with a stale `after_chars`
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -29,12 +29,6 @@ use crossterm::event::{KeyCode, KeyEvent};
 use super::simulator::InsertCommand;
 pub use super::simulator::Mode;
 use crate::grammar::commands::{CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP};
-
-/// Maximum length of insert mode text recording (security limit)
-const MAX_INSERT_TEXT_LENGTH: usize = 1000;
-
-/// Maximum number of movements in insert mode (security limit)
-const MAX_INSERT_MOVEMENTS: usize = 100;
 
 /// Maximum number of keys in a pending compound action (security limit)
 const MAX_PENDING_KEYS: usize = 10;
@@ -268,10 +262,8 @@ impl Default for RepeatBuffer {
 /// This recorder tracks text input and cursor movements made during
 /// insert mode, so they can be replayed with the `.` command.
 ///
-/// # Security
-///
-/// - Text recording is limited to 1000 characters
-/// - Movement recording is limited to 100 steps
+/// The whole session is recorded without a cap, so `.` replays it exactly;
+/// growth is bounded by what the user types.
 #[derive(Debug)]
 pub struct InsertModeRecorder {
     is_recording: bool,
@@ -312,29 +304,26 @@ impl InsertModeRecorder {
 
     /// Record a character typed in insert mode
     ///
-    /// Characters are appended to the text buffer up to the security limit.
+    /// Characters are appended to the text buffer.
     pub fn record_char(&mut self, ch: char) {
         if !self.is_recording {
             return;
         }
 
-        // Security: limit text length
-        if self.text.len() < MAX_INSERT_TEXT_LENGTH {
-            self.text.push(ch);
-        }
+        self.text.push(ch);
     }
 
     /// Record an arrow key movement at the current text position
     ///
     /// Keys share one ordered list with editing keys so replay keeps their
-    /// original order relative to the text. The list is limited to 100 keys.
+    /// original order relative to the text.
     pub fn record_movement(&mut self, movement: Movement) {
         self.record_key(InsertAction::Move(movement));
     }
 
     /// Record an Insert-mode editing key at the current text position
     ///
-    /// Bounded like [`Self::record_movement`].
+    /// Ordered like [`Self::record_movement`].
     pub fn record_edit(&mut self, command: InsertCommand) {
         self.record_key(InsertAction::Edit(command));
     }
@@ -344,12 +333,10 @@ impl InsertModeRecorder {
             return;
         }
 
-        if self.keys.len() < MAX_INSERT_MOVEMENTS {
-            self.keys.push(InsertKey {
-                after_chars: self.text.chars().count(),
-                action,
-            });
-        }
+        self.keys.push(InsertKey {
+            after_chars: self.text.chars().count(),
+            action,
+        });
     }
 
     /// Finish recording and return the recorded action
@@ -428,14 +415,14 @@ pub(crate) fn is_operator_command(key: &KeyEvent) -> bool {
 /// - `Esc` (cancel)
 /// - Movement commands: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `g`, `G`
 ///
-/// Note: `q`/`Q` (macro record toggle/replay) are deliberately *not*
+/// Note: `Q`/`q` (macro record toggle/replay) are deliberately *not*
 /// excluded here, even though they're never actually repeatable in
 /// practice. `execute_command_any_mode` intercepts both before dispatch
 /// ever reaches `record_command_if_needed_normal` (the sole caller of this
 /// function), so neither can appear as the *command* key in a recorded
 /// sequence. But this function is also applied to every *argument* char in
 /// a multi-key sequence (`key_events.iter().all(is_repeatable_command)`),
-/// and 'q'/'Q' are valid arguments to `r`/`f`/`t`/`F`/`T` (e.g. `rq`,
+/// and 'Q'/'q' are valid arguments to `r`/`f`/`t`/`F`/`T` (e.g. `rq`,
 /// `fq`) - excluding them here would make those combinations silently
 /// unrepeatable.
 ///
@@ -658,42 +645,39 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_mode_recorder_max_text_length() {
+    fn test_insert_mode_recorder_keeps_long_text() {
         let mut recorder = InsertModeRecorder::new();
         recorder.start(None);
-
-        // Record MAX_INSERT_TEXT_LENGTH + 100 characters
-        for _ in 0..MAX_INSERT_TEXT_LENGTH + 100 {
+        for _ in 0..5000 {
             recorder.record_char('x');
         }
 
-        let action = recorder.finish();
-
-        match action {
-            RepeatableAction::InsertSequence { text, .. } => {
-                // Should be limited to MAX_INSERT_TEXT_LENGTH
-                assert_eq!(text.len(), MAX_INSERT_TEXT_LENGTH);
-            }
+        match recorder.finish() {
+            RepeatableAction::InsertSequence { text, .. } => assert_eq!(text.len(), 5000),
             RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
         }
     }
 
     #[test]
-    fn test_insert_mode_recorder_max_movements() {
+    fn test_insert_mode_recorder_keeps_all_keys_in_order_past_old_caps() {
         let mut recorder = InsertModeRecorder::new();
         recorder.start(None);
-
-        // Record MAX_INSERT_MOVEMENTS + 10 movements
-        for _ in 0..MAX_INSERT_MOVEMENTS + 10 {
+        for _ in 0..1100 {
+            recorder.record_char('a');
+        }
+        for _ in 0..150 {
             recorder.record_movement(Movement::Left);
         }
+        recorder.record_char('b');
+        recorder.record_movement(Movement::Right);
 
-        let action = recorder.finish();
-
-        match action {
-            RepeatableAction::InsertSequence { keys, .. } => {
-                // Should be limited to MAX_INSERT_MOVEMENTS
-                assert_eq!(keys.len(), MAX_INSERT_MOVEMENTS);
+        match recorder.finish() {
+            RepeatableAction::InsertSequence { text, keys, .. } => {
+                assert_eq!(text.len(), 1101);
+                assert_eq!(keys.len(), 151);
+                assert!(keys[..150].iter().all(|k| k.after_chars == 1100));
+                assert_eq!(keys[150].after_chars, 1101);
+                assert_eq!(keys[150].action, InsertAction::Move(Movement::Right));
             }
             RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
         }
@@ -797,13 +781,13 @@ mod tests {
         )));
     }
 
-    /// Regression test: `q`/`Q` as the *argument* char to `r`/`f`/`t`/`F`/`T`
+    /// Regression test: `Q`/`q` as the *argument* char to `r`/`f`/`t`/`F`/`T`
     /// (not as the standalone macro-toggle/replay command) must remain
-    /// `.`-repeatable. An earlier revision excluded `'q' | 'Q'` unconditionally
+    /// `.`-repeatable. An earlier revision excluded `'Q' | 'q'` unconditionally
     /// from `is_repeatable_command`, which is applied per-key via
     /// `key_events.iter().all(is_repeatable_command)`
     /// (`simulator/commands/mod.rs`), so it silently broke `.`-repeating
-    /// `rq`, `fq`, `tq`, `Fq`, `Tq` - not just the standalone `q`/`Q` command,
+    /// `rq`, `fq`, `tq`, `Fq`, `Tq` - not just the standalone `Q`/`q` command,
     /// which never reaches this function to begin with (see the module doc
     /// on `is_repeatable_command`).
     #[test]

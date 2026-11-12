@@ -2000,6 +2000,16 @@ mod mode_selection_extended_tests {
         }
     }
 
+    #[test]
+    fn mode_label_names_each_minigame_mode() {
+        let today = chrono::Utc::now().date_naive();
+        let labels: Vec<String> = MiniGameModeSelection::all_modes(today)
+            .iter()
+            .map(crate::ui::render::mode_selection::mode_label)
+            .collect();
+        assert_eq!(labels, ["Arcade", "Survival", "Daily Challenge"]);
+    }
+
     /// Regression test for critique S4: the FR-006 "attempts remaining"
     /// indicator must actually reach the rendered buffer, not just be
     /// constructed and then silently truncated by the submenu's fixed

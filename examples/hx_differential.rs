@@ -114,6 +114,11 @@ fn send(session: &str, what: &Send) -> Result<(), String> {
     Ok(())
 }
 
+/// `path` as one single-quoted shell word.
+fn shell_quote(path: &Path) -> String {
+    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
+}
+
 fn extension(language: Language) -> &'static str {
     match language {
         Language::Rs => "rs",
@@ -129,7 +134,11 @@ fn run_in_hx(case: &GoldenCase, scratch: &Path) -> Result<String, String> {
     std::fs::write(&file, &case.text).map_err(|error| error.to_string())?;
     std::fs::write(&config, "").map_err(|error| error.to_string())?;
     let session = format!("hxdiff{}", std::process::id());
-    let command = format!("hx -c {} {} 2>/dev/null", config.display(), file.display());
+    let command = format!(
+        "hx -c {} {} 2>/dev/null",
+        shell_quote(&config),
+        shell_quote(&file)
+    );
     tmux(&[
         "new-session",
         "-d",
@@ -195,18 +204,21 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let scratch = std::env::temp_dir().join(format!("hx-differential-{}", std::process::id()));
-    if let Err(error) = std::fs::create_dir_all(&scratch) {
-        eprintln!("cannot create {}: {error}", scratch.display());
-        return ExitCode::FAILURE;
-    }
+    let scratch_dir = match tempfile::tempdir() {
+        Ok(dir) => dir,
+        Err(error) => {
+            eprintln!("cannot create a temporary directory: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let scratch = scratch_dir.path();
 
     let mut drift = 0_usize;
     for case in &mut table.cases {
         if filter.is_some_and(|text| !case.id.contains(text.as_str())) {
             continue;
         }
-        match run_in_hx(case, &scratch) {
+        match run_in_hx(case, scratch) {
             Ok(actual) if actual == case.expected => println!("ok     {}", case.id),
             Ok(actual) => {
                 drift += 1;
@@ -224,7 +236,6 @@ fn main() -> ExitCode {
             }
         }
     }
-    let _ = std::fs::remove_dir_all(&scratch);
 
     if write {
         match table.render() {

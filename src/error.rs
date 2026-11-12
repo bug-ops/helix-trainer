@@ -264,92 +264,45 @@ mod tests {
     use std::assert_matches;
 
     #[test]
-    fn test_error_conversion() {
-        let err = SecurityError::PathTraversal;
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Failed to load scenario file. Please check the file path and format."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_invalid_path() {
-        let err = SecurityError::InvalidPath;
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Failed to load scenario file. Please check the file path and format."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_suspicious_path() {
-        let err = SecurityError::SuspiciousPath;
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Failed to load scenario file. Please check the file path and format."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_invalid_toml() {
-        let err = SecurityError::InvalidToml("parse error".to_string());
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "Failed to load scenario file. Please check the file path and format."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_file_too_large() {
-        let err = SecurityError::FileTooLarge {
-            max: 1000,
-            actual: 2000,
-        };
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "The scenario file is too large or complex. Please use a smaller file."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_too_many_scenarios() {
-        let err = SecurityError::TooManyScenarios {
-            max: 100,
-            actual: 200,
-        };
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "The scenario file is too large or complex. Please use a smaller file."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_content_too_large() {
-        let err = SecurityError::ContentTooLarge {
-            max: 1000,
-            actual: 2000,
-        };
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "The scenario file is too large or complex. Please use a smaller file."
-        );
-    }
-
-    #[test]
-    fn test_error_conversion_too_many_hints() {
-        let err = SecurityError::TooManyHints { max: 10 };
-        let user_err = UserError::from(err);
-        assert_eq!(
-            user_err.to_string(),
-            "The scenario file is too large or complex. Please use a smaller file."
-        );
+    fn test_error_conversion_messages() {
+        const SCENARIO_FILE: &str =
+            "Failed to load scenario file. Please check the file path and format.";
+        const TOO_LARGE: &str =
+            "The scenario file is too large or complex. Please use a smaller file.";
+        let cases = [
+            (SecurityError::PathTraversal, SCENARIO_FILE),
+            (SecurityError::InvalidPath, SCENARIO_FILE),
+            (
+                SecurityError::InvalidToml("parse error".to_string()),
+                SCENARIO_FILE,
+            ),
+            (
+                SecurityError::FileTooLarge {
+                    max: 1000,
+                    actual: 2000,
+                },
+                TOO_LARGE,
+            ),
+            (
+                SecurityError::TooManyScenarios {
+                    max: 100,
+                    actual: 200,
+                },
+                TOO_LARGE,
+            ),
+            (
+                SecurityError::ContentTooLarge {
+                    max: 1000,
+                    actual: 2000,
+                },
+                TOO_LARGE,
+            ),
+            (SecurityError::TooManyHints { max: 10 }, TOO_LARGE),
+        ];
+        for (err, expected) in cases {
+            let label = format!("{err:?}");
+            assert_eq!(UserError::from(err).to_string(), expected, "{label}");
+        }
     }
 
     #[test]

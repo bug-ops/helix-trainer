@@ -353,16 +353,11 @@ proptest! {
     }
 }
 
-/// Name of the environment variable that turns the randomized pass on.
-const RANDOMIZED_PASS_ENV: &str = "HELIX_TRAINER_RANDOMIZED_PASS";
-
 /// Random seed over the full registry; a rare finding shows up here without
-/// looking like a flaky CI test. Run with `HELIX_TRAINER_RANDOMIZED_PASS=1`.
+/// looking like a flaky CI test. Run with `cargo nextest run --run-ignored only randomized_full_registry_pass`.
 #[test]
-fn randomized_full_registry_pass_when_opted_in() {
-    if std::env::var_os(RANDOMIZED_PASS_ENV).is_none() {
-        return;
-    }
+#[ignore = "randomized full-registry pass with a random seed; opt in with --run-ignored"]
+fn randomized_full_registry_pass() {
     let mut runner = proptest::test_runner::TestRunner::new(ProptestConfig {
         cases: 4096,
         ..ProptestConfig::default()

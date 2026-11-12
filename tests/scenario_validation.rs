@@ -215,7 +215,7 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
             continue;
         }
 
-        // Handle 'q'/'Q' (macro record toggle/replay) - dispatched directly
+        // Handle 'Q'/'q' (macro record toggle/replay) - dispatched directly
         // by `execute_command_any_mode`'s early return, not the
         // registry-backed KeyTrie that the input state machine walks, so
         // char-by-char validation has no entry for them.

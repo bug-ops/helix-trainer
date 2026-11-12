@@ -28,3 +28,10 @@ path = "fuzz_targets/keymap_resolve.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "profile_load"
+path = "fuzz_targets/profile_load.rs"
+test = false
+doc = false
+bench = false

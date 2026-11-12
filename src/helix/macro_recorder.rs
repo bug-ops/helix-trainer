@@ -1,7 +1,7 @@
-//! Macro recording and replay (`q`/`Q`) for the Helix simulator
+//! Macro recording and replay (`Q`/`q`) for the Helix simulator
 //!
-//! `q` toggles recording of successfully-executed command strings into an
-//! unnamed macro register; `Q` replays them by feeding each one back through
+//! `Q` toggles recording of successfully-executed command strings into an
+//! unnamed macro register; `q` replays them by feeding each one back through
 //! `execute_command_any_mode` - the same dispatch path as live input, so
 //! replay never duplicates dispatch logic.
 //!
@@ -25,10 +25,10 @@
 //! is deterministic (it doesn't depend on repeat-buffer state at replay
 //! time), which is arguably better than literal-`.` capture would be.
 //!
-//! `Q` pressed while recording is, by contrast, a deliberate no-op rather
+//! `q` pressed while recording is, by contrast, a deliberate no-op rather
 //! than a nested replay: replayed commands run with `is_replaying == true`,
 //! which is exactly what makes `MacroRecorder::record` skip them, so a
-//! `Q`-triggered replay's effects would apply to the document while not
+//! `q`-triggered replay's effects would apply to the document while not
 //! being captured into the macro currently being recorded - the resulting
 //! macro would silently not match what the user watched happen on screen.
 //! `execute_command_any_mode` checks `is_recording_macro()` before calling
@@ -59,20 +59,20 @@ use crate::limits::MAX_MACRO_LENGTH;
 /// Kept as a counter separate from `.`-repeat's `MAX_REPEAT_DEPTH`
 /// (`simulator/mod.rs`) rather than sharing it: the two budgets bound
 /// different recursion, and conflating them would let a macro replay
-/// borrow the repeat budget or vice versa. In practice `Q` is skipped
+/// borrow the repeat budget or vice versa. In practice `q` is skipped
 /// outright while already replaying (see [`MacroRecorder::begin_replay`]),
 /// so depth cannot exceed 1 through that path today; this cap is defense in
 /// depth against future changes to that invariant.
 const MAX_MACRO_DEPTH: usize = 10;
 
-/// Records and replays a single unnamed `q`/`Q` macro
+/// Records and replays a single unnamed `Q`/`q` macro
 #[derive(Debug, Default)]
 pub(crate) struct MacroRecorder {
     /// `Some` while recording; accumulates command strings as they execute
     recording: Option<Vec<String>>,
-    /// The last macro stopped-and-stored by `q`, ready for `Q` to replay
+    /// The last macro stopped-and-stored by `Q`, ready for `q` to replay
     stored: Vec<String>,
-    /// Set for the duration of a `Q` replay, so the recording tap in
+    /// Set for the duration of a `q` replay, so the recording tap in
     /// `execute_command_any_mode` does not capture replayed commands
     is_replaying: bool,
     /// Current macro-replay recursion depth
@@ -90,18 +90,18 @@ impl MacroRecorder {
         self.recording.is_some()
     }
 
-    /// Whether a macro replay (`Q`) is currently in progress
+    /// Whether a macro replay (`q`) is currently in progress
     #[cfg(test)]
     pub(crate) fn is_replaying(&self) -> bool {
         self.is_replaying
     }
 
-    /// Toggle recording (`q`): start if idle, stop-and-store if active
+    /// Toggle recording (`Q`): start if idle, stop-and-store if active
     ///
     /// Deliberately unconditional: stopping a recording that captured
-    /// nothing (e.g. `q` immediately followed by `q`) overwrites `stored`
+    /// nothing (e.g. `Q` immediately followed by `Q`) overwrites `stored`
     /// with the empty recording, discarding any previously-stored macro.
-    /// This matches real Helix's `q`/`Q` parity - there is no separate
+    /// This matches real Helix's `Q`/`q` parity - there is no separate
     /// "cancel recording without saving" gesture.
     pub(crate) fn toggle(&mut self) {
         match self.recording.take() {

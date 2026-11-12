@@ -193,7 +193,7 @@ Mode Selection
 | **Editing** | <kbd>i</kbd> <kbd>a</kbd> <kbd>I</kbd> <kbd>A</kbd> <kbd>o</kbd> <kbd>O</kbd> <kbd>r</kbd> <kbd>c</kbd> <kbd>Alt</kbd>+<kbd>c</kbd> <kbd>d</kbd> <kbd>Alt</kbd>+<kbd>d</kbd> <kbd>J</kbd> <kbd>Alt</kbd>+<kbd>J</kbd> <kbd>></kbd> <kbd><</kbd> <kbd>~</kbd> <kbd>`</kbd> <kbd>Alt</kbd>+<kbd>`</kbd> <kbd>R</kbd> <kbd>Alt</kbd>+<kbd>x</kbd> <kbd>Ctrl</kbd>+<kbd>c</kbd> (toggle comment) |
 | **Clipboard** | <kbd>y</kbd> <kbd>p</kbd> <kbd>P</kbd> |
 | **Registers** | <kbd>"</kbd><kbd>a</kbd>-<kbd>z</kbd> prefix on <kbd>y</kbd>/<kbd>p</kbd>/<kbd>P</kbd>/<kbd>R</kbd>/<kbd>d</kbd>/<kbd>c</kbd> (named registers) <kbd>"</kbd><kbd>_</kbd> (blackhole, discards writes) |
-| **Macros** | <kbd>q</kbd> (record/stop) <kbd>Q</kbd> (replay) |
+| **Macros** | <kbd>Q</kbd> (record/stop) <kbd>q</kbd> (replay) |
 | **Command-line** | <kbd>:</kbd> then <kbd>goto N</kbd> / <kbd>g N</kbd> (jump to line) |
 | **Search** | <kbd>/</kbd> <kbd>?</kbd> <kbd>n</kbd> <kbd>N</kbd> <kbd>*</kbd> <kbd>Alt</kbd>+<kbd>*</kbd> |
 | **View** | <kbd>z</kbd> <kbd>zz</kbd> <kbd>zt</kbd> <kbd>zb</kbd> <kbd>zm</kbd> <kbd>zj</kbd> <kbd>zk</kbd> |

@@ -180,6 +180,26 @@ fn typed_period_is_replayed_as_text_by_dot_and_macro() {
 }
 
 #[test]
+fn dot_replays_a_long_insert_session_with_many_keys_in_order() {
+    let mut cmds = vec![CMD_INSERT];
+    cmds.extend(std::iter::repeat_n("a", 1100));
+    cmds.extend(std::iter::repeat_n(CMD_ARROW_LEFT, 75));
+    cmds.extend(std::iter::repeat_n(CMD_BACKSPACE, 75));
+    cmds.extend([
+        "b",
+        CMD_ESCAPE,
+        CMD_MOVE_DOWN,
+        CMD_GOTO_LINE_START,
+        CMD_REPEAT,
+    ]);
+
+    let out = run("x\nx", &cmds);
+
+    let session = format!("{}b{}", "a".repeat(950), "a".repeat(75));
+    assert_eq!(out, format!("{session}x\n{session}x"));
+}
+
+#[test]
 fn dot_replays_backspace_inside_an_insert_session() {
     let out = run(
         "ab\ncd",

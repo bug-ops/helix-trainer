@@ -256,7 +256,7 @@ fn run_normal(
             return (Ok(()), AnyModeSimulator::Normal(normal_sim));
         }
         NormalCommand::Macro(MacroOp::Replay) => {
-            // `Q` while recording is a no-op, not a replay: the recording tap
+            // `q` while recording is a no-op, not a replay: the recording tap
             // below is skipped while `execute_macro_replay` sets
             // `is_replaying`, so replayed effects would apply to the document
             // while silently NOT being captured into the macro currently being

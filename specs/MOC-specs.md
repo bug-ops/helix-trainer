@@ -60,7 +60,7 @@ The 2026-11-11 batch of 33 issues (PR for #607) amends [[helix-core-post-25-07-1
 | [[language-aware-syntax-highlighting/spec\|Language-Aware Syntax Highlighting for Scenario Content]] | specify (lightweight, per SDD scaling guidance) | implemented — shared prerequisite for the two specs below |
 | [[writing-markup-scenario-track/spec\|Writing / Markup Scenario Track]] | specify (lightweight, per SDD scaling guidance) | implemented — evaluates GitHub issue #152 (#361) |
 | [[multi-language-scenario-content/spec\|Multi-Language Scenario Content]] | specify (lightweight, per SDD scaling guidance) | implemented — pilot shipped as scoped (#362) |
-| [[regex-selection-and-macro-commands/spec\|Regex Selection (`s`/`S`) and Macro Record/Replay (`q`/`Q`)]] | specify (lightweight, per SDD scaling guidance) | implemented — closes issue #198's remaining scope (macros, selection-regex) |
+| [[regex-selection-and-macro-commands/spec\|Regex Selection (`s`/`S`) and Macro Record/Replay (`Q`/`q`)]] | specify (lightweight, per SDD scaling guidance) | implemented — closes issue #198's remaining scope (macros, selection-regex) |
 | [[custom-helix-keymap-support/spec\|Custom Helix Keymap Remapping (`use_helix_keymap`)]] | specify (lightweight, per SDD scaling guidance) | implemented — closes issue #163 |
 | [[end-game-summary-screen/spec\|End-Game Summary Screen on Curriculum Completion]] | specify (lightweight, per SDD scaling guidance) | implemented — closes issue #145 |
 | [[duplicate-scenario-ids/spec\|Fix Duplicate Scenario IDs]] | specify (lightweight bug-fix spec) | implemented — closes issue #363 via PR #372; uniqueness guard in `tests/scenario_validation.rs` |
@@ -77,7 +77,8 @@ Not yet built. Drafted for review/prioritization only.
 |---------|-------|--------|
 | [[fsrs-7-crate-migration/spec\|Migrate `fsrs` Crate from 6.6 to 7.0 (FSRS-6 Behavior Preserved)]] | specify (lightweight, per SDD scaling guidance) | proposed — dependency major bump; model change tracked in [[fsrs-7-model-adoption/spec]] |
 | [[fsrs-7-model-adoption/spec\|Evaluate Switching the Scheduler from the FSRS-6 Model to the FSRS-7 Model]] | specify (lightweight, per SDD scaling guidance) | evaluated 2026-11-12 (#437): DEFER (synthetic corpus, elapsed form not declared in advance; re-run on real logs) — decision record in section 11; go/no-go evaluation (research, P4); prerequisite: [[fsrs-7-crate-migration/spec]] |
-| [[mutation-testing-critical-paths/spec\|Adopt Mutation Testing on Scoring, FSRS Scheduling and Quest-Generation Critical Paths]] | specify (lightweight, per SDD scaling guidance) | proposed — non-gating scheduled cargo-mutants run (research, P4); setup built (#549), baseline recorded 2026-11-12 (76.0%, gaps in #633); related: #536 |
+| [[review-event-log/spec\|Local Review-Event Log for a Real FSRS Evaluation Corpus]] | specify (lightweight, per SDD scaling guidance) | proposed — design complete (#627): append-only `review_log.jsonl` captured at the tracker chokepoint; feeds the re-run of [[fsrs-7-model-adoption/spec]] |
+| [[mutation-testing-critical-paths/spec\|Adopt Mutation Testing on Scoring, FSRS Scheduling and Quest-Generation Critical Paths]] | specify (lightweight, per SDD scaling guidance) | proposed — non-gating scheduled cargo-mutants run (research, P4); setup built (#549), baseline recorded 2026-11-12 (76.0%), gaps covered by new tests (#633), re-measure pending; related: #536 |
 | [[undo-insert-session-granularity/spec\|One Undo Step per Insert Session (`u` Undoes the Whole `i ... Escape`)]] | specify (lightweight, per SDD scaling guidance) | proposed — #571, #589, #596; FR-003 amended with the per-command hx table; FR-013 and FR-014 add multi-cursor sessions; related: #501 |
 
 ## Project Foundation
@@ -152,7 +153,7 @@ updated this tree so it stays in sync with what actually shipped. Summary:
   existing spec; stale "#198 still open" references corrected throughout
   (spec.md and README.md).
 - **regex-selection-and-macro-commands** (new) — `a4efc2e` implemented
-  `s`/`S` (regex select/split) and `q`/`Q` (macro record/replay), a
+  `s`/`S` (regex select/split) and `Q`/`q` (macro record/replay), a
   substantial standalone feature (new `helix-stdx` dependency, new
   `MacroRecorder`) with no prior spec coverage beyond a deferred bullet in
   register-command-mode-support.

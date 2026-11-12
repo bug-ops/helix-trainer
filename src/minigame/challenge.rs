@@ -5,6 +5,8 @@
 //! - Best score tracking (daily and all-time)
 //! - Deterministic scenario selection using seeded RNG
 
+use std::sync::Arc;
+
 use rand::SeedableRng;
 use rand::prelude::SliceRandom;
 
@@ -27,21 +29,9 @@ use super::ChallengeConfig;
 ///
 /// # Performance
 ///
-/// Uses index-based shuffling to reduce from O(n) clones to O(k) clones,
-/// where k is `config.scenario_count` (typically 10).
-///
-/// # TODO(#621): `Arc<Scenario>` optimization
-///
-/// Consider using `Arc<Scenario>` to avoid deep clones entirely. Currently
-/// bounded to k=10 clones per call, which is acceptable but could be
-/// eliminated with reference counting. Out of scope for now: the selection
-/// this function returns is stored as owned `Scenario` end-to-end (through
-/// `MiniGameSession::with_mode`, `refill_queue`'s `VecDeque<Scenario>` queue,
-/// and the public `ActiveMiniScenario::scenario` field also used by the
-/// non-Challenge Arcade/Survival path via `DifficultyController::next_scenario`),
-/// so switching to `Arc<Scenario>` here alone would just move the clone rather
-/// than remove it — it needs a coordinated type change across all of those
-/// call sites.
+/// Uses index-based shuffling and returns `Arc<Scenario>` handles, so the
+/// selection costs k deep clones once (k is `config.scenario_count`) and the
+/// session shares them through its queue and active scenario without cloning.
 ///
 /// # Examples
 ///
@@ -58,14 +48,14 @@ use super::ChallengeConfig;
 pub fn select_challenge_scenarios(
     scenarios: &[Scenario],
     config: &ChallengeConfig,
-) -> Vec<Scenario> {
+) -> Vec<Arc<Scenario>> {
     if scenarios.is_empty() {
         return Vec::new();
     }
 
     if scenarios.len() < config.scenario_count {
         // Not enough scenarios, return all available
-        return scenarios.to_vec();
+        return scenarios.iter().cloned().map(Arc::new).collect();
     }
 
     // CR-004: Use index-based shuffling to reduce clones from O(n) to O(k)
@@ -73,7 +63,10 @@ pub fn select_challenge_scenarios(
     let mut indices: Vec<usize> = (0..scenarios.len()).collect();
     indices.shuffle(&mut rng);
     indices.truncate(config.scenario_count);
-    indices.into_iter().map(|i| scenarios[i].clone()).collect()
+    indices
+        .into_iter()
+        .map(|i| Arc::new(scenarios[i].clone()))
+        .collect()
 }
 
 #[cfg(test)]
@@ -513,7 +506,7 @@ mod tests {
                     config.seed = seed;
                     select_challenge_scenarios(&scenarios, &config)
                         .into_iter()
-                        .map(|s| s.id)
+                        .map(|s| s.id.clone())
                         .collect()
                 })
                 .collect();

@@ -1,16 +1,16 @@
 # Macro Recording and Replay Scenarios
-# Scenarios demonstrating 'q' (toggle macro recording) and 'Q' (replay the
+# Scenarios demonstrating 'Q' (toggle macro recording) and 'q' (replay the
 # recorded macro).
 
 [[scenarios]]
 id = "macro_delete_lines_001"
 name = "Record and replay a line-delete macro"
-description = "Record a line-delete with 'q', then replay it with 'Q' to delete another line"
+description = "Record a line-delete with 'Q', then replay it with 'q' to delete another line"
 
 hints = [
-    "'q' toggles macro recording on and off",
-    "Record 'x' (select line) then 'd' (delete) between the two 'q' presses",
-    "'Q' replays everything that was recorded",
+    "'Q' toggles macro recording on and off",
+    "Record 'x' (select line) then 'd' (delete) between the two 'Q' presses",
+    "'q' replays everything that was recorded",
 ]
 
 [scenarios.setup]
@@ -26,8 +26,8 @@ line 4"""
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["q", "x", "d", "q", "Q"]
-description = "Record 'xd' (select line, delete) between two 'q' presses, then 'Q' to replay it once more"
+commands = ["Q", "x", "d", "Q", "q"]
+description = "Record 'xd' (select line, delete) between two 'Q' presses, then 'q' to replay it once more"
 
 [scenarios.scoring]
 optimal_count = 5
@@ -38,17 +38,17 @@ tolerance = 0
 category = "advanced"
 difficulty = "intermediate"
 tags = ["macro", "delete", "line"]
-commands_taught = ["q", "Q"]
+commands_taught = ["Q", "q"]
 
 [[scenarios]]
 id = "macro_append_lines_001"
 name = "Record and replay an append macro"
-description = "Record appending '!' to a line end with 'q', then replay with 'Q' on the next line"
+description = "Record appending '!' to a line end with 'Q', then replay with 'q' on the next line"
 
 hints = [
-    "'q' toggles macro recording on and off",
+    "'Q' toggles macro recording on and off",
     "Record 'A!Escape' (append '!' at line end) followed by 'j' and 'gh' to move to the next line",
-    "'Q' replays the whole recorded sequence on the new line",
+    "'q' replays the whole recorded sequence on the new line",
 ]
 
 [scenarios.setup]
@@ -64,8 +64,8 @@ baz"""
 cursor_position = [2, 0]
 
 [scenarios.solution]
-commands = ["q", "A", "!", "Escape", "j", "gh", "q", "Q"]
-description = "Record appending '!' and moving to the next line, then 'Q' to replay it once more"
+commands = ["Q", "A", "!", "Escape", "j", "gh", "Q", "q"]
+description = "Record appending '!' and moving to the next line, then 'q' to replay it once more"
 
 [scenarios.scoring]
 optimal_count = 8
@@ -76,4 +76,4 @@ tolerance = 1
 category = "advanced"
 difficulty = "intermediate"
 tags = ["macro", "insert", "append"]
-commands_taught = ["q", "Q"]
+commands_taught = ["Q", "q"]

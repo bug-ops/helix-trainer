@@ -110,7 +110,7 @@ pub struct HelixSimulator<M: EditorMode = NormalMode> {
     /// Repeat buffer for recording and replaying actions
     pub(super) repeat_buffer: RepeatBuffer,
 
-    /// Macro recorder for `q`/`Q` recording and replay
+    /// Macro recorder for `Q`/`q` recording and replay
     ///
     /// Lives on the generic `HelixSimulator<M>`, not `NormalMode`-only, and
     /// is threaded across every mode-transition struct literal so that
@@ -205,12 +205,12 @@ impl<M: EditorMode> HelixSimulator<M> {
         &self.repeat_buffer
     }
 
-    /// Whether a `q`/`Q` macro is currently being recorded
+    /// Whether a `Q`/`q` macro is currently being recorded
     pub fn is_recording_macro(&self) -> bool {
         self.macro_recorder.is_recording()
     }
 
-    /// Toggle `q`/`Q` macro recording on/off
+    /// Toggle `Q`/`q` macro recording on/off
     pub(super) fn toggle_macro_recording(&mut self) {
         self.macro_recorder.toggle();
     }
@@ -510,7 +510,7 @@ impl AnyModeSimulator {
         matches!(self, Self::Insert(_))
     }
 
-    /// Whether a `q`/`Q` macro is currently being recorded
+    /// Whether a `Q`/`q` macro is currently being recorded
     pub fn is_recording_macro(&self) -> bool {
         match self {
             Self::Normal(sim) => sim.is_recording_macro(),
@@ -780,7 +780,7 @@ impl AnyModeSimulator {
         result
     }
 
-    /// Execute the macro replay (`Q`) command
+    /// Execute the macro replay (`q`) command
     ///
     /// Replays the stored macro by feeding each recorded command string back
     /// through `execute_command_any_mode` - the same dispatch path as live

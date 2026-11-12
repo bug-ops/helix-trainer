@@ -216,7 +216,7 @@ pub(super) fn render_task_screen(frame: &mut Frame, state: &AppState) -> Option<
             .active()
             .is_some_and(crate::game::GameSession::is_recording_macro)
         {
-            " [q: REC] "
+            " [Q: REC] "
         } else {
             ""
         };

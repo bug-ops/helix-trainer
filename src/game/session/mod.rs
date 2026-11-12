@@ -337,7 +337,7 @@ impl<S: SessionState> GameSession<S> {
         self.simulator.mode() == Mode::Insert
     }
 
-    /// Check if a `q`/`Q` macro is currently being recorded
+    /// Check if a `Q`/`q` macro is currently being recorded
     pub fn is_recording_macro(&self) -> bool {
         self.simulator.is_recording_macro()
     }

@@ -54,12 +54,12 @@ impl RegisteredCommand {
     }
 }
 
-/// The `q` / `Q` macro commands.
+/// The `Q` / `q` macro commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MacroOp {
-    /// `q`: start or stop recording.
+    /// `Q`: start or stop recording.
     ToggleRecording,
-    /// `Q`: replay the recorded macro.
+    /// `q`: replay the recorded macro.
     Replay,
 }
 
@@ -254,7 +254,7 @@ pub enum NormalCommand {
     InsertEntry(InsertEntryCommand),
     /// `.`: repeat the last action.
     Repeat,
-    /// `q` or `Q`.
+    /// `Q` or `q`.
     Macro(MacroOp),
     /// `f`, `F`, `t` or `T` with its character.
     Find {

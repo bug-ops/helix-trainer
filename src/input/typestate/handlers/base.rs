@@ -73,15 +73,15 @@ fn plain_key(code: KeyCode, modifiers: KeyModifiers) -> HandlerResult {
         KeyCode::Char('?') => regex_prompt(PromptKind::SearchBackward),
         KeyCode::Char('K') => regex_prompt(PromptKind::KeepSelections),
 
-        // Macro recording ('q') and replay ('Q'). This handler only runs
+        // Macro recording ('Q') and replay ('q'). This handler only runs
         // in Normal mode (Insert mode input bypasses the state machine
         // entirely - see `handle_insert_mode_input`), so these always
         // mean "toggle recording" / "replay macro" here; dispatched as
         // plain commands so `execute_command_any_mode` does the work.
-        KeyCode::Char('q') => {
+        KeyCode::Char('Q') => {
             HandlerResult::Execute(NormalCommand::Macro(MacroOp::ToggleRecording))
         }
-        KeyCode::Char('Q') => HandlerResult::Execute(NormalCommand::Macro(MacroOp::Replay)),
+        KeyCode::Char('q') => HandlerResult::Execute(NormalCommand::Macro(MacroOp::Replay)),
 
         // Count prefix - digits 1-9 start a count
         KeyCode::Char(c) if let Some(count) = count_from_digit(c) => {

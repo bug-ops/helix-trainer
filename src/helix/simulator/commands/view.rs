@@ -72,19 +72,24 @@ fn scroll<M: EditorMode>(
         .replace(primary_index, Range::new(anchor, head));
 }
 
+/// Line of the primary cursor: `hx` `cursor()`, which for a forward selection is
+/// the last selected character, not the exclusive `head`
+fn primary_cursor_line<M: EditorMode>(sim: &HelixSimulator<M>) -> usize {
+    let cursor = sim.selection.primary().cursor(sim.doc.slice(..));
+    sim.doc.char_to_line(cursor)
+}
+
 /// Move the view, never the cursor, until the cursor is inside the `scrolloff`
 /// margins: what `hx` does after every key
 pub(super) fn ensure_cursor_in_view<M: EditorMode>(sim: &mut HelixSimulator<M>) {
-    let cursor = sim.selection.primary().cursor(sim.doc.slice(..));
-    sim.view_state
-        .ensure_cursor_in_view(sim.doc.char_to_line(cursor));
+    let line = primary_cursor_line(sim);
+    sim.view_state.ensure_cursor_in_view(line);
 }
 
 /// Center the view on the cursor when a search put it outside the view
 pub(super) fn center_if_outside_view<M: EditorMode>(sim: &mut HelixSimulator<M>) {
-    let cursor = sim.selection.primary().cursor(sim.doc.slice(..));
-    sim.view_state
-        .center_if_outside(sim.doc.char_to_line(cursor));
+    let line = primary_cursor_line(sim);
+    sim.view_state.center_if_outside(line);
 }
 
 /// Page up (Ctrl-b command): scroll one view height, the cursor stays unless
@@ -148,11 +153,9 @@ pub fn half_page_down<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), 
 pub fn view_center<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
-    let head = sim.selection.primary().head;
-    let cursor_line = sim.doc.char_to_line(head);
-    let total_lines = sim.doc.len_lines();
+    let cursor_line = primary_cursor_line(sim);
 
-    sim.view_state.center_on_line(cursor_line, total_lines);
+    sim.view_state.center_on_line(cursor_line);
     Ok(())
 }
 
@@ -165,8 +168,7 @@ pub fn view_center<M: crate::helix::simulator::EditorMode>(
 pub fn view_align_top<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
-    let head = sim.selection.primary().head;
-    let cursor_line = sim.doc.char_to_line(head);
+    let cursor_line = primary_cursor_line(sim);
     let total_lines = sim.doc.len_lines();
 
     sim.view_state.align_top(cursor_line, total_lines);
@@ -182,8 +184,7 @@ pub fn view_align_top<M: crate::helix::simulator::EditorMode>(
 pub fn view_align_bottom<M: crate::helix::simulator::EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
-    let head = sim.selection.primary().head;
-    let cursor_line = sim.doc.char_to_line(head);
+    let cursor_line = primary_cursor_line(sim);
     let total_lines = sim.doc.len_lines();
 
     sim.view_state.align_bottom(cursor_line, total_lines);
@@ -265,8 +266,31 @@ mod tests {
 
         view_center(&mut sim).unwrap();
 
-        // Cursor should be centered (line 50 - 10 = line 40 at top)
-        assert_eq!(sim.view_state.top_line(), 40);
+        // hx align_view(Center): relative = (20 - 1) / 2 = 9
+        assert_eq!(sim.view_state.top_line(), 41);
+    }
+
+    #[test]
+    fn test_view_commands_use_the_cursor_not_the_exclusive_head() {
+        let mut sim = create_multiline_sim(100);
+        sim.view_state.set_size(20, 80);
+        let (from, to) = (sim.doc.line_to_char(50), sim.doc.line_to_char(51));
+        sim.selection = Selection::single(from, to);
+
+        view_align_top(&mut sim).unwrap();
+
+        assert_eq!(sim.view_state.top_line(), 50);
+    }
+
+    #[test]
+    fn test_view_center_does_not_clamp_at_document_end() {
+        let mut sim = create_multiline_sim(100);
+        sim.selection = Selection::point(sim.doc.line_to_char(98));
+        sim.view_state.set_size(20, 80);
+
+        view_center(&mut sim).unwrap();
+
+        assert_eq!(sim.view_state.top_line(), 89);
     }
 
     #[test]

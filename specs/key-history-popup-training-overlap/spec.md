@@ -47,7 +47,7 @@ side-by-side panels) or their column boundaries.
 
 As a result, whenever the key-history text is long enough — e.g. during a
 multi-keystroke pending input (regex-selection prompt `s`/`S`, macro
-record/replay `q`/`Q`, named-register operations `"a` + motion) — the popup's
+record/replay `Q`/`q`, named-register operations `"a` + motion) — the popup's
 rendered `Rect` extends leftward past the Target State panel's right border and
 paints directly over it, corrupting the panel's box-drawing characters (visible
 as doubled/misaligned corners, e.g.
@@ -158,7 +158,7 @@ No new data entities. This is a rendering-layer fix; existing types involved:
 | ID | Metric | Target |
 |----|--------|--------|
 | SC-001 | Reproduction case 1 (regex-selection prompt `s`/`f`/`o`/`o`) re-tested via tmux capture | Target panel right border renders as a single clean box-drawing line, no doubled `└`/`┘` characters |
-| SC-002 | Reproduction case 2 (macro record/replay `q`,`x`,`d`,`q`,`Q`) re-tested | SUCCESS screen renders with intact Current/Target panel borders |
+| SC-002 | Reproduction case 2 (macro record/replay `Q`,`x`,`d`,`Q`,`q`) re-tested | SUCCESS screen renders with intact Current/Target panel borders |
 | SC-003 | Reproduction case 3 (named-register `"ay` / `"aP`) re-tested | SUCCESS screen renders with intact Current/Target panel borders |
 | SC-004 | New/updated unit test in `src/ui/render/popups.rs` | Passes under `cargo nextest run --workspace --all-features --lib --bins` |
 | SC-005 | Arcade-mode regression check (existing tests + a manual tmux pass with a long key sequence) | No new overlap with Arcade HUD (Target/Timer/Score) |

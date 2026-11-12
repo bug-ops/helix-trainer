@@ -521,15 +521,14 @@ pub fn match_brackets<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), 
     Ok(())
 }
 
-/// Flip selection direction (swap anchor and head) - Helix 'Alt-;' command
+/// Flip selection direction (swap anchor and head) of every range - Helix 'Alt-;' command
 ///
 /// # Errors
 ///
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform
 /// with the fallible commands that share the registry's function type.
 pub fn flip_selections<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
-    let range = sim.selection.primary();
-    sim.selection = Selection::single(range.head, range.anchor);
+    sim.selection = sim.selection.clone().transform(|range| range.flip());
     Ok(())
 }
 

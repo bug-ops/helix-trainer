@@ -181,9 +181,9 @@ pub(crate) fn delete_active_selection<M: EditorMode>(sim: &mut HelixSimulator<M>
 
 /// Delete selection (single 'd' - deletes current selection)
 ///
-/// Stays in Normal mode, so each resulting cursor is clamped to the last
-/// valid character rather than resting one-past-the-end (unlike
-/// `change_selection`, which hands the raw mapped positions to Insert mode).
+/// Each resulting cursor is the selection mapped through the deletion, as in
+/// Helix `delete_selection`: a cursor deleted at the document end rests
+/// one-past-the-end, and a later `d` there deletes nothing.
 ///
 /// # Errors
 ///
@@ -228,11 +228,6 @@ pub fn delete_selection_noyank<M: EditorMode>(
 
 fn delete_selection_impl<M: EditorMode>(sim: &mut HelixSimulator<M>) {
     delete_active_selection(sim);
-    let last_valid_pos = sim.doc.len_chars().saturating_sub(1);
-    sim.selection = sim
-        .selection
-        .clone()
-        .transform(|range| Range::point(range.head.min(last_valid_pos)));
 }
 
 /// True when every range of the active selection spans one or more whole

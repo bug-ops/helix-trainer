@@ -76,8 +76,8 @@ Not yet built. Drafted for review/prioritization only.
 | Feature | Phase | Status |
 |---------|-------|--------|
 | [[fsrs-7-crate-migration/spec\|Migrate `fsrs` Crate from 6.6 to 7.0 (FSRS-6 Behavior Preserved)]] | specify (lightweight, per SDD scaling guidance) | proposed — dependency major bump; model change tracked in [[fsrs-7-model-adoption/spec]] |
-| [[fsrs-7-model-adoption/spec\|Evaluate Switching the Scheduler from the FSRS-6 Model to the FSRS-7 Model]] | specify (lightweight, per SDD scaling guidance) | proposed — go/no-go evaluation (research, P4); prerequisite: [[fsrs-7-crate-migration/spec]] |
-| [[mutation-testing-critical-paths/spec\|Adopt Mutation Testing on Scoring, FSRS Scheduling and Quest-Generation Critical Paths]] | specify (lightweight, per SDD scaling guidance) | proposed — non-gating scheduled cargo-mutants run (research, P4); related: #536 |
+| [[fsrs-7-model-adoption/spec\|Evaluate Switching the Scheduler from the FSRS-6 Model to the FSRS-7 Model]] | specify (lightweight, per SDD scaling guidance) | evaluated 2026-11-12 (#437): DEFER (synthetic corpus, elapsed form not declared in advance; re-run on real logs) — decision record in section 11; go/no-go evaluation (research, P4); prerequisite: [[fsrs-7-crate-migration/spec]] |
+| [[mutation-testing-critical-paths/spec\|Adopt Mutation Testing on Scoring, FSRS Scheduling and Quest-Generation Critical Paths]] | specify (lightweight, per SDD scaling guidance) | proposed — non-gating scheduled cargo-mutants run (research, P4); setup built (#549), baseline pending; related: #536 |
 | [[undo-insert-session-granularity/spec\|One Undo Step per Insert Session (`u` Undoes the Whole `i ... Escape`)]] | specify (lightweight, per SDD scaling guidance) | proposed — #571, #589, #596; FR-003 amended with the per-command hx table; FR-013 and FR-014 add multi-cursor sessions; related: #501 |
 
 ## Project Foundation

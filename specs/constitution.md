@@ -67,7 +67,7 @@ status: permanent
   | 5 | `gamification` |
   | 6 | `game` |
   | 7 | `minigame` |
-  | 8 | `error` (the user-facing error hub: `UserError`, `ErrorCause`, `error_chain` and the `From` conversions into `UserError`, #606) |
+  | 8 | `error` (the user-facing error hub: `UserError`, `ErrorCause` and the `From` conversions into `UserError`, #606; `error_chain` stays in `security`) |
   | 9 | `input` |
   | 10 | `async_state` |
   | 11 | `ui` |
@@ -138,7 +138,7 @@ status: permanent
   `#![forbid(unsafe_code)]` crate attributes in `main.rs` and `lib.rs`) MUST
   remain in force project-wide — no exceptions, no `#[allow(unsafe_code)]`
   overrides.
-- Clippy pedantic lints are enabled project-wide (#532). Kept allowed in `Cargo.toml`, each with a one-line reason: `module_name_repetitions` and `must_use_candidate` (user decision), and, as a deferred residual, `assert_is_empty`, `match_same_arms`, `similar_names` and `too_many_lines`. #537 burns the four residual lints down: each is either fixed or silenced at the site with a local `#[expect(.., reason = "..")]`, then removed from the crate-wide allow-list in `Cargo.toml`, so that only the two user-decision lints stay allowed crate-wide; the offenders are measured before the work and again after the merge, and a new crate-wide `allow` for a lint requires an explicit team decision recorded here.
+- Clippy pedantic lints are enabled project-wide (#532). Only `module_name_repetitions` and `must_use_candidate` stay allowed crate-wide in `Cargo.toml` (user decision, each with a one-line reason). #537 removed the four former residual allows (`assert_is_empty`, `match_same_arms`, `similar_names`, `too_many_lines`): every remaining offender (about 140 functions) carries a function-level `#[expect(.., reason = "..")]` and none was fixed by a machine rewrite, because the machine fix for `assert_is_empty` reads worse. A new crate-wide `allow` for a lint requires an explicit team decision recorded here.
 - Every `pub` type, trait, function, and method must have a `///` doc
   comment explaining *what* and *why*, not merely restating the name;
   non-trivial public APIs need a runnable `# Examples` doc-test.

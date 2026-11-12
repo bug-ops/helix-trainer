@@ -22,7 +22,7 @@ related:
 
 > [!info] Metadata
 > **Source**: research CI cycle finding (priority P4, research)
-> **Status**: Proposed (not built). Decision criteria FIXED 2026-11-11 (FR-006, FR-011) before any result is inspected; the decision record is written after the run.
+> **Status**: Evaluated 2026-11-12, decision record in section 11: DEFER. The corpus is synthetic only and the elapsed form that `LL7` uses was not fixed before the numbers were seen, so no GO is valid. Sensitivity: fractional elapsed fails the multi-day tolerance (NO-GO form); whole-day elapsed would pass both bars. The model switch stays unimplemented.
 > **Depth**: Lightweight spec, per this project's SDD scaling guidance. This is a go/no-go evaluation, not an implementation commitment: it specifies what must be measured and how the decision is made, not how the model is wired in.
 > **Prerequisite**: [[fsrs-7-crate-migration/spec|FSRS-7 crate migration]] (mechanical `fsrs` 6.x to 7.0.0 bump)
 
@@ -107,7 +107,7 @@ THEN the outcome is exactly one of GO, NO-GO, or DEFER, with the numbers that ju
 | FR-003 | THE evaluation SHALL report ONE primary metric separately for same-day reviews (elapsed under 1 day) and multi-day reviews (elapsed of 1 day or more): the mean LOG-LOSS of the predicted retrievability against the recalled (1) or forgotten (0) outcome. Binned RMSE is reported as a secondary metric and does not enter the decision. The mapping of a trainer attempt to the 1-4 FSRS rating is defined by [[fsrs-review-rating-and-session/spec]] (FR-004..FR-006: failure is Again; success is Easy for ratio <= 1.5, Good for <= 3.0, otherwise Hard); the binary recall outcome is success versus failure. The evaluation takes it from there, not invented. | must |
 | FR-004 | WHEN comparing models THE evaluation SHALL use identical inputs, ratings, and timestamps for both, with FSRS-7 run both with default parameters and, if applicable, with the elapsed time passed as fractional days | must |
 | FR-005 | THE evaluation SHALL assess each candidate representation of sub-day elapsed time and interval (keep day-quantized, store fractional days, store seconds) for impact on `Scheduler` due-item selection and on daily quest generation and reset, which currently assume day granularity. [NEEDS CLARIFICATION: should "due" within a session be able to resurface a card minutes later, and does that conflict with the existing session/quest design?] | must |
-| FR-006 | THE decision criteria are FIXED here, before any result is inspected (user decision D-437, 2026-11-11). With `LL6` and `LL7` the mean log-loss of FSRS-6 and FSRS-7 on the same events and `gain_same = (LL6_same - LL7_same) / LL6_same`: (a) GO when the corpus is valid (FR-011) AND `gain_same >= 5%` (FSRS-7 at least 5% better on same-day reviews) AND `LL7_multi <= 1.01 * LL6_multi` (FSRS-7 at most 1% worse on multi-day reviews); (b) NO-GO when the corpus is valid and either `gain_same < 5%` or `LL7_multi > 1.01 * LL6_multi`; (c) DEFER when the corpus is NOT valid (FR-011). The numbers are reported as measured; nothing is averaged across the same-day and multi-day groups | must |
+| FR-006 | THE decision criteria are FIXED here, before any result is inspected (user decision D-437, 2026-11-11). With `LL6` and `LL7` the mean log-loss of FSRS-6 and FSRS-7 on the same events and `gain_same = (LL6_same - LL7_same) / LL6_same`: (a) GO when the corpus is valid (FR-011) AND `gain_same >= 5%` (FSRS-7 at least 5% better on same-day reviews) AND `LL7_multi <= 1.01 * LL6_multi` (FSRS-7 at most 1% worse on multi-day reviews); (b) NO-GO when the corpus is valid and either `gain_same < 5%` or `LL7_multi > 1.01 * LL6_multi`; (c) DEFER when the corpus is NOT valid (FR-011). The numbers are reported as measured; nothing is averaged across the same-day and multi-day groups. ELAPSED FORM (clarification of 2026-11-12, see section 11): the form of elapsed time that reaches `LL7` MUST be declared BEFORE a run, as the form the production scheduler will actually feed to the model, and the verdict is stated for THAT form only; any other form is recorded as a sensitivity result and is not averaged in. A form chosen after the numbers are seen is not a valid basis for GO. The current scheduler is day-granular (`elapsed_days: u32`, day-quantized due dates) and the sub-day due and quest design of FR-005 is unresolved, so the form to declare for the next run is whole-day elapsed days; FSRS-7 fed fractional elapsed days is the sub-day sensitivity | must |
 | FR-007 | THE evaluation SHALL enumerate state-migration options for existing profiles (reset, derive `stability_fast` via serde default, replay of reconstructable history, approximate mapping) with the user-visible consequences of each | must |
 | FR-008 | THE evaluation SHALL confirm that retrievability for FSRS-7 is obtained through `FSRS::current_retrievability` rather than from `FSRS_PARAMS[20]` | must |
 | FR-009 | THE evaluation SHALL record the model/parameter-set choice that `FSRS::new` would make implicitly, and require it be pinned explicitly in any GO follow-up | should |
@@ -186,14 +186,39 @@ THEN the outcome is exactly one of GO, NO-GO, or DEFER, with the numbers that ju
 ## 10. Open Questions
 
 > [!question] Unresolved
-> - [NEEDS CLARIFICATION: Is a per-review log available or capturable for a real corpus, given `profile.json` stores only aggregate state?]
+> - [NEEDS CLARIFICATION: Is a per-review log available or capturable for a real corpus, given `profile.json` stores only aggregate state? The DEFER of section 11 is re-run on such a corpus.]
 > - Closed 2026-11-11: trainer attempt to FSRS rating and recall-outcome mapping is defined in [[fsrs-review-rating-and-session/spec]] (FR-003 pointer).
 > - Closed 2026-11-11 (user decision D-437): GO margin 5% relative log-loss on same-day reviews, multi-day tolerance 1% worse (FR-006), corpus validity per FR-011.
 > - [NEEDS CLARIFICATION: Should within-session resurfacing of a card be a product goal, or is day-level due sufficient with FSRS-7 used only for better stability estimates?]
 > - [NEEDS CLARIFICATION: Preferred migration for existing profiles (reset vs. replay vs. approximate).]
 > - [NEEDS CLARIFICATION: Startup-time baseline for NFR-003.]
 
-## 11. See Also
+## 11. Decision Record (2026-11-12)
+
+> [!important] Outcome
+> **DEFER.** The corpus is valid by FR-011 but SYNTHETIC only, and the elapsed form used for `LL7` was not declared before the numbers were seen (the first reading of FR-006 was ambiguous, and the clarification was written after the results). A GO resting on that post-hoc choice is not a valid adoption basis. Sensitivity results are kept: fractional elapsed is NO-GO, whole-day elapsed would pass both bars. The model switch is not adopted and nothing is implemented.
+
+Tool and corpus (FR-012, `examples/fsrs_model_eval.rs`, seeded, two runs identical): 5 seeds x 1,500 cards x 10 reviews from a model-neutral generator (stretched-exponential forgetting `0.9^((t/s)^0.8)` with hidden stability: success gain, failure shrink, lognormal noise; 55% same-day gaps of 1 minute to 12 hours, 45% multi-day gaps of 1 to 60 days; 2% of timestamps skewed backwards). Ratings use the trainer mapping of FR-003. Models: FSRS-6 with default parameters and whole-day elapsed (as shipped); FSRS-7 with default parameters, once with whole-day elapsed and once with fractional elapsed days. Retrievability is read through `FSRS::current_retrievability` for every model (FR-008 confirmed: no `FSRS_PARAMS[20]` indexing). Metric: mean log-loss, probabilities clamped to [1e-6, 1-1e-6].
+
+Corpus validity (FR-011): V1 36,535 scored same-day and 30,392 scored multi-day events (pass); V2 the same verdict on all 5 seeds for each form (pass); V3 0.76% of events excluded (pass); V4 generator neither FSRS-6 nor FSRS-7 (pass by construction). The corpus satisfies FR-011, so DEFER here does not come from FR-011 but from the decision of 2026-11-12: the elapsed form was not declared in advance and the evidence is synthetic only (FR-006 clarification).
+
+| Model and elapsed form | Same-day log-loss | Multi-day log-loss | Same-day gain vs FSRS-6 | Multi-day vs FSRS-6 | FR-006 verdict |
+|------------------------|-------------------|--------------------|-------------------------|---------------------|----------------|
+| FSRS-6, whole-day (shipped) | 0.7215 | 1.0554 | baseline | baseline | baseline |
+| FSRS-7, whole-day elapsed | 0.2443 | 0.9562 | 66% better | 9.4% better | would pass both bars on every seed (sensitivity, not a verdict) |
+| FSRS-7, fractional elapsed | 0.1964 | 1.1035 | 72.8% better | 4.6% worse (fails the 1% tolerance) | would fail on every seed (sensitivity, not a verdict) |
+
+Why no form is the verdict form: the first reading of FR-006 did not say how elapsed time reaches `LL7`, and the example printed the fractional form as primary. The whole-day form is the one the current scheduler feeds and needs no change to due selection, daily quests or the stored interval type, while the fractional form needs the sub-day design of FR-005 (not evaluated); that argument was made after the results, so it is the rule for the NEXT run (FR-006), not a basis for this one.
+
+Caveats that bound the conclusion:
+- The form clarification was written after the numbers were seen; choosing the whole-day form afterwards would be post-hoc, so both rows stay as sensitivity and neither is a verdict (decision of 2026-11-12).
+- Synthetic evidence only; the risk table of section 9 prefers DEFER over GO on synthetic-only evidence, and this record follows that rule.
+- FSRS-6 default parameters score worse than chance on this generator's same-day events (0.7215 is above ln 2), so most of the same-day gain measures how well FSRS-7 defaults fit this generator, not a real-learner effect.
+- FR-005 (sub-day due selection and quests) and FR-007 (migration options) were not evaluated numerically: `profile.json` stores state, not a review log, so replay of existing history is impossible for current users. FR-009: `FSRS::new(&[])` selects the FSRS-7 defaults, so any follow-up pins the parameter table explicitly.
+
+Follow-up: (1) a follow-up issue to collect a real per-review-log corpus (the trainer persists state, not a log, so capture has to be designed first) and to re-run the evaluation with the elapsed form declared in advance (FR-006: whole-day, the form the production scheduler feeds, with fractional as sensitivity), re-checking FR-011 validity; (2) no adoption spec and no scheduler change until that re-run gives GO; (3) the fractional (sub-day) form failed the multi-day tolerance on the synthetic corpus and is not pursued unless a real corpus shows it within tolerance.
+
+## 12. See Also
 
 - [[constitution]] — project principles
 - [[MOC-specs]] — all specifications

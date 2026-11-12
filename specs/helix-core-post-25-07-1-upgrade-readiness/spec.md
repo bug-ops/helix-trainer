@@ -33,6 +33,9 @@ related:
 
 The simulator wraps real `helix-core` ([[constitution]] Section I). The project promises that scenarios teach genuine Helix behavior, so drift between the pinned core and the current upstream editor makes some canonical solutions and taught keybindings stale. Upstream has accumulated roughly 16 months of changes, including at least one compile-breaking API change affecting this project. When a new tag is published, the bump will land on top of that backlog unless it is understood in advance.
 
+> [!info] Re-verified 2026-11-12 (#438)
+> Against the `25.07.1` tag (`a05c151`) and master `a714a81`: still no release tag after `25.07.1` (2025-07-18); the compare is ahead 1004 and behind 2 (diverged; the earlier figure was 991). No version bump follows from this, the decision rule of Section 3.2 keeps the `25.07.1` pin. CORRECTIONS to the first research: the Insert-mode `Tab` (`smart_tab`) and `Shift-Tab` (`insert_tab`) bindings (`default.rs` 393-394), `gD` goto_declaration (48) and normal-mode `Ctrl-z` suspend (335) are ALREADY in `25.07.1`, not master changes; `:set-register` is NOT in `25.07.1`. The default keymap diff `25.07.1..master` is only `[x`/`]x` XML element motions, `space E` renamed `space .`, and `space s`/`S` mapped to `lsp_or_syntax_symbol_picker` and `lsp_or_syntax_workspace_symbol_picker`. Confirmed: the `find_nth_pairs_pos` API break (master `surround.rs` 160), `|` added to `PAIRS`, and diffs in `case_conversion.rs` (92 lines), `selection.rs` (64), `transaction.rs` (208), `indent.rs` (1008) and `surround.rs` (56). Not re-verified: jumplist saving for goto next/prev and goto_word, the `<n>G` documentation, and the window-mode additions.
+
 Facts below were verified on 2026-11-10 against the upstream compare of `25.07.1...master` (master HEAD `57d86412`). Everything is on unreleased master, so details may change before a tag is cut.
 
 ### Goal
@@ -149,19 +152,19 @@ These are changes in `helix-core` between `25.07.1` and master that can alter ou
 
 ### 3.6 New-command scenario candidates
 
-Candidates come from default keymap and typable-command changes on master. None is committed to the scenario catalog by this spec. Each accepted candidate needs its own spec/issue, and MUST NOT be added until it exists in a released tag the project pins. Rows are on unreleased master.
+Candidates come from default keymap and typable-command changes on master, except the three rows marked as already released in `25.07.1` (re-verification of 2026-11-12). None is committed to the scenario catalog by this spec. Each accepted candidate needs its own spec/issue, and MUST NOT be added until it exists in a released tag the project pins. Rows are on unreleased master.
 
 | Candidate | Specific upstream change | Teachable in simulator? |
 |-----------|-------------------------|-------------------------|
 | XML element motions | `]x` / `[x` motions; XML/HTML/JSX textobjects (upstream #11158) | `[NEEDS CLARIFICATION: needs tree-sitter syntax; the simulator uses no syntax trees today, and the new `find_nth_pairs_pos` `syntax` parameter suggests more tree-sitter coupling]` |
-| Goto declaration | new `gD` goto_declaration | Likely LSP-only; probably not simulable (no LSP in the trainer) |
+| Goto declaration | `gD` goto_declaration (already bound in `25.07.1`, `default.rs` 48; not a master change) | Likely LSP-only; probably not simulable (no LSP in the trainer) |
 | Goto line / file start docs | docs now describe `<n>G` / `<n>gg` as goto_line and `<n>g` / `g` split for goto_file_start | Check whether existing goto-line coverage already matches; possible hint/doc fix instead of a new scenario |
 | Jumplist saving | goto next/prev and goto_word now save to the jumplist | Scenarios using `Ctrl-o` / `Ctrl-i` after those motions would change; check jumplist support in the simulator |
 | Window mode additions | `t` transpose_view, `ns` / `nv` new splits, goto_file_hsplit/vsplit | Out of scope: windows and splits are not simulated |
-| Insert-mode Tab behavior | `Tab` smart_tab, `Shift-Tab` insert_tab | Candidate: indentation-in-insert-mode scenario, if the simulator exposes smart_tab behavior |
-| Suspend | normal-mode `Ctrl-z` suspend | Not teachable (process-level) |
+| Insert-mode Tab behavior | `Tab` smart_tab, `Shift-Tab` insert_tab (already in `25.07.1`, `default.rs` 393-394; not a master change) | Simulated at the pin: indentation by FR-031, smart-tab approximation by FR-059; `Shift-Tab` (`insert_tab`) is not modeled |
+| Suspend | normal-mode `Ctrl-z` suspend (already in `25.07.1`, `default.rs` 335; not a master change) | Not teachable (process-level) |
 | Symbol pickers | `space s` / `S` now `lsp_or_syntax_*_symbol_picker` | Picker UI is not simulated |
-| `:set-register` | new typable command | Candidate: aligns with the existing named-register and command-line support, which today covers only `:goto` / `:g` ([[register-command-mode-support/spec]]) |
+| `:set-register` | new typable command, NOT in `25.07.1` (verified 2026-11-12) | Candidate: aligns with the existing named-register and command-line support, which today covers only `:goto` / `:g` ([[register-command-mode-support/spec]]) |
 
 ### 3.7 Keymap and command rename handling (`use_helix_keymap`)
 
@@ -176,7 +179,8 @@ Known keymap changes on master relevant here:
 
 - `space E` was renamed to `space .` (file explorer in the current buffer's directory). The explorer is not simulated, so this affects at most hint text and any binding-name table.
 - `space s` / `S` now map to `lsp_or_syntax_*_symbol_picker`; names resolved by `use_helix_keymap` must tolerate the new identifiers.
-- Insert-mode `Tab` / `Shift-Tab` and normal-mode `Ctrl-z` have new defaults; verify the stock keymap does not shadow them wrongly.
+- `[x` / `]x` (XML element motions) are new on master; they need syntax trees and are not simulated.
+- Insert-mode `Tab` / `Shift-Tab` and normal-mode `Ctrl-z` are NOT master changes: they are already default in `25.07.1` (re-verification of 2026-11-12), so the stock keymap table must already hold them.
 
 ### 3.8 Simulator Fidelity at the Pinned Core (25.07.1)
 
@@ -231,9 +235,9 @@ Known keymap changes on master relevant here:
 | FR-056 | WHEN `Backspace` runs in Insert mode with the cursor between an auto-pair (`()`, `[]`, `\"\"`) THE SIMULATOR SHALL delete BOTH halves (`i ( Backspace Escape` gives the empty buffer; also `[` and `\"`), as hx does | #597 | must |
 | FR-057 | THE scenario `writing/code-fence.toml` SHALL use the solution `O`, backtick, backtick, backtick, `Delete`, `Escape`, `j`, `o`, backtick, backtick, backtick, `Delete`, `Escape` with `optimal_count` 13 (was 11): with auto-pair (FR-055) three typed backticks leave a fourth that `Delete` removes. The target text is unchanged. The scenario's parity claim is SIMULATOR OUTPUT versus the scenario target (Task and MiniGame completion, `cargo nextest run scenario`), NOT byte parity with hx: in hx the same keys leave a trailing `\n` after the final `Delete` (a hx quirk, see 3.8.6 table E), which the simulator does not reproduce and the spec does not claim to | #597 | must |
 | FR-058 | WHEN `Ctrl-r` is pressed in the Base input state on a gameplay screen (Task and Arcade) THE SYSTEM SHALL execute redo (the existing `TrainerAlias` path) instead of dropping the key. The Ctrl-key table (`b f u d c r`) is ONE table shared by the single-key mapping and the base-state Ctrl handler, with an end-to-end test (`handle_key_event(Ctrl-r)` after an undo redoes) | #592 | must |
-| FR-059 | WHEN Insert-mode `Tab` is pressed and ANY cursor has a non-whitespace character before it on its line THE SIMULATOR SHALL insert nothing for any cursor (hx `smart_tab`, on by default in 25.07.1, moves to the end of the parent syntax node instead of indenting; with a cursor in leading whitespace only, FR-031 applies unchanged). For `rs`, each cursor with text before it moves to just after the closer of the INNERMOST bracket pair (`()` `[]` `{}`) that encloses it, found with the lexer of the newline-indent rule (FR-039: strings and comments are skipped); when no pair encloses it, it moves to just after the closing `}` of the depth-0 block that opens later in the cursor line's item; otherwise, and for `py` and `md` ALWAYS, the cursor stays (hx without a syntax tree). This is a deterministic approximation of hx's tree-sitter parent-node jump without a syntax tree dependency (the user's choice for FR-039 applies); the three repro cases of the issue (`a Tab Escape`, `A Tab Escape`, `w a Tab Escape` on scenario 14) are golden-checked against hx and every mismatch is recorded in 3.8.4. Exact tree-sitter parent-node fidelity is tracked by a follow-up issue | #583 | must |
+| FR-059 | WHEN Insert-mode `Tab` is pressed and ANY cursor has a non-whitespace character before it on its line THE SIMULATOR SHALL insert nothing for any cursor (hx `smart_tab`, on by default in 25.07.1, moves to the end of the parent syntax node instead of indenting; with a cursor in leading whitespace only, FR-031 applies unchanged). For `rs`, each cursor with text before it moves to just after the closer of the INNERMOST bracket pair (`()` `[]` `{}`) that encloses it, found with the lexer of the newline-indent rule (FR-039: strings and comments are skipped); when no pair encloses it, it moves to just after the closing `}` of the depth-0 block that opens later in the cursor line's item; otherwise, and for `py` and `md` ALWAYS, the cursor stays (hx without a syntax tree). This is a deterministic approximation of hx's tree-sitter parent-node jump without a syntax tree dependency (the user's choice for FR-039 applies); the three repro cases of the issue (`a Tab Escape`, `A Tab Escape`, `w a Tab Escape` on scenario 14) are golden-checked against hx and every mismatch is recorded in 3.8.4 (known: for `py` and `md` hx moves to the end of the ROOT node, so `A Tab` goes to the document end, where this rule stays; and for `rs` `f( a Tab` jumps to the function end in hx and to after `)` here). Exact tree-sitter parent-node fidelity is tracked by a follow-up issue | #583 | must |
 | FR-060 | WHEN `/`, `?`, `n` or `N` searches THE SIMULATOR SHALL port hx `search_impl` (helix-term `commands.rs` 2148-2203): the forward search starts at the primary range's `to()` (the next grapheme boundary for a point range) and the backward search at its `from()` (the previous grapheme boundary); the match range keeps `with_direction(primary.direction())`; a zero-width match is widened to one grapheme; a match with `end == 0` is skipped; the search wraps around. So `/ $ Enter d` on scenario 14 selects the line break at the end of line 1 and joins it with line 2 (`fn add(a: i32, b: i32) -> i32 {    let sum = a + b;`) and `/ ^ Enter d` deletes the first character of line 2 (`   let sum = a + b;`) | #584 | must |
-| FR-061 | WHEN `C` or `Alt-C` runs THE SIMULATOR SHALL port hx `copy_selection_on_line` for the primary range (the primary-only simplification of FR-053 stays): the copy goes to the same VISUAL column (tabs counted at the language tab width, FR-063) on the next (`C`) or previous (`Alt-C`) line, and a line shorter than the column is SKIPPED (no cursor is created there and the walk continues to the following line). So on scenario 14 `l C C C d d` yields `fadd(a: i32, b: i32) -> i32 {` / `  let sum = a + b;` / `  sum` / `}` and the closing brace line is untouched. The scenario `copy_selection_next_002` is reworked against hx | #585 | must |
+| FR-061 | WHEN `C` or `Alt-C` runs THE SIMULATOR SHALL port hx `copy_selection_on_line` for the primary range (the primary-only simplification of FR-053 stays): the copy goes to the same VISUAL column (tabs counted at the language tab width, FR-063) on the next (`C`) or previous (`Alt-C`) line, and a line shorter than the column is SKIPPED (no cursor is created there and the walk continues to the following line). So on scenario 14 `l C C C d` creates no cursor on the shorter closing-brace line and deletes the character at column 1 of lines 1-3 only, as hx does. RESIDUAL (#625, 3.8.4): a SECOND `d` deletes the closing `}` in the simulator because `delete_selection_impl` clamps a cursor at the document end onto the last character, while hx keeps it. The scenario `copy_selection_next_002` is reworked against hx | #585 | must |
 | FR-062 | THE simulator command registered as `search_word_under_cursor` SHALL be renamed `search_selection_detect_word_boundaries` (the behavior of FR-045 since #581), and `Alt-*` (`search_selection`) on a POINT range SHALL search for the escaped character under it instead of selecting the word; the helpers `select_word_as_pattern` and `extract_word_at_cursor` are deleted. The in-game help text and the keymap command-name tables use the new name (a user remap naming the old name is reported through the unknown-command path, FR-014, no alias before 1.0) | #600 | must |
 | FR-063 | THE language rules SHALL carry the tab width as a typed `TabWidth` newtype: `rs` 4, `py` 4, `md` 2 (the hx 25.07.1 `languages.toml` values), and 4 for the bare-simulator rules `LanguageRules::PLAIN` only. `&` (FR-037), `<` (FR-030), the whitespace-only Backspace (FR-053), and `C`/`Alt-C` (FR-061) read the tab width from the active language rules, never from a constant. Tests cover `md` (width 2) next to `rs` | #542 | must |
 | FR-064 | THE simulator SHALL model ONE logical viewport so that `Ctrl-d`, `Ctrl-u`, `Ctrl-f`, `Ctrl-b`, `zj` and `zk` and the view after every command match hx 25.07.1 on a fixed 24-row view (user decision D-541 = B: a fixed logical view height, a port of hx scrolling; the rendered terminal height is NOT used and no real-height input exists). The full model, formulas and golden setup are in section 3.8.8. The fixed `PAGE_SIZE` is deleted | #541 | must |
@@ -320,8 +324,8 @@ WHEN  the user presses a, Tab, Escape on scenario 14
                                       THEN no indentation is inserted and the cursor follows FR-059 (#583)
 WHEN  the user presses /, $, Enter, d on scenario 14
                                       THEN lines 1 and 2 are joined (#584)
-WHEN  the user presses l, C, C, C, d, d on scenario 14
-                                      THEN the result is `fadd(...` and the closing brace stays (#585)
+WHEN  the user presses l, C, C, C, d on scenario 14
+                                      THEN lines 1-3 each lose the character at column 1 and the closing brace line is untouched (#585; a second d is the residual #625)
 WHEN  the user presses Alt-* on a point cursor
                                       THEN the escaped character under it is the search pattern (#600)
 WHEN  the user presses Ctrl-d / Ctrl-u / Ctrl-f / Ctrl-b on a 60-line document
@@ -394,7 +398,20 @@ WHEN  a scenario is indented with 8 spaces and the user presses >
 
 All `open` rows above for newline indent are tracked by one follow-up issue, #546; its cases 1-5 are implemented by the FR-039 amendments, and case 6 (multi-cursor Insert, together with counted `o`/`O`, #577) by FR-053 (#596).
 
-The former note on `Ctrl-d`/`Ctrl-u`/`Ctrl-f`/`Ctrl-b` (fixed page size, so Select-mode extension by these keys, FR-036, could not be golden-compared) and on the fixed tab width of 4 is replaced by FR-064 and FR-063. The residual rows of those requirements (soft-wrap, horizontal view, jumplist and picker centering, and the cases FR-059 cannot match without a syntax tree) are listed in this section when the implementation lands.
+The former note on `Ctrl-d`/`Ctrl-u`/`Ctrl-f`/`Ctrl-b` (fixed page size, so Select-mode extension by these keys, FR-036, could not be golden-compared) and on the fixed tab width of 4 is replaced by FR-064 and FR-063. The residual rows of those requirements are listed in the table "Residuals of the 2026-11-11 batch" below.
+
+**Residuals of the 2026-11-11 batch** (recorded after implementation; hx 25.07.1 versus the simulator):
+
+| Case | hx 25.07.1 result | Simulator result | Status |
+|------|-------------------|------------------|--------|
+| `rs`: `f( a Tab` (FR-059, #583) | cursor jumps to the end of the enclosing function (tree-sitter parent node) | cursor moves to just after the `)` of the innermost enclosing pair | open: exact tree-sitter parent-node fidelity needs a syntax tree (follow-up issue filed with the PR) |
+| `py` and `md`: `A Tab` after text (FR-059) | moves to the end of the root node (document end) | stays | open, same follow-up |
+| Viewport: soft-wrap, horizontal view, jumplist and picker centering (FR-064, #541) | view scroll and centering follow soft-wrapped rows, the horizontal offset, jumps and pickers | not modeled (soft-wrap off, no horizontal view, no jumplist or picker) | accepted residual; paging by the RENDERED editor height is a P4 follow-up |
+| `zz` (FR-064) | `align_view(Center)` with `relative = (H-1)/2`, no clamp at the document end | `H/2` with end-of-document clamping | open, #626 |
+| `l C C C d d` (FR-061, #585) | the second `d` keeps the closing `}` | the second `d` deletes the closing `}` | open, #625 |
+| `Alt-;` on a multi-range selection | flips every range | flips only the primary range | open, #623 |
+| `/` with an all-lowercase pattern (FR-060) | smart-case: case-insensitive match | case-sensitive match | open, #624 |
+| Long Insert sessions replayed with `.` (FR-053) | the full session replays | input past the 1000-character or 100-key caps is dropped silently and keys replay out of order | open, #622 |
 
 Scenario corrections: `dedent_001` and `dedent_line_001` were rewritten with 4-space nesting, because hx auto-detects an 8-space unit for an 8-space file (FR-037) and `<` removes all 8 spaces.
 
@@ -514,7 +531,7 @@ Two-cursor entry goldens on `ab cd\nef gh\nij kl` after `l C`: `i x Escape` give
 
 ### 3.8.8 Viewport model (FR-064, #541)
 
-User decision D-541 = B (2026-11-11): a fixed logical view height with a port of the hx scroll, not the rendered terminal height. Reference: `hx` 25.07.1 (helix-term `commands.rs` 1810-1917 `scroll`, `default.rs` 185-188, helix-view `view.rs` 231-300 and 335-347). The residual rows (soft-wrap, horizontal view, jumplist and picker centering) are written to 3.8.4 when the implementation lands.
+User decision D-541 = B (2026-11-11): a fixed logical view height with a port of the hx scroll, not the rendered terminal height. Reference: `hx` 25.07.1 (helix-term `commands.rs` 1810-1917 `scroll`, `default.rs` 185-188, helix-view `view.rs` 231-300 and 335-347). The residual rows (soft-wrap, horizontal view, jumplist and picker centering, and `zz`) are listed in 3.8.4.
 
 One logical viewport: `ViewState` with H = 24 inner rows (the existing `DEFAULT_VISIBLE_LINES`). `PAGE_SIZE` is deleted, and `ViewState.top_line` plays the role of the hx view anchor line. Soft-wrap is off, so visual rows equal lines. One ported `scroll(offset, direction, sync_cursor)` serves every key below:
 
@@ -584,7 +601,7 @@ One logical viewport: `ViewState` with H = 24 inner rows (the existing `DEFAULT_
 > - [NEEDS CLARIFICATION: does the new core raise `rust-version` above the project's MSRV?]
 > - [NEEDS CLARIFICATION: should there be an automated trigger (scheduled check of upstream tags, e.g. in the continuous-improvement cycle's dependency monitoring) or is manual detection enough?]
 > - [NEEDS CLARIFICATION: how long to wait before filing an issue to move to a `rev` pin if no tag appears (it has been about 16 months since 25.07.1)?]
-> - [NEEDS CLARIFICATION: whether upstream will publish a tag before the master changes listed here are altered or reverted; re-verify the compare at bump time.]
+> - [NEEDS CLARIFICATION: whether upstream will publish a tag before the master changes listed here are altered or reverted; re-verify the compare at bump time.] Re-verified 2026-11-12: no tag yet, master diverged (ahead 1004, behind 2).
 
 ## 9. See Also
 

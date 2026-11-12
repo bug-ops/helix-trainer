@@ -21,7 +21,7 @@ related:
 
 > [!info] Metadata
 > **Source**: research CI cycle finding (priority P4, research)
-> **Status**: Proposed (not built)
+> **Status**: Setup built (#549): configuration and workflow committed. BASELINE PENDING (section 11); the baseline record, triage and gating decision are not yet written.
 > **Depth**: Lightweight research spec, per this project's SDD scaling guidance. It specifies WHAT is missing and WHY it matters, plus the decisions that must be made. It does not prescribe workflow YAML or tool flags beyond what is needed to state a requirement.
 
 > [!abstract]
@@ -200,7 +200,17 @@ THEN each missed mutant is either linked to a follow-up issue or recorded as acc
 > - [NEEDS CLARIFICATION: Whether any alternative mutation tool should be compared.]
 > - [NEEDS CLARIFICATION: Issue #536 is currently closed; confirm whether its vacuous-assert work is complete, so this baseline starts from the post-fix suite.]
 
-## 11. See Also
+## 11. Implementation Status and Baseline (2026-11-12)
+
+| Item | State |
+|------|-------|
+| `.gitignore` rule `/.cargo/*` with the exception `!/.cargo/mutants.toml`, so the configuration is tracked | built |
+| `.cargo/mutants.toml`: the four files of FR-001, `--no-default-features` (FR-003), nextest on `--lib --bins`, noise exclusions (FR-002), 60 s minimum per-mutant test timeout (FR-006) | built; `cargo mutants --list` finds 282 mutants (scorer 21, quests 94, performance 143, scheduler 24) |
+| Workflow: weekly and manual dispatch, no pull-request trigger (FR-004), `cargo-mutants` 27.1.0 pinned with `--locked`, 240 minute job timeout, result artifacts uploaded (FR-005), exit codes 2 and 3 (missed or timed-out mutants) do not fail the job (FR-012) | built |
+| Baseline (FR-007) and triage of missed mutants (FR-008) | **BASELINE PENDING**: the two attempts failed in the unmutated tree because other in-flight edits broke the test build; the run is repeated once the tree builds, and this table is then filled with caught, missed, unviable and timed-out counts per file, the tool version and the commit |
+| Gating decision with runtime evidence (FR-010) | pending the baseline run |
+
+## 12. See Also
 
 - [[constitution]] — project principles
 - [[MOC-specs]] — all specifications

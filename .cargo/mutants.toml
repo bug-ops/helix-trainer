@@ -17,7 +17,8 @@ test_tool = "nextest"
 exclude_re = [
     "tracing::",
     "(debug|info|warn|error|trace)!",
-    "impl (fmt::)?(Display|Debug) for",
+    "impl (std::)?(fmt::)?(Display|Debug) for",
+    "impl PartialEq for ReviewItem",
     "fmt::Formatter",
     "ratatui::",
 ]

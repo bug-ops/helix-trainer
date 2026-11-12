@@ -21,7 +21,7 @@ related:
 
 > [!info] Metadata
 > **Source**: research CI cycle finding (priority P4, research)
-> **Status**: Setup built (#549): configuration and workflow committed. BASELINE PENDING (section 11); the baseline record, triage and gating decision are not yet written.
+> **Status**: Setup built (#549): configuration and workflow committed. baseline RECORDED 2026-11-12 (section 11: 76.0% on 233 viable mutants, gaps tracked by #633); the PR gating threshold stays pending until those gaps are covered.
 > **Depth**: Lightweight research spec, per this project's SDD scaling guidance. It specifies WHAT is missing and WHY it matters, plus the decisions that must be made. It does not prescribe workflow YAML or tool flags beyond what is needed to state a requirement.
 
 > [!abstract]
@@ -205,10 +205,23 @@ THEN each missed mutant is either linked to a follow-up issue or recorded as acc
 | Item | State |
 |------|-------|
 | `.gitignore` rule `/.cargo/*` with the exception `!/.cargo/mutants.toml`, so the configuration is tracked | built |
-| `.cargo/mutants.toml`: the four files of FR-001, `--no-default-features` (FR-003), nextest on `--lib --bins`, noise exclusions (FR-002), 60 s minimum per-mutant test timeout (FR-006) | built; `cargo mutants --list` finds 282 mutants (scorer 21, quests 94, performance 143, scheduler 24) |
+| `.cargo/mutants.toml`: the four files of FR-001, `--no-default-features` (FR-003), nextest on `--lib --bins`, noise exclusions (FR-002), 60 s minimum per-mutant test timeout (FR-006) | built; `cargo mutants --list` found 282 mutants before the noise exclusion of the baseline row and finds 278 after it (scorer 21, quests 94, performance 143, scheduler 24) |
 | Workflow: weekly and manual dispatch, no pull-request trigger (FR-004), `cargo-mutants` 27.1.0 pinned with `--locked`, 240 minute job timeout, result artifacts uploaded (FR-005), exit codes 2 and 3 (missed or timed-out mutants) do not fail the job (FR-012) | built |
-| Baseline (FR-007) and triage of missed mutants (FR-008) | **BASELINE PENDING**: the two attempts failed in the unmutated tree because other in-flight edits broke the test build; the run is repeated once the tree builds, and this table is then filled with caught, missed, unviable and timed-out counts per file, the tool version and the commit |
-| Gating decision with runtime evidence (FR-010) | pending the baseline run |
+| Baseline (FR-007) and triage of missed mutants (FR-008) | **RECORDED 2026-11-12**, see the table below. Triage: the 2 scheduler misses were noise (`ReviewItem::eq` and `Scheduler`'s `Debug::fmt`) and are now excluded in `.cargo/mutants.toml`; the other 56 are genuine test gaps, ticketed in #633. Effective baseline: 278 mutants, caught 177, missed 56, unviable 45, score 76.0% |
+| Gating decision with runtime evidence (FR-010) | **Non-gating confirmed**: the full scoped run takes 41 minutes wall clock at `-j 2` with 0 timeouts, well inside the 240 minute weekly job timeout, which supports the scheduled non-gating design. A pull-request gating threshold is NOT set: it stays pending until the gaps of #633 are covered and a re-run shows the score, so that a threshold is not fixed against a known-weak baseline |
+
+**Effective baseline** (after the noise exclusion; cargo-mutants 27.1.0, `-j 2`, `--no-default-features`, nextest on `--lib --bins`, 278 mutants): caught 177, missed 56, unviable 45; score = caught / (caught + missed) = 177 / 233 = 76.0%.
+
+| File | Caught | Missed | Unviable | Score |
+|------|--------|--------|----------|-------|
+| `src/game/scorer.rs` | 20 | 0 | 1 | 100% |
+| `src/learning/scheduler.rs` | 15 | 0 | 5 | 100% |
+| `src/gamification/quests.rs` | 62 | 19 | 13 | 76.5% |
+| `src/learning/performance.rs` | 80 | 37 | 26 | 68.4% |
+
+Provenance: the first raw run, on the #607 batch branch (head `953a6e7` at recording time, 41 minutes wall clock, 0 timeouts), had 282 mutants: caught 179, missed 58, unviable 45, score 179 / 237 = 75.5%, with scheduler 17 caught / 2 missed / 5 unviable (89.5%). The exclusions `impl (std::)?(fmt::)?(Display|Debug) for` and `impl PartialEq for ReviewItem` (excluded per impl, so the 2 CAUGHT `ReviewItem::eq` mutants left together with the 2 missed noise mutants) removed 4 mutants and give the effective baseline above.
+
+Disposition of the 56 missed mutants of the effective baseline (FR-008, SC-003): all are genuine test gaps tracked by #633 (the 2 noise misses of the raw run are excluded, not ticketed). The weakest area is FSRS performance tracking (`performance.rs`), then quest generation.
 
 ## 12. See Also
 

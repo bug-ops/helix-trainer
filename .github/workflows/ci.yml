@@ -47,6 +47,7 @@ jobs:
               - 'build.rs'
               - 'tests/**'
               - 'benches/**'
+              - 'fuzz/**'
               - '.cargo/**'
               - 'rust-toolchain*'
               - 'deny.toml'
@@ -148,6 +149,9 @@ jobs:
 
       - name: Check without default features
         run: cargo check --no-default-features --all-targets
+
+      - name: Check the fuzz crate compiles
+        run: cargo check --manifest-path fuzz/Cargo.toml
 
   docs:
     name: Rustdoc

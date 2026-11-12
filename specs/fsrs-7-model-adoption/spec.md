@@ -216,7 +216,7 @@ Caveats that bound the conclusion:
 - FSRS-6 default parameters score worse than chance on this generator's same-day events (0.7215 is above ln 2), so most of the same-day gain measures how well FSRS-7 defaults fit this generator, not a real-learner effect.
 - FR-005 (sub-day due selection and quests) and FR-007 (migration options) were not evaluated numerically: `profile.json` stores state, not a review log, so replay of existing history is impossible for current users. FR-009: `FSRS::new(&[])` selects the FSRS-7 defaults, so any follow-up pins the parameter table explicitly.
 
-Follow-up: (1) a follow-up issue to collect a real per-review-log corpus (the trainer persists state, not a log, so capture has to be designed first) and to re-run the evaluation with the elapsed form declared in advance (FR-006: whole-day, the form the production scheduler feeds, with fractional as sensitivity), re-checking FR-011 validity; (2) no adoption spec and no scheduler change until that re-run gives GO; (3) the fractional (sub-day) form failed the multi-day tolerance on the synthetic corpus and is not pursued unless a real corpus shows it within tolerance.
+Follow-up: (1) #627, the follow-up issue to collect a real per-review-log corpus (the trainer persists state, not a log, so capture has to be designed first) and to re-run the evaluation with the elapsed form declared in advance (FR-006: whole-day, the form the production scheduler feeds, with fractional as sensitivity), re-checking FR-011 validity; (2) no adoption spec and no scheduler change until that re-run gives GO; (3) the fractional (sub-day) form failed the multi-day tolerance on the synthetic corpus and is not pursued unless a real corpus shows it within tolerance.
 
 ## 12. See Also
 

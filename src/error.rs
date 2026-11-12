@@ -220,6 +220,9 @@ impl From<crate::config::ConfigError> for UserError {
         match err {
             ConfigError::Security(e) => e.into(),
             ConfigError::NotFound => Self::scenario_load_error(),
+            e @ ConfigError::Io(_) => Self::ScenarioLoadError {
+                cause: Some(e.into()),
+            },
             e @ (ConfigError::QuestTemplate(_) | ConfigError::Scenario(_)) => {
                 Self::OperationFailed {
                     cause: Some(e.into()),
@@ -430,6 +433,10 @@ mod tests {
         assert_matches!(
             UserError::from(ConfigError::NotFound),
             UserError::ScenarioLoadError { cause: None }
+        );
+        assert_matches!(
+            UserError::from(ConfigError::Io(std::io::Error::other("denied"))),
+            UserError::ScenarioLoadError { cause: Some(_) }
         );
         assert_matches!(
             UserError::from(GameError::NoActiveScenario),

@@ -482,7 +482,6 @@ mod tests {
     use std::assert_matches;
 
     use super::*;
-    use crate::input::typestate::key_mapping::key_to_command_string;
     use crate::testing::sid;
     use crate::{
         config::Scenario,
@@ -1449,59 +1448,9 @@ mod tests {
         assert_eq!(msg, Some(Message::ToggleSound));
     }
 
-    // Unit tests for key_to_command_string()
-    mod key_to_command_string_tests {
+    // Unit tests for arrow-key handling in gameplay input
+    mod arrow_key_tests {
         use super::*;
-
-        #[test]
-        fn test_char_key() {
-            let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
-            assert_eq!(
-                key_to_command_string(key),
-                Some(Cow::Owned("h".to_string()))
-            );
-        }
-
-        #[test]
-        fn test_uppercase_char_key() {
-            let key = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT);
-            assert_eq!(
-                key_to_command_string(key),
-                Some(Cow::Owned("G".to_string()))
-            );
-        }
-
-        #[test]
-        fn test_escape_key() {
-            let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Escape")));
-        }
-
-        #[test]
-        fn test_backspace_key() {
-            let key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Backspace")));
-        }
-
-        #[test]
-        fn test_arrow_keys() {
-            assert_eq!(
-                key_to_command_string(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)),
-                Some(Cow::Borrowed("Left"))
-            );
-            assert_eq!(
-                key_to_command_string(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)),
-                Some(Cow::Borrowed("Right"))
-            );
-            assert_eq!(
-                key_to_command_string(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
-                Some(Cow::Borrowed("Up"))
-            );
-            assert_eq!(
-                key_to_command_string(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
-                Some(Cow::Borrowed("Down"))
-            );
-        }
 
         #[test]
         fn test_map_arrow_to_movement() {
@@ -1662,12 +1611,6 @@ mod tests {
         }
 
         #[test]
-        fn test_enter_key() {
-            let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Enter")));
-        }
-
-        #[test]
         fn test_arrow_keys_with_modifiers_not_mapped() {
             use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
             use crate::ui::state::screen::TaskData;
@@ -1740,41 +1683,6 @@ mod tests {
                 }
                 _ => panic!("Expected ExecuteCommand with 'Right' for Shift+Right"),
             }
-        }
-
-        #[test]
-        fn test_tab_key() {
-            let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Tab")));
-        }
-
-        #[test]
-        fn test_unknown_key_returns_none() {
-            let key = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), None);
-        }
-
-        #[test]
-        fn test_home_key_returns_none() {
-            let key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
-            assert_eq!(key_to_command_string(key), None);
-        }
-
-        /// Regression test: an unmapped Alt-modified key must be dropped by
-        /// the fallback, not silently serialized as the bare character. Prior
-        /// to this fix, an unmapped Alt-z would reach the state machine as
-        /// plain "z", executing whatever "z" resolves to (view mode prefix)
-        /// instead of being ignored as an unrecognized command.
-        #[test]
-        fn test_unmapped_alt_key_is_dropped_not_serialized_as_bare_char() {
-            let key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::ALT);
-            assert_eq!(key_to_command_string(key), None);
-        }
-
-        #[test]
-        fn test_unmapped_ctrl_key_is_dropped_not_serialized_as_bare_char() {
-            let key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL);
-            assert_eq!(key_to_command_string(key), None);
         }
     }
 

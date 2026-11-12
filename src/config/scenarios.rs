@@ -513,19 +513,13 @@ impl ScenarioLoader {
     /// Not reached from production code today — see the [`ScenarioLoader`] type
     /// docs for why this filesystem path is retained.
     fn visit_toml_files(&self, dir: &Path) -> Result<(Vec<Scenario>, usize), ConfigError> {
-        let entries = fs::read_dir(dir).map_err(|e| {
-            tracing::error!("Failed to read directory: {}", e);
-            ConfigError::NotFound
-        })?;
+        let entries = fs::read_dir(dir).map_err(ConfigError::Io)?;
 
         let mut scenarios = Vec::new();
         let mut file_count: usize = 0;
 
         for entry in entries {
-            let entry = entry.map_err(|e| {
-                tracing::error!("Failed to read directory entry: {}", e);
-                ConfigError::NotFound
-            })?;
+            let entry = entry.map_err(ConfigError::Io)?;
 
             let path = entry.path();
 
@@ -536,13 +530,12 @@ impl ScenarioLoader {
                 file_count = file_count.saturating_add(sub_count);
             } else if path.extension().and_then(|s| s.to_str()) == Some("toml") {
                 // Load scenarios from this file
-                let file_scenarios = self.load(&path).map_err(|e| {
+                let file_scenarios = self.load(&path).inspect_err(|e| {
                     tracing::error!(
                         file = %sanitizer::sanitize_path_for_logging(&path),
                         "Failed to load scenario file: {:?}",
                         e
                     );
-                    e
                 })?;
 
                 file_count = file_count.saturating_add(1);
@@ -641,14 +634,13 @@ impl ScenarioLoader {
                 MAX_SCENARIOS_PER_FILE,
                 Self::validate_scenario,
             )
-            .map_err(|e| {
+            .inspect_err(|e| {
                 tracing::error!(
                     locale = locale,
                     index = index,
                     "Failed to load embedded scenario file: {:?}",
                     e
                 );
-                e
             })?;
 
             all_scenarios.extend(scenarios);

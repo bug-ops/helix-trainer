@@ -1,11 +1,13 @@
 //! Tests for `key_mapping` module
 
+use std::borrow::Cow;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::grammar::commands::*;
 use crate::input::typestate::key_mapping::{
-    handle_insert_mode_input, is_count_compatible_command, map_key_to_helix_command,
-    map_single_key_command, normalize_key_event, parse_helix_key_string,
+    handle_insert_mode_input, is_count_compatible_command, key_to_command_string,
+    map_key_to_helix_command, map_single_key_command, normalize_key_event, parse_helix_key_string,
 };
 
 // ============================================================================
@@ -1178,4 +1180,99 @@ fn test_parse_all_alt_commands_from_plan() {
     let key = parse_helix_key_string("Alt-*").unwrap();
     assert!(key.modifiers.contains(KeyModifiers::ALT));
     assert_eq!(key.code, KeyCode::Char('*'));
+}
+
+// ============================================================================
+// key_to_command_string tests
+// ============================================================================
+
+#[test]
+fn test_key_to_command_string_char_key() {
+    let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+    assert_eq!(
+        key_to_command_string(key),
+        Some(Cow::Owned("h".to_string()))
+    );
+}
+
+#[test]
+fn test_key_to_command_string_uppercase_char_key() {
+    let key = KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT);
+    assert_eq!(
+        key_to_command_string(key),
+        Some(Cow::Owned("G".to_string()))
+    );
+}
+
+#[test]
+fn test_key_to_command_string_escape_key() {
+    let key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Escape")));
+}
+
+#[test]
+fn test_key_to_command_string_backspace_key() {
+    let key = KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE);
+    assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Backspace")));
+}
+
+#[test]
+fn test_key_to_command_string_arrow_keys() {
+    assert_eq!(
+        key_to_command_string(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)),
+        Some(Cow::Borrowed("Left"))
+    );
+    assert_eq!(
+        key_to_command_string(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)),
+        Some(Cow::Borrowed("Right"))
+    );
+    assert_eq!(
+        key_to_command_string(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
+        Some(Cow::Borrowed("Up"))
+    );
+    assert_eq!(
+        key_to_command_string(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)),
+        Some(Cow::Borrowed("Down"))
+    );
+}
+
+#[test]
+fn test_key_to_command_string_enter_key() {
+    let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+    assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Enter")));
+}
+
+#[test]
+fn test_key_to_command_string_tab_key() {
+    let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+    assert_eq!(key_to_command_string(key), Some(Cow::Borrowed("Tab")));
+}
+
+#[test]
+fn test_key_to_command_string_unknown_key_returns_none() {
+    let key = KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE);
+    assert_eq!(key_to_command_string(key), None);
+}
+
+#[test]
+fn test_key_to_command_string_home_key_returns_none() {
+    let key = KeyEvent::new(KeyCode::Home, KeyModifiers::NONE);
+    assert_eq!(key_to_command_string(key), None);
+}
+
+/// Regression test: an unmapped Alt-modified key must be dropped by
+/// the fallback, not silently serialized as the bare character. Prior
+/// to this fix, an unmapped Alt-z would reach the state machine as
+/// plain "z", executing whatever "z" resolves to (view mode prefix)
+/// instead of being ignored as an unrecognized command.
+#[test]
+fn test_key_to_command_string_unmapped_alt_key_is_dropped_not_serialized_as_bare_char() {
+    let key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::ALT);
+    assert_eq!(key_to_command_string(key), None);
+}
+
+#[test]
+fn test_key_to_command_string_unmapped_ctrl_key_is_dropped_not_serialized_as_bare_char() {
+    let key = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL);
+    assert_eq!(key_to_command_string(key), None);
 }

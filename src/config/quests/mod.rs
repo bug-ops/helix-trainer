@@ -327,13 +327,12 @@ impl QuestLoader {
             MAX_QUEST_TEMPLATES_PER_FILE,
             Self::validate_quest,
         )
-        .map_err(|e| {
+        .inspect_err(|e| {
             tracing::error!(
                 locale = locale,
                 "Failed to load embedded quest file: {:?}",
                 e
             );
-            e
         })?;
 
         tracing::info!(

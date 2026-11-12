@@ -22,6 +22,10 @@ pub enum ConfigError {
     #[error("Invalid scenario: {0}")]
     Scenario(#[from] ScenarioValidationError),
 
+    /// Reading a scenario directory or one of its entries failed.
+    #[error("Failed to read the scenario directory: {0}")]
+    Io(#[source] std::io::Error),
+
     /// No embedded or on-disk source exists for the request.
     #[error("No scenario or quest source found")]
     NotFound,
@@ -35,5 +39,12 @@ mod tests {
     fn quest_template_error_keeps_its_message() {
         let err = ConfigError::from(QuestTemplateError::XpRewardTooHigh { max: 1, actual: 2 });
         assert!(err.to_string().contains("Invalid quest template"));
+    }
+
+    #[test]
+    fn io_error_keeps_its_cause_as_the_source() {
+        let err = ConfigError::Io(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+        assert!(std::error::Error::source(&err).is_some());
+        assert!(!err.to_string().contains("No scenario"));
     }
 }

@@ -541,7 +541,7 @@ pub fn map_key_to_helix_command(key: KeyEvent) -> Option<&'static str> {
     }
 }
 
-/// The `h`/`j`/`k`/`l` key an unmodified arrow key stands for in Normal mode.
+/// The `h`/`j`/`k`/`l` key an arrow key stands for in Normal mode; the caller checks modifiers.
 pub(crate) fn arrow_movement(key_code: KeyCode) -> Option<KeyEvent> {
     let movement = match key_code {
         KeyCode::Left => 'h',
@@ -565,25 +565,14 @@ pub(crate) fn arrow_movement(key_code: KeyCode) -> Option<KeyEvent> {
 /// like `CMD_COPY_SELECTION_PREV` = "Alt-C"), and builds strings for prefix keys
 /// that the state machine needs to handle.
 pub(crate) fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> {
-    // First try to get the command constant from map_key_to_helix_command
-    // This handles all known single-key commands including modifier commands
     if let Some(cmd) = map_key_to_helix_command(key) {
         return Some(Cow::Borrowed(cmd));
     }
 
-    // For unknown commands (prefix keys like 'g', 'm', 'f', etc.),
-    // normalize and return the character for the state machine to process.
-    // Guard is applied AFTER normalization so macOS Option-composed chars
-    // are judged on their post-normalization modifiers.
     let key = normalize_key_event(key);
 
     match key.code {
-        // Only bare ASCII chars fall through here: known ALT/CTRL commands
-        // are already returned above by `map_key_to_helix_command`, so an
-        // ALT/CTRL-carrying char reaching this arm is unmapped and must be
-        // dropped rather than silently serialized as the bare character
-        // (previously: unmapped Alt-x reached the state machine as plain
-        // "x", executing `select line` instead of being ignored).
+        // An unmapped Alt/Ctrl char is dropped, never serialized as the bare char.
         KeyCode::Char(c)
             if c.is_ascii()
                 && !key.modifiers.contains(KeyModifiers::ALT)

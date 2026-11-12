@@ -823,6 +823,10 @@ impl AnyModeSimulator {
 ///
 /// This handles both simple commands and compound actions (e.g., x+d for select line + delete).
 /// Commands are parsed and executed in order, with multi-key sequences (gg, rx) handled properly.
+#[expect(
+    clippy::match_same_arms,
+    reason = "arms stay apart to document each case"
+)]
 fn execute_key_sequence(
     sim: &mut AnyModeSimulator,
     keys: &[crossterm::event::KeyEvent],

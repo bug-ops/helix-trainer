@@ -131,9 +131,9 @@ impl ScenarioCompletionService {
 
     /// Update profile counters after scenario completion
     pub fn update_profile_counters(profile: &mut UserProfile, is_perfect: bool) {
-        profile.scenarios_completed += 1;
+        profile.scenarios_completed = profile.scenarios_completed.saturating_add(1);
         if is_perfect {
-            profile.perfect_scenarios += 1;
+            profile.perfect_scenarios = profile.perfect_scenarios.saturating_add(1);
         }
     }
 
@@ -357,6 +357,18 @@ mod tests {
     }
 
     #[test]
+    fn test_update_profile_counters_saturates() {
+        let mut profile = UserProfile::new();
+        profile.scenarios_completed = u32::MAX;
+        profile.perfect_scenarios = u32::MAX;
+
+        ScenarioCompletionService::update_profile_counters(&mut profile, true);
+
+        assert_eq!(profile.scenarios_completed, u32::MAX);
+        assert_eq!(profile.perfect_scenarios, u32::MAX);
+    }
+
+    #[test]
     fn test_xp_components_partial_score() {
         let feedback = create_test_feedback(75, 100);
         let components = ScenarioCompletionService::calculate_xp_components(&feedback, false);
@@ -397,6 +409,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_extract_commands_empty() {
         let feedback = create_test_feedback(100, 100);
         let commands = ScenarioCompletionService::extract_commands(&feedback);

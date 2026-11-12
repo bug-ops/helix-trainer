@@ -32,6 +32,10 @@ use crate::input::typestate::{
 // ============================================================================
 
 impl InputHandler<RegisterPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &RegisterPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Accept any character as the register name

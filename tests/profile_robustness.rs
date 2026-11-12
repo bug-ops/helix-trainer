@@ -115,6 +115,10 @@ fn mutate(document: &mut Value, mutations: &[Mutation], unknown_fields: usize) {
     }
 }
 
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn exercise_consumers(mut profile: UserProfile, clock_selector: usize) {
     let level_before = profile.level;
     let now = match clock_selector % 3 {

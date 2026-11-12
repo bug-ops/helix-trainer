@@ -6,18 +6,18 @@
 use helix_trainer::config::{
     CursorSpec, Pos, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
 };
+use helix_trainer::error::UserError;
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
 use helix_trainer::input::keymap::CanonicalKeys;
 use helix_trainer::input::typestate::InputState;
 use helix_trainer::learning::PerformanceTracker;
-use helix_trainer::security::UserError;
 use helix_trainer::ui::state::{InputStateAccess, MenuData, TypedScreen};
 use helix_trainer::ui::{AppState, Message};
 use std::assert_matches;
 use std::borrow::Cow;
 
 /// Run `update` and execute the effects it requests, as the event loop does
-fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::security::UserError> {
+fn update(state: &mut AppState, msg: Message) -> Result<(), helix_trainer::error::UserError> {
     let mut effects = Vec::new();
     let result = helix_trainer::ui::update(state, msg, &mut effects);
     for effect in effects {

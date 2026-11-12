@@ -507,6 +507,10 @@ fn test_unknown_keys_in_metadata_table_are_rejected() {
 }
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_scenario_without_metadata_table_gets_default_metadata() {
     let toml = create_test_scenario_toml();
     let toml = toml.split("[scenarios.metadata]").next().unwrap();
@@ -517,6 +521,10 @@ fn test_scenario_without_metadata_table_gets_default_metadata() {
 }
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_default_loader() {
     let loader = ScenarioLoader::default();
     assert!(!loader.allowed_base_paths.is_empty());
@@ -1563,7 +1571,7 @@ mod completion_rule {
     }
 }
 
-fn load_toml(toml: &str) -> Result<Vec<Scenario>, crate::security::UserError> {
+fn load_toml(toml: &str) -> Result<Vec<Scenario>, crate::config::ConfigError> {
     let mut temp_file = NamedTempFile::new().unwrap();
     temp_file.write_all(toml.as_bytes()).unwrap();
     temp_file.flush().unwrap();

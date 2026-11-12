@@ -362,6 +362,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_streak_achievement_detection() {
         let tracker = PerformanceTracker::new();
         let mut profile = UserProfile::new();
@@ -470,6 +474,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_check_and_unlock_marks_profile_and_returns_ids() {
         let tracker = PerformanceTracker::new();
         let mut profile = UserProfile::new();

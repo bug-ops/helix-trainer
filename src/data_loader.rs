@@ -119,6 +119,7 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>, storage: ProfileSto
 /// use helix_trainer::async_state::{SaveRequest, SaveWriterOutcome};
 /// use helix_trainer::data_loader::spawn_save_writer;
 /// use helix_trainer::gamification::{ProfileStorage, UserProfile};
+/// use std::assert_matches;
 ///
 /// #[tokio::main]
 /// async fn main() {
@@ -135,7 +136,7 @@ pub fn spawn_data_loaders(tx: mpsc::Sender<DataLoadMessage>, storage: ProfileSto
 ///
 ///     drop(save_tx);
 ///     let outcome = writer_handle.await.unwrap();
-///     assert!(matches!(outcome, SaveWriterOutcome::LastSaveSucceeded));
+///     assert_matches!(outcome, SaveWriterOutcome::LastSaveSucceeded);
 /// }
 /// ```
 pub fn spawn_save_writer(
@@ -198,7 +199,7 @@ pub(crate) async fn load_scenarios_async() -> Result<Vec<Scenario>, LoaderError>
         let loader = ScenarioLoader::new();
         loader
             .load_from_embedded(locale_str)
-            .map_err(LoaderError::Scenarios)
+            .map_err(|e| LoaderError::Scenarios(e.into()))
     })
     .await?
 }
@@ -274,6 +275,7 @@ fn profile_task_failed(storage: &ProfileStorage, error: JoinError) -> DataLoadMe
 /// use helix_trainer::async_state::DataLoadMessage;
 /// use helix_trainer::data_loader::start_fresh_profile_message;
 /// use helix_trainer::gamification::ProfileStorage;
+/// use std::assert_matches;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() {
@@ -284,7 +286,7 @@ fn profile_task_failed(storage: &ProfileStorage, error: JoinError) -> DataLoadMe
 /// let msg = start_fresh_profile_message(ProfileStorage::with_path(&path))
 ///     .await
 ///     .unwrap();
-/// assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1));
+/// assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1);
 /// # }
 /// ```
 pub async fn start_fresh_profile_message(
@@ -315,6 +317,7 @@ pub async fn start_fresh_profile_message(
 /// use helix_trainer::async_state::DataLoadMessage;
 /// use helix_trainer::data_loader::restore_previous_profile_message;
 /// use helix_trainer::gamification::{ProfileStorage, UserProfile};
+/// use std::assert_matches;
 ///
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() {
@@ -327,7 +330,7 @@ pub async fn start_fresh_profile_message(
 /// std::fs::write(storage.path(), "{broken").unwrap();
 ///
 /// let msg = restore_previous_profile_message(storage).await.unwrap();
-/// assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 500));
+/// assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 500);
 /// # }
 /// ```
 pub async fn restore_previous_profile_message(
@@ -366,7 +369,7 @@ pub(crate) async fn load_quest_registry_async(
                 tracing::warn!(%locale, "No quest templates for locale, using the fallback");
                 QuestTemplateRegistry::from_embedded(FALLBACK_QUEST_LOCALE)
             })
-            .map_err(LoaderError::QuestRegistry)
+            .map_err(|e| LoaderError::QuestRegistry(e.into()))
     })
     .await?
 }
@@ -374,6 +377,7 @@ pub(crate) async fn load_quest_registry_async(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
     use std::time::Duration;
 
     const DATA_LOADING_TIMEOUT: Duration = Duration::from_secs(5);
@@ -401,10 +405,7 @@ mod tests {
                     .await
                     .unwrap();
                 drop(save_tx);
-                assert!(matches!(
-                    handle.await.unwrap(),
-                    SaveWriterOutcome::LastSaveSucceeded
-                ));
+                assert_matches!(handle.await.unwrap(), SaveWriterOutcome::LastSaveSucceeded);
             });
         });
 
@@ -444,7 +445,7 @@ mod tests {
 
         let msg = load_profile_message(storage).await.unwrap();
 
-        assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1));
+        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1);
     }
 
     /// Regression test for #440: an unparsable profile is reported as an
@@ -485,7 +486,7 @@ mod tests {
 
         let msg = start_fresh_profile_message(storage.clone()).await.unwrap();
 
-        assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 0));
+        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 0);
         assert!(storage.load().is_ok());
         let QuarantineOutcome::BackedUp(backup_path) = backup else {
             panic!("expected a backup");
@@ -501,7 +502,7 @@ mod tests {
 
         let msg = start_fresh_profile_message(storage.clone()).await.unwrap();
 
-        assert!(matches!(msg, DataLoadMessage::ProfileError { .. }));
+        assert_matches!(msg, DataLoadMessage::ProfileError { .. });
         assert!(!storage.exists());
     }
 
@@ -640,20 +641,20 @@ mod tests {
         let message = restore_previous_profile_message(storage.clone())
             .await
             .unwrap();
-        assert!(matches!(message, DataLoadMessage::ProfileReady(p) if p.total_xp == 500));
+        assert_matches!(message, DataLoadMessage::ProfileReady(p) if p.total_xp == 500);
 
         std::fs::write(storage.path(), "{broken again").unwrap();
         std::fs::write(storage.path().with_added_extension("prev"), "{also broken").unwrap();
         let message = restore_previous_profile_message(storage.clone())
             .await
             .unwrap();
-        assert!(matches!(
+        assert_matches!(
             message,
             DataLoadMessage::ProfileError {
                 previous: PreviousCopy::Unavailable,
                 ..
             }
-        ));
+        );
         assert_eq!(
             std::fs::read_to_string(storage.path()).unwrap(),
             "{broken again"

@@ -507,6 +507,7 @@ impl From<std::io::Error> for QuarantineError {
 mod tests {
     use super::*;
     use serde::Deserialize;
+    use std::assert_matches;
 
     #[derive(Debug, PartialEq, Serialize, Deserialize)]
     struct Doc {
@@ -557,10 +558,10 @@ mod tests {
         let store = store(dir.path(), 1024);
         fs::create_dir_all(store.path()).unwrap();
 
-        assert!(matches!(
+        assert_matches!(
             store.save(&Doc { value: 2 }),
             Err(StorageError::Write { .. })
-        ));
+        );
         assert!(store.path().is_dir());
         let names: Vec<_> = fs::read_dir(store.path().parent().unwrap())
             .unwrap()
@@ -630,7 +631,7 @@ mod tests {
         let store = store(dir.path(), 8);
         store.save(&Doc { value: 1_234_567 }).unwrap();
         let err = store.load().unwrap_err();
-        assert!(matches!(err, StorageError::TooLarge { .. }), "{err}");
+        assert_matches!(err, StorageError::TooLarge { .. }, "{err}");
         assert!(err.to_string().contains("too large"));
     }
 
@@ -640,7 +641,7 @@ mod tests {
         let store = store(dir.path(), 1024);
         store.save(&Doc { value: 1 }).unwrap();
         fs::write(store.path(), "{broken").unwrap();
-        assert!(matches!(store.load(), Err(StorageError::Corrupt { .. })));
+        assert_matches!(store.load(), Err(StorageError::Corrupt { .. }));
     }
 
     #[test]
@@ -648,7 +649,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = store(dir.path(), 1024);
         fs::create_dir_all(store.path()).unwrap();
-        assert!(matches!(store.load(), Err(StorageError::Read { .. })));
+        assert_matches!(store.load(), Err(StorageError::Read { .. }));
     }
 
     fn migrating_store(dir: &Path, max_size: u64) -> (JsonStore<Doc>, JsonStore<Doc>) {
@@ -708,7 +709,7 @@ mod tests {
         let (old, new) = migrating_store(dir.path(), 8);
         old.save(&Doc { value: 1_234_567 }).unwrap();
 
-        assert!(matches!(new.load(), Err(StorageError::Migrate { .. })));
+        assert_matches!(new.load(), Err(StorageError::Migrate { .. }));
         assert!(!new.exists());
     }
 
@@ -718,7 +719,7 @@ mod tests {
         let (old, new) = migrating_store(dir.path(), 1024);
         fs::create_dir_all(old.path()).unwrap();
 
-        assert!(matches!(new.load(), Err(StorageError::Migrate { .. })));
+        assert_matches!(new.load(), Err(StorageError::Migrate { .. }));
         assert!(!new.exists());
     }
 
@@ -747,7 +748,7 @@ mod tests {
             .unwrap_err()
             .to_string();
         let chain = crate::security::error_chain(&err);
-        assert!(matches!(err, StorageError::Corrupt { .. }), "{chain}");
+        assert_matches!(err, StorageError::Corrupt { .. }, "{chain}");
         assert_eq!(chain.matches(&cause).count(), 1, "{chain}");
     }
 
@@ -775,7 +776,7 @@ mod tests {
 
         let err = store.save(&Failing).unwrap_err();
 
-        assert!(matches!(err, StorageError::Serialize { .. }), "{err}");
+        assert_matches!(err, StorageError::Serialize { .. }, "{err}");
         assert_eq!(
             crate::security::error_chain(&err).matches("nope").count(),
             1
@@ -791,7 +792,7 @@ mod tests {
         let err = new.load().unwrap_err();
 
         let chain = crate::security::error_chain(&err);
-        assert!(matches!(err, StorageError::Migrate { .. }), "{chain}");
+        assert_matches!(err, StorageError::Migrate { .. }, "{chain}");
         assert!(chain.contains("too large"), "{chain}");
         assert_eq!(chain.matches("too large").count(), 1, "{chain}");
     }

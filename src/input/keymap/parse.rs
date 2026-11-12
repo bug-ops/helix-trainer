@@ -426,6 +426,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn empty_config_yields_identity_overlay() {
         let (overlay, report) = resolve_str("").unwrap();
         assert!(overlay.is_empty());
@@ -434,6 +438,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn simple_top_level_remap_applies() {
         let (overlay, report) = resolve_str(
             r#"
@@ -575,6 +583,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn select_and_insert_tables_are_silently_ignored() {
         // Out of scope by design (no select mode; insert mode has no dispatch) -
         // not even worth a warning, since they're not part of our supported subset.
@@ -648,6 +660,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn backtick_and_alt_backtick_do_not_collide() {
         // A bare "`" and an explicit "A-`" must normalize to *distinct*
         // PhysicalKeys. `map_macos_composed_char` no longer rewrites plain

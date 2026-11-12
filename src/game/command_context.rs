@@ -8,10 +8,10 @@
 //!
 //! - [`CommandExecutor`]: Execute commands with count prefix support
 
+use super::GameError;
 use crate::grammar::commands::{
     CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_ESCAPE,
 };
-use crate::security::UserError;
 
 /// Format a key command for display in key history
 ///
@@ -53,9 +53,9 @@ pub fn format_key_for_display(command: &str) -> String {
 ///
 /// ```
 /// use helix_trainer::game::CommandExecutor;
-/// use helix_trainer::security::UserError;
+/// use helix_trainer::game::GameError;
 ///
-/// fn run<E: CommandExecutor>(executor: &mut E) -> Result<(), UserError> {
+/// fn run<E: CommandExecutor>(executor: &mut E) -> Result<(), GameError> {
 ///     // "3d" is one action; the simulator applies the count
 ///     executor.execute_single("3d")
 /// }
@@ -69,8 +69,8 @@ pub trait CommandExecutor {
     ///
     /// # Errors
     ///
-    /// Returns a `UserError` if the command does not exist or fails.
-    fn execute_single(&mut self, command: &str) -> Result<(), UserError>;
+    /// Returns a [`GameError`] if the command does not exist or fails.
+    fn execute_single(&mut self, command: &str) -> Result<(), GameError>;
 
     /// Check if scenario is completed after command execution
     fn check_completion(&self) -> bool;

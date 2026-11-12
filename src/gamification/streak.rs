@@ -154,14 +154,12 @@ impl StreakManager {
             return Err(GamificationError::StreakFreezeNothingToProtect);
         }
 
-        if Self::try_consume_freeze(profile, days_since_active) {
-            Ok(())
-        } else {
-            Err(GamificationError::StreakFreezeGapOutOfRange {
+        Self::try_consume_freeze(profile, days_since_active).ok_or(
+            GamificationError::StreakFreezeGapOutOfRange {
                 days_since_active,
                 max_gap_days: STREAK_FREEZE_MAX_GAP_DAYS,
-            })
-        }
+            },
+        )
     }
 
     /// Try to consume a streak freeze to cover a gap of `days_since_active`

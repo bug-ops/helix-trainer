@@ -39,18 +39,8 @@ const RANKS: &[(&str, u8)] = &[
     ("data_loader", 12),
 ];
 
-/// Upward edges that are known and tracked, `(from, to)`.
-///
-/// `security` holds `UserError` and `ErrorCause`, which wrap the domain errors
-/// above it. Moving them into an error hub above every domain module needs a
-/// domain error type per session and loader API.
-// Tracked in #606: the user-facing error hub still sits below the domain modules it wraps.
-const ALLOWED: &[(&str, &str)] = &[
-    ("security", "config"),
-    ("security", "gamification"),
-    ("security", "helix"),
-    ("security", "learning"),
-];
+/// Upward edges that are known and tracked, `(from, to)`. Empty: the layer order has no exceptions.
+const ALLOWED: &[(&str, &str)] = &[];
 
 fn rank_of(module: &str) -> Option<u8> {
     RANKS
@@ -410,6 +400,10 @@ mod self_checks {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn an_edge_inside_a_cfg_test_block_is_ignored() {
         let source = "#[cfg(test)]\nmod t {\n    use crate::ui::X;\n}\n";
         assert!(reported("helix", source).is_empty());
@@ -418,6 +412,10 @@ mod self_checks {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn a_doc_link_is_not_an_edge() {
         let source = "/// See [`crate::ui::X`].\nfn f() {}\n";
         assert!(reported("helix", source).is_empty());
@@ -456,6 +454,10 @@ mod self_checks {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn a_cfg_test_fn_inside_an_impl_is_ignored() {
         let source = "struct S;\nimpl S {\n    #[cfg(test)]\n    fn t() { crate::ui::f(); }\n    fn p() {}\n}\n";
         assert!(reported("helix", source).is_empty());
@@ -467,6 +469,10 @@ mod self_checks {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn a_lower_rank_edge_is_fine() {
         assert!(
             reported(

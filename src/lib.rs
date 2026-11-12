@@ -26,6 +26,7 @@ pub mod async_state;
 pub mod config;
 pub mod constants;
 pub mod data_loader;
+pub mod error;
 pub mod game;
 pub mod gamification;
 pub mod grammar;

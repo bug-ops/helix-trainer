@@ -8,11 +8,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::config::ConfigError;
 use crate::config::quests::{
     QuestDifficulty as TemplateDifficulty, QuestLoader, QuestSpec, QuestTemplate,
 };
 use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
-use crate::security::UserError;
 
 use super::{UserProfile, XPCalculator};
 
@@ -164,6 +164,10 @@ impl crate::learning::ProgressTracker for QuestType {
         }
     }
 
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn current(&self) -> u64 {
         match self {
             QuestType::CommandPractice { current, .. } => u64::from(*current),
@@ -176,6 +180,10 @@ impl crate::learning::ProgressTracker for QuestType {
         }
     }
 
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn target(&self) -> u64 {
         match self {
             QuestType::CommandPractice { target, .. } => u64::from(*target),
@@ -216,7 +224,7 @@ pub struct Quest {
 /// let quest = Quest::from(&templates[0]);
 /// assert_eq!(quest.id, templates[0].id);
 /// assert!(!quest.completed);
-/// # Ok::<(), helix_trainer::security::UserError>(())
+/// # Ok::<(), helix_trainer::error::UserError>(())
 /// ```
 impl From<&QuestTemplate> for Quest {
     fn from(template: &QuestTemplate) -> Self {
@@ -474,7 +482,7 @@ impl QuestTemplateRegistry {
     ///
     /// # Errors
     ///
-    /// Returns `UserError` if no templates are embedded for `locale` or they
+    /// Returns [`ConfigError`] if no templates are embedded for `locale` or they
     /// fail validation.
     ///
     /// # Examples
@@ -486,7 +494,7 @@ impl QuestTemplateRegistry {
     /// assert!(!registry.is_empty());
     /// assert!(QuestTemplateRegistry::from_embedded("zz").is_err());
     /// ```
-    pub fn from_embedded(locale: &str) -> Result<Self, UserError> {
+    pub fn from_embedded(locale: &str) -> Result<Self, ConfigError> {
         let loader = QuestLoader::new();
         let templates = loader.load_from_embedded(locale)?;
 
@@ -838,6 +846,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_generate_quests_with_empty_registry_leaves_every_slot_unfilled() {
         let today = chrono::Utc::now().date_naive();
         for (level, slots) in [(1, 3), (10, 4), (20, 4)] {

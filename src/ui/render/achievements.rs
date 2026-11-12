@@ -72,6 +72,10 @@ pub(super) fn render_achievements_screen(frame: &mut Frame, state: &AppState) {
 /// Render the achievement list, one line per achievement, clamping and applying the
 /// current scroll offset. Returns the 1-indexed (first, last) visible row range when the
 /// list doesn't fully fit, for the instructions bar's position indicator.
+#[expect(
+    clippy::similar_names,
+    reason = "parallel names mirror the values they bind"
+)]
 fn render_achievements_content(
     frame: &mut Frame,
     state: &AppState,

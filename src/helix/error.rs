@@ -2,9 +2,8 @@
 //!
 //! The simulator reports every rejected command as a [`SimulatorError`] so callers can
 //! tell an unknown key from an invalid regex without matching on text. The conversion to the
-//! sanitized, UI-facing [`UserError`] happens at the boundary, in the `From` impl below.
+//! sanitized, UI-facing [`UserError`](crate::error::UserError) lives in the error hub.
 
-use crate::security::UserError;
 use helix_core::regex;
 
 /// Longest slice of caller-supplied text echoed back in an error message.
@@ -139,35 +138,13 @@ impl SimulatorError {
     }
 }
 
-impl From<SimulatorError> for UserError {
-    fn from(err: SimulatorError) -> Self {
-        UserError::CommandFailed {
-            context: err.to_string(),
-            cause: Some(err.into()),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::security::ErrorCause;
-    use std::assert_matches;
 
     #[test]
     fn bound_strips_control_and_non_ascii_and_caps_length() {
         assert_eq!(bound("a\nb\tc\u{e9}"), "abc");
         assert_eq!(bound(&"x".repeat(500)).len(), MAX_ECHOED_CHARS);
-    }
-
-    #[test]
-    fn converts_to_command_failed_with_the_message() {
-        let user = UserError::from(SimulatorError::NoSelections);
-        assert!(matches!(user, UserError::CommandFailed { .. }));
-        assert!(user.to_string().contains("no selections remaining"));
-        assert_matches!(
-            std::error::Error::source(&user).and_then(|e| e.downcast_ref::<ErrorCause>()),
-            Some(ErrorCause::Simulator(SimulatorError::NoSelections))
-        );
     }
 }

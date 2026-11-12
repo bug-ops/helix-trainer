@@ -6,6 +6,7 @@
 use super::{ranges_of, run_keys, run_keys_in};
 use crate::grammar::commands::*;
 use crate::helix::Language;
+use std::assert_matches;
 
 const I1: &str = "fn f() {\n    a\n    b\n}";
 const I1_NO_EOL: &str = "fn f() {\n    a";
@@ -249,10 +250,10 @@ fn counted_open_beyond_the_cursor_cap_is_rejected_and_changes_nothing() {
     let text = "a\n".repeat(MANY_CURSORS);
     let mut sim = run_keys(&text, &[CMD_SELECT_ALL, "s a"]);
     let error = sim.execute_command("2o").unwrap_err();
-    assert!(matches!(
+    assert_matches!(
         error,
         crate::helix::error::SimulatorError::TooManyCursors { max: MANY_CURSORS }
-    ));
+    );
     assert!(!sim.is_insert_mode());
     assert_eq!(sim.display().content(), text);
 }

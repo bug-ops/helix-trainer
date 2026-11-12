@@ -15,7 +15,7 @@
 //! let mut sim: HelixSimulator<InsertMode> = sim.enter_insert_mode();
 //! sim.insert_text("x")?;
 //! let _sim: HelixSimulator<NormalMode> = sim.exit_insert_mode();
-//! # Ok::<(), helix_trainer::security::UserError>(())
+//! # Ok::<(), helix_trainer::error::UserError>(())
 //! ```
 //!
 //! Text insertion is not available in Normal mode:

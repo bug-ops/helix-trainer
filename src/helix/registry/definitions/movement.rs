@@ -20,6 +20,10 @@ use crate::helix::simulator::NormalMode;
 use crate::helix::simulator::commands::{movement, select_mode, view};
 
 /// Register all movement commands
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Basic cursor movement
     registry.register(Command::new(
@@ -240,6 +244,10 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
 ///
 /// These commands require a target character and are handled specially
 /// by the dispatcher. This function registers metadata only.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 pub(crate) fn register_parametric_metadata(registry: &mut CommandRegistry<NormalMode>) {
     // Find char commands - metadata only, handlers are in dispatcher
     registry.register(Command::new(

@@ -298,6 +298,10 @@ mod tests {
 
     /// #586: the header, the body panels and the bottom bar share one margin
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_every_box_starts_at_the_screen_margin() {
         let columns = first_non_blank_columns(&render(130, 45));
         assert!(!columns.is_empty());

@@ -19,7 +19,7 @@ mod parse;
 pub use context::KeyContext;
 pub use keys::{CanonicalKeys, GameplayKey, ParsePhysicalKeyError, PhysicalKey};
 pub use load::{
-    KeymapLoadError, KeymapReport, KeymapWarning, KeymapWarningReason,
+    KeymapLoadError, KeymapReport, KeymapStatus, KeymapWarning, KeymapWarningReason, StartupKeymap,
     keymap_fingerprint_mismatch_message, load_keymap_file, resolve_startup_overlay, resolve_str,
 };
 pub use overlay::KeymapOverlay;

@@ -14,6 +14,10 @@ use rust_i18n::t;
 /// Build menu items with scenario list and navigation options
 ///
 /// Returns list of menu items with proper styling and indicators
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>> {
     let filtered_scenarios = state.game.scenario_collection.filtered();
     let profile = &state.progress.profile;

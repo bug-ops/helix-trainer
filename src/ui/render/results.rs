@@ -23,6 +23,10 @@ fn rating_description(rating: PerformanceRating) -> String {
 }
 
 /// Render the results screen showing scenario completion
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
     let area = frame.area();
 
@@ -181,6 +185,10 @@ pub(super) fn render_results_screen(frame: &mut Frame, state: &AppState) {
 }
 
 /// Render XP breakdown and quest progress panel
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 fn render_progression_panel(
     frame: &mut Frame,
     state: &AppState,

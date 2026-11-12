@@ -337,6 +337,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_category_icon_all_variants() {
         // Just verify all variants return non-empty strings
         assert!(!category_icon(ScenarioCategory::Movement).is_empty());

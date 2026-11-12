@@ -13,7 +13,7 @@
 //! faithfully replay count prefixes and mode-specific insert sequences),
 //! while macros store resolved command *strings*, since the `KeyEvent`
 //! conversion (`NormalCommand::keys`) is lossy for parameterised commands like
-//! `:goto 3` or `s <pattern>`. Unifying them is deferred; see the `TODO`
+//! `:goto 3` or `s <pattern>`. Unifying them is deferred; see the `TODO(#620)`
 //! below.
 //!
 //! `.` pressed while recording is captured, but not as the literal `.`
@@ -46,11 +46,11 @@
 //!
 //! # Deferred
 //!
-//! - TODO: named macro registers (`"<reg>q`) - `RegisterFile` stores a
+//! - TODO(#619): named macro registers (`"<reg>q`) - `RegisterFile` stores a
 //!   single `String` per register, not a `Vec<String>`, so this needs a
 //!   register-file change beyond this MVP's single unnamed register.
-//! - TODO: unifying `.`-repeat's recorder with this one - see "Relationship
-//!   to `.`-repeat" above; tracked as a follow-up, not attempted here.
+//! - TODO(#620): unifying `.`-repeat's recorder with this one - see "Relationship
+//!   to `.`-repeat" above; not attempted here.
 
 use crate::limits::MAX_MACRO_LENGTH;
 
@@ -158,6 +158,10 @@ mod tests {
     use super::*;
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn new_recorder_is_idle() {
         let recorder = MacroRecorder::new();
         assert!(!recorder.is_recording());
@@ -180,6 +184,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn record_is_noop_when_not_recording() {
         let mut recorder = MacroRecorder::new();
         recorder.record("h");

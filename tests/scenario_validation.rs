@@ -349,6 +349,10 @@ fn test_after_taught_commands_scenarios_declare_taught_commands() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 fn test_all_scenarios_execute_solution() {
     use helix_trainer::game::SessionAfterAction;
     let loader = ScenarioLoader::new();

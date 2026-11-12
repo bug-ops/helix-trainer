@@ -14,8 +14,9 @@ use tokio::task::JoinError;
 use helix_trainer::{
     async_state::DataLoadMessage,
     constants::{ANIMATION_TICK_INTERVAL, COUNTDOWN_TICK_INTERVAL, SUCCESS_SCREEN_DELAY},
+    error::UserError,
     gamification::ProfileStorage,
-    security::{UserError, error_chain},
+    security::error_chain,
     ui::{self, AppState, Message, Notification, NotificationType, Viewport, state::Effect},
 };
 
@@ -317,6 +318,7 @@ mod tests {
         gamification::{ProfileStorage, UserProfile},
         learning::PerformanceTracker,
     };
+    use std::assert_matches;
 
     fn test_state() -> AppState {
         let dir = tempfile::tempdir().unwrap();
@@ -388,7 +390,7 @@ mod tests {
         );
 
         let msg = data_rx.recv().await.expect("a result message");
-        assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1));
+        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1);
         assert!(std::fs::read_to_string(&path).unwrap().contains("profile"));
         let backups = backup_files(dir.path());
         assert_eq!(
@@ -429,7 +431,7 @@ mod tests {
         settle_update(&mut state, Ok(()), vec![Effect::RestoreProfile], &data_tx);
 
         let msg = data_rx.recv().await.expect("a result message");
-        assert!(matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 500));
+        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 500);
         assert_eq!(backup_files(dir.path()).len(), 1);
     }
 
@@ -455,10 +457,7 @@ mod tests {
         settle_update(&mut state, Ok(()), vec![Effect::RestoreProfile], &data_tx);
 
         let msg = data_rx.recv().await.expect("a result message");
-        assert!(
-            matches!(msg, DataLoadMessage::ProfileError { .. }),
-            "{msg:?}"
-        );
+        assert_matches!(msg, DataLoadMessage::ProfileError { .. }, "{msg:?}");
         assert_eq!(std::fs::read_to_string(storage.path()).unwrap(), "{broken");
         assert_eq!(std::fs::read_to_string(&prev).unwrap(), "{also broken");
     }

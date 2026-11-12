@@ -145,6 +145,10 @@ pub(crate) fn snapshot_quest_completion(state: &AppState) -> Vec<bool> {
 }
 
 /// Get current progress value from quest type
+#[expect(
+    clippy::match_same_arms,
+    reason = "arms stay apart to document each case"
+)]
 fn get_quest_current_progress(quest_type: &QuestType) -> u32 {
     match quest_type {
         QuestType::CommandPractice { current, .. } => *current,

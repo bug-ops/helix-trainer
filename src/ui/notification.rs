@@ -12,12 +12,42 @@ use crate::constants::{
     DEFAULT_NOTIFICATION_DURATION, MAX_VISIBLE_NOTIFICATIONS, STREAK_FREEZE_MAX_GAP_DAYS,
 };
 use crate::game::services::CompletionEvent;
+use crate::input::keymap::{KeymapStatus, StartupKeymap};
 use crate::time::{MonotonicClock, SystemMonotonicClock};
 use crate::ui::text;
 use rust_i18n::t;
 use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+/// The startup notification text for how the keymap resolved, or `None` when the keymap
+/// is disabled and there is nothing to tell.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::config::AppConfig;
+/// use helix_trainer::input::keymap::resolve_startup_overlay;
+/// use helix_trainer::ui::keymap_status_message;
+///
+/// let keymap = resolve_startup_overlay(&AppConfig::default());
+/// assert!(keymap_status_message(&keymap).is_none());
+/// ```
+pub fn keymap_status_message(keymap: &StartupKeymap) -> Option<String> {
+    match keymap.status {
+        KeymapStatus::Disabled => None,
+        KeymapStatus::Applied => Some(
+            t!(
+                "keymap.startup_summary",
+                applied = keymap.report.applied,
+                ignored = keymap.report.ignored.len()
+            )
+            .to_string(),
+        ),
+        KeymapStatus::NotFound => Some(t!("keymap.startup_not_found").to_string()),
+        KeymapStatus::Invalid => Some(t!("keymap.startup_invalid").to_string()),
+    }
+}
 
 /// Type of notification to display
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -253,6 +283,10 @@ impl Notification {
     }
 
     /// Get color for this notification type
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     pub fn color(&self) -> ratatui::style::Color {
         use ratatui::style::Color;
         match &self.notification_type {
@@ -403,6 +437,33 @@ impl Default for NotificationQueue {
 mod tests {
     use super::*;
     use crate::time::FakeMonotonicClock;
+
+    #[test]
+    fn keymap_status_messages_keep_their_text() {
+        use crate::input::keymap::KeymapOverlay;
+        use crate::input::keymap::KeymapReport;
+
+        let message = |status| {
+            keymap_status_message(&StartupKeymap {
+                overlay: KeymapOverlay::identity(),
+                report: KeymapReport::default(),
+                status,
+            })
+        };
+        assert_eq!(message(KeymapStatus::Disabled), None);
+        assert_eq!(
+            message(KeymapStatus::Applied).as_deref(),
+            Some("Helix keymap loaded: 0 binding(s) applied, 0 ignored")
+        );
+        assert_eq!(
+            message(KeymapStatus::NotFound).as_deref(),
+            Some("Helix keymap enabled, but config.toml was not found — using stock keymap")
+        );
+        assert_eq!(
+            message(KeymapStatus::Invalid).as_deref(),
+            Some("Helix keymap config could not be loaded — using stock keymap")
+        );
+    }
 
     #[test]
     fn test_notification_creation() {

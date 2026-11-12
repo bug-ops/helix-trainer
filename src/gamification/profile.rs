@@ -518,6 +518,10 @@ impl XPCalculator {
     /// };
     /// assert_eq!(XPCalculator::quest_xp_reward(&hard_scenario, QuestDifficulty::Hard), 150);
     /// ```
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     pub fn quest_xp_reward(
         quest_type: &super::QuestType,
         difficulty: super::QuestDifficulty,
@@ -759,6 +763,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_new_profile_defaults() {
         let profile = UserProfile::new();
         assert_eq!(profile.level, 1);
@@ -856,6 +864,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_reset_daily_quests() {
         let mut profile = UserProfile::new();
 

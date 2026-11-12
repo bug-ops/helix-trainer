@@ -91,6 +91,10 @@ pub(crate) fn handle_profile_stats_keys(key: KeyEvent, state: &AppState) -> Opti
 /// - gg: jump to first item
 /// - G: jump to last item
 /// - 15G/15gg: jump to item 15
+#[expect(
+    clippy::match_same_arms,
+    reason = "arms stay apart to document each case"
+)]
 pub(crate) fn handle_menu_keys(key: KeyEvent, state: &AppState) -> Option<Message> {
     // Ctrl-Q exits application from anywhere
     if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -2259,7 +2263,7 @@ mod tests {
             state
         }
 
-        fn type_keys(state: &mut AppState, keys: &str) -> Result<(), crate::security::UserError> {
+        fn type_keys(state: &mut AppState, keys: &str) -> Result<(), crate::error::UserError> {
             for c in keys.chars() {
                 let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
                 if let Some(msg) = handle_task_keys(key, state) {

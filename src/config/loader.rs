@@ -1,5 +1,6 @@
 //! Shared TOML parse-and-validate pipeline for scenario/quest files.
 
+use super::ConfigError;
 use crate::security::SecurityError;
 
 /// TOML file wrapper carrying a list of domain items.
@@ -11,14 +12,14 @@ pub(crate) trait ItemsFile: serde::de::DeserializeOwned {
 /// Parses `content` as `F`, unwraps its items, enforces `max_count`, and
 /// runs `validate` over each item.
 ///
-/// Returns the unsanitized `SecurityError` (rather than `UserError`) so
+/// Returns the unsanitized [`ConfigError`] (rather than `UserError`) so
 /// callers can log the precise cause (e.g. `toml::de::Error` line/column)
-/// before converting to a sanitized error for the user.
+/// before it is converted to a sanitized error for the user.
 pub(crate) fn parse_and_validate<F>(
     content: &str,
     max_count: usize,
-    validate: impl Fn(&F::Item) -> Result<(), SecurityError>,
-) -> Result<Vec<F::Item>, SecurityError>
+    validate: impl Fn(&F::Item) -> Result<(), ConfigError>,
+) -> Result<Vec<F::Item>, ConfigError>
 where
     F: ItemsFile,
 {
@@ -30,7 +31,8 @@ where
         return Err(SecurityError::TooManyScenarios {
             max: max_count,
             actual: items.len(),
-        });
+        }
+        .into());
     }
 
     for item in &items {
@@ -113,8 +115,9 @@ tolerance = 0
     #[test]
     fn parse_and_validate_propagates_item_validation_error() {
         let toml = two_scenario_toml();
-        let result =
-            parse_and_validate::<ScenariosFile>(&toml, 2, |_| Err(SecurityError::InvalidContent));
+        let result = parse_and_validate::<ScenariosFile>(&toml, 2, |_| {
+            Err(SecurityError::InvalidContent.into())
+        });
         assert!(result.is_err());
     }
 }

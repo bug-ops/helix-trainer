@@ -16,6 +16,10 @@ use crate::input::typestate::{
 // ============================================================================
 
 impl InputHandler<TextObjectAroundPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &TextObjectAroundPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Valid text objects: w, W, (, ), [, ], {, }, <, >, ", ', `, p
@@ -39,6 +43,10 @@ impl InputHandler<TextObjectAroundPending> for KeyHandler {
 // ============================================================================
 
 impl InputHandler<TextObjectInsidePending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(_state: &TextObjectInsidePending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Valid text objects: w, W, (, ), [, ], {, }, <, >, ", ', `, p

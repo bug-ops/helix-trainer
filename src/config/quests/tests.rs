@@ -147,6 +147,10 @@ target = 3
 }
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_quest_conditions_default() {
     let conditions = QuestConditions::default();
     assert!(conditions.min_level.is_none());
@@ -396,6 +400,10 @@ fn test_quest_text_keys_are_rejected_in_templates() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 fn test_validate_all_quest_templates() {
     use std::collections::{HashMap, HashSet};
 
@@ -773,7 +781,7 @@ target = 3
         .unwrap_err();
         assert_matches!(
             err,
-            SecurityError::QuestTemplate(QuestTemplateError::XpRewardTooHigh { .. })
+            ConfigError::QuestTemplate(QuestTemplateError::XpRewardTooHigh { .. })
         );
     }
 }

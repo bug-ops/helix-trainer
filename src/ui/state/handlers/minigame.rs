@@ -5,13 +5,13 @@ use std::sync::Arc;
 use super::SessionInput;
 use super::key_history;
 use crate::config::Scenario;
+use crate::error::UserError;
 use crate::game::services::ScenarioCompletionService;
 use crate::gamification::XPCalculator;
 use crate::helix::ModeKind;
 use crate::input::resolve::{Resolution, resolve_keys};
 use crate::learning::PerformanceTracker;
 use crate::minigame::MiniGameSession;
-use crate::security::UserError;
 use crate::sound::SoundEffect;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
@@ -346,6 +346,10 @@ pub(in crate::ui::state) fn handle_minigame_next_scenario(state: &mut AppState) 
 /// - Calculates and awards XP
 /// - Updates high scores
 /// - Saves profile to disk (non-fatal on error)
+#[expect(
+    clippy::similar_names,
+    reason = "parallel names mirror the values they bind"
+)]
 pub(in crate::ui::state) fn handle_minigame_game_over(state: &mut AppState) {
     let should_process = state
         .minigame_session_mut()
@@ -1506,7 +1510,7 @@ mod tests {
 
         assert!(result.is_err());
         assert!(state.minigame_session().is_some());
-        assert!(matches!(state.screen, TypedScreen::MiniGame(_)));
+        assert_matches!(state.screen, TypedScreen::MiniGame(_));
     }
 
     #[test]

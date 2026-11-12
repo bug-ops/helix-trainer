@@ -106,6 +106,10 @@ fn line_has_selection(line_idx: usize, sel: &SelectionBounds) -> bool {
 ///
 /// `language` is resolved to its syntax in syntect's bundled `SyntaxSet` by file extension;
 /// a test asserts every [`Language`] variant resolves to a non-plain syntax.
+#[expect(
+    clippy::similar_names,
+    reason = "parallel names mirror the values they bind"
+)]
 pub(crate) fn highlight_code_with_multi_cursor(
     content: &str,
     cursors: &[CursorInfo],
@@ -260,6 +264,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_highlight_with_multi_cursor_empty() {
         let lines = highlight_code_with_multi_cursor("", &[], &[], Language::Rs);
         assert!(lines.is_empty());

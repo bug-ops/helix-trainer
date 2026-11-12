@@ -604,6 +604,10 @@ pub(crate) fn key_to_command_string(key: KeyEvent) -> Option<Cow<'static, str>> 
 /// Helix insert-mode editing chords (`Ctrl-w`, `Ctrl-u`, `Ctrl-k`, `Ctrl-d`,
 /// `Alt-d`, `Alt-Backspace`, `Delete`). A `Ctrl`/`Alt`-modified character with
 /// no insert-mode binding yields `None`: it must never be typed as text (#489).
+#[expect(
+    clippy::match_same_arms,
+    reason = "arms stay apart to document each case"
+)]
 pub fn handle_insert_mode_input(key: KeyEvent) -> Option<Cow<'static, str>> {
     let chord = Chord::of(key.modifiers);
     let borrowed = |cmd: &'static str| Some(Cow::Borrowed(cmd));

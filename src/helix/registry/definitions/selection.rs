@@ -20,6 +20,10 @@ use crate::helix::simulator::commands::editing;
 use crate::helix::simulator::commands::selection;
 
 /// Register all selection commands
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Existing selection commands
     registry.register(Command::new(

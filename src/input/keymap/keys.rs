@@ -426,7 +426,7 @@ mod tests {
             KeyEvent::new(KeyCode::Char('g'), KeyModifiers::SHIFT),
         ];
         let normalized: Vec<_> = spellings.into_iter().map(PhysicalKey::from_event).collect();
-        assert!(normalized.windows(2).all(|w| w[0] == w[1]));
+        assert!(normalized.array_windows::<2>().all(|[a, b]| a == b));
     }
 
     #[test]

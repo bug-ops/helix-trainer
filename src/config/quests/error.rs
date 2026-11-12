@@ -4,9 +4,9 @@ use thiserror::Error;
 
 /// Why a quest template was rejected by `QuestLoader`.
 ///
-/// Wrapped in [`SecurityError::QuestTemplate`](crate::security::SecurityError::QuestTemplate);
+/// Wrapped in [`ConfigError::QuestTemplate`](crate::config::ConfigError::QuestTemplate);
 /// the text is for logs, the user only sees the sanitized
-/// [`UserError`](crate::security::UserError).
+/// [`UserError`](crate::error::UserError).
 ///
 /// # Examples
 ///

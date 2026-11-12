@@ -176,6 +176,10 @@ fn warn_keymap_fingerprint_mismatch(state: &mut AppState) {
 ///
 /// Processes async loading results and updates app state accordingly.
 /// Handles scenarios, profiles, quest registry, and save confirmations.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
     match msg {
         DataLoadMessage::ScenariosReady(scenarios) => {
@@ -322,9 +326,9 @@ mod tests {
     use helix_trainer::config::json_store::QuarantineError;
     use helix_trainer::config::json_store::{Document, StorageError};
     use helix_trainer::config::keymap::fingerprint::{KeymapFingerprint, StoredKeymapFingerprint};
+    use helix_trainer::error::UserError;
     use helix_trainer::gamification::PreviousCopy;
     use helix_trainer::ids::{QuestId, ScenarioId};
-    use helix_trainer::security::UserError;
     use helix_trainer::{
         config::{
             CursorSpec, Pos, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution,
@@ -333,6 +337,7 @@ mod tests {
         constants::STREAK_FREEZE_MAX_GAP_DAYS,
         gamification::{ProfileStorage, QuestTemplateRegistry},
     };
+    use std::assert_matches;
 
     // Binary crate tests cannot access the library's #[cfg(test)]-gated
     // `ProfileStorage::for_test()`, so we mirror it locally here: a unique file
@@ -1285,10 +1290,7 @@ mod tests {
             DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
         );
 
-        assert!(matches!(
-            state.progress.quest_registry,
-            QuestRegistrySlot::Ready(_)
-        ));
+        assert_matches!(state.progress.quest_registry, QuestRegistrySlot::Ready(_));
     }
 
     #[test]
@@ -1320,10 +1322,7 @@ mod tests {
             &mut state,
             DataLoadMessage::ProfileReady(UserProfile::new()),
         );
-        assert!(matches!(
-            state.progress.quest_registry,
-            QuestRegistrySlot::Pending
-        ));
+        assert_matches!(state.progress.quest_registry, QuestRegistrySlot::Pending);
         assert_eq!(
             state.progress.profile.daily_quests,
             [] as [helix_trainer::gamification::Quest; 0]
@@ -1356,10 +1355,10 @@ mod tests {
             )),
         );
 
-        assert!(matches!(
+        assert_matches!(
             state.progress.quest_registry,
             QuestRegistrySlot::Unavailable
-        ));
+        );
         assert_eq!(
             state.progress.profile.daily_quests,
             [] as [helix_trainer::gamification::Quest; 0]

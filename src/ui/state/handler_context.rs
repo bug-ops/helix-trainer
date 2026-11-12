@@ -3,7 +3,7 @@
 //! Provides compile-time guarantees that handlers receive the correct
 //! screen data type, eliminating runtime type checks.
 
-use crate::security::UserError;
+use crate::error::UserError;
 use crate::ui::state::{ConfigState, GameState, ProgressState, TypedScreen, UIState};
 
 /// Shared context for handlers that need access to non-screen state

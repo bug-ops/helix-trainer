@@ -221,6 +221,10 @@ mod editor_tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_render_editor_with_diff_cursor_on_first_line() {
         let lines = super::super::editor::render_editor_with_diff(
             "hello world\nsecond line\n",
@@ -245,6 +249,10 @@ mod editor_tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_render_editor_with_diff_empty_content() {
         let lines =
             super::super::editor::render_editor_with_diff("", "", &primary_cursor(0, 0), &[], None);

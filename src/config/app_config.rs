@@ -167,6 +167,7 @@ impl ConfigStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
     use std::fs;
     use tempfile::TempDir;
 
@@ -321,13 +322,13 @@ mod tests {
         // Write invalid JSON
         fs::write(&file_path, "invalid json {").unwrap();
 
-        assert!(matches!(
+        assert_matches!(
             storage.load(),
             Err(StorageError::Corrupt {
                 doc: Document::Config,
                 ..
             })
-        ));
+        );
     }
 
     #[test]

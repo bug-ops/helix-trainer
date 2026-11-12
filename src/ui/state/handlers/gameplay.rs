@@ -6,9 +6,10 @@ use std::time::Duration;
 
 use super::SessionInput;
 use super::key_history;
+use crate::error::UserError;
 use crate::grammar::commands::CMD_ESCAPE;
 use crate::input::resolve::{Resolution, resolve_keys};
-use crate::security::{UserError, error_chain};
+use crate::security::error_chain;
 use crate::ui::state::{
     AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, TypedScreen, dispatch,
 };
@@ -178,9 +179,12 @@ fn apply_to_session(
     task_data: &mut crate::ui::state::TaskData,
     input: SessionInput<'_>,
 ) -> Result<(), UserError> {
-    apply_with(task_data, |session| match input {
-        SessionInput::Text(text) => session.apply_action(text.to_owned()),
-        SessionInput::Command(command) => session.apply_command(command),
+    apply_with(task_data, |session| {
+        match input {
+            SessionInput::Text(text) => session.apply_action(text.to_owned()),
+            SessionInput::Command(command) => session.apply_command(command),
+        }
+        .map_err(UserError::from)
     })
 }
 

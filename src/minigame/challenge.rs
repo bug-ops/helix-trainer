@@ -30,7 +30,7 @@ use super::ChallengeConfig;
 /// Uses index-based shuffling to reduce from O(n) clones to O(k) clones,
 /// where k is `config.scenario_count` (typically 10).
 ///
-/// # TODO: `Arc<Scenario>` optimization
+/// # TODO(#621): `Arc<Scenario>` optimization
 ///
 /// Consider using `Arc<Scenario>` to avoid deep clones entirely. Currently
 /// bounded to k=10 clones per call, which is acceptable but could be
@@ -53,7 +53,7 @@ use super::ChallengeConfig;
 /// let config = ChallengeConfig::for_date(chrono::Utc::now().date_naive());
 /// let selected = select_challenge_scenarios(&scenarios, &config);
 /// assert_eq!(selected.len(), 10);
-/// # Ok::<(), helix_trainer::security::UserError>(())
+/// # Ok::<(), helix_trainer::error::UserError>(())
 /// ```
 pub fn select_challenge_scenarios(
     scenarios: &[Scenario],

@@ -12,7 +12,7 @@
 //! let mut sim = AnyModeSimulator::new("hello world".to_string());
 //! sim.execute_command("w")?;  // Move to next word
 //! assert_eq!(sim.display().cursor_position(), (0, 6));
-//! # Ok::<(), helix_trainer::security::UserError>(())
+//! # Ok::<(), helix_trainer::error::UserError>(())
 //! ```
 
 pub mod error;

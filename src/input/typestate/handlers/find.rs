@@ -12,6 +12,10 @@ use crate::input::typestate::{
 };
 
 impl InputHandler<FindCharPending> for KeyHandler {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "arms stay apart to document each case"
+    )]
     fn handle_key(state: &FindCharPending, key: KeyEvent) -> HandlerResult {
         match key.code {
             // Accept any printable character

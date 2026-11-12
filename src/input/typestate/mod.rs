@@ -31,6 +31,7 @@
 //! ```
 //! use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 //! use helix_trainer::input::typestate::{HandlerResult, InputState, InputStateMachine};
+//! use std::assert_matches;
 //!
 //! let mut state_machine = InputStateMachine::new();
 //! assert!(state_machine.state().is_base());
@@ -41,7 +42,7 @@
 //!
 //! // Press 'g' again - complete "gg" command
 //! let result = state_machine.process_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
-//! assert!(matches!(result, HandlerResult::Execute(_)));
+//! assert_matches!(result, HandlerResult::Execute(_));
 //! assert!(state_machine.state().is_base());
 //! ```
 

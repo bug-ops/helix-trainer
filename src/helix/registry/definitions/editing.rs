@@ -17,6 +17,10 @@ use crate::helix::simulator::commands::editing;
 use crate::helix::simulator::{HelixSimulator, NormalMode};
 
 /// Register all editing commands
+#[expect(
+    clippy::too_many_lines,
+    reason = "one flat sequence of steps; splitting would only add indirection"
+)]
 pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // Delete selection
     registry.register(Command::new(

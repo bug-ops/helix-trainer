@@ -6,6 +6,7 @@
 use crate::config::{Difficulty, LastAction, Scenario};
 use crate::constants::EXTRA_LIFE_SCORE_MILESTONE;
 use crate::game::CommandExecutor;
+use crate::game::GameError;
 use crate::helix::{AnyModeSimulator, EditorSnapshot};
 use crate::learning::PerformanceTracker;
 use crate::minigame::{
@@ -13,7 +14,6 @@ use crate::minigame::{
     MultiplierChange, PerformancePoint, Ratio, ScoreBreakdown, ScoreCalculator,
     select_challenge_scenarios,
 };
-use crate::security::UserError;
 use crate::time::{MonotonicClock, SystemMonotonicClock};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -315,7 +315,7 @@ impl ActiveMiniScenario {
     fn apply_command(
         &mut self,
         command: &crate::helix::normal_command::NormalCommand,
-    ) -> Result<(), UserError> {
+    ) -> Result<(), GameError> {
         let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
         self.simulator.execute_normal(command)?;
         self.target_held_before_last = held_before;
@@ -326,7 +326,7 @@ impl ActiveMiniScenario {
 
 // Implement CommandExecutor trait for unified command handling with count prefix
 impl CommandExecutor for ActiveMiniScenario {
-    fn execute_single(&mut self, command: &str) -> Result<(), UserError> {
+    fn execute_single(&mut self, command: &str) -> Result<(), GameError> {
         let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
         self.simulator.execute_command(command)?;
         self.target_held_before_last = held_before;
@@ -433,7 +433,7 @@ impl MiniGameSession {
     ///
     /// // Without FSRS weighting
     /// let uniform = MiniGameSession::new(scenarios, None);
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn new(scenarios: Arc<Vec<Scenario>>, tracker: Option<PerformanceTracker>) -> Self {
         Self::with_mode(scenarios, tracker, MiniGameMode::default())
@@ -459,7 +459,7 @@ impl MiniGameSession {
     /// let mode = MiniGameMode::Survival(SurvivalConfig::default());
     /// let session = MiniGameSession::with_mode(scenarios, None, mode);
     /// assert_eq!(session.stats().lives(), 1); // Survival mode has 1 life
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn with_mode(
         scenarios: Arc<Vec<Scenario>>,
@@ -561,7 +561,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.start();
     /// assert!(session.state().is_countdown());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn start(&mut self) {
         self.phase = Phase::Countdown { remaining: 3 };
@@ -587,7 +587,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// session.tick_countdown();
     /// session.tick_countdown();
     /// assert!(session.state().is_playing());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn tick_countdown(&mut self) {
         if let Phase::Countdown { remaining } = self.phase {
@@ -614,7 +614,7 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Errors
     ///
-    /// Returns `UserError` if command execution fails or no scenario is active.
+    /// Returns [`GameError`] if command execution fails or no scenario is active.
     ///
     /// # Examples
     ///
@@ -628,14 +628,14 @@ impl<R: Rng> MiniGameSession<R> {
     /// session.start();
     /// session.handle_command("x")?; // select line
     /// session.handle_command("d")?; // delete
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
-    pub fn handle_command(&mut self, command: &str) -> Result<(), UserError> {
+    pub fn handle_command(&mut self, command: &str) -> Result<(), GameError> {
         if !self.state().is_playing() {
             return Ok(()); // Ignore commands in non-playing states
         }
 
-        let current = self.current.as_mut().ok_or(UserError::operation_failed())?;
+        let current = self.current.as_mut().ok_or(GameError::NoActiveScenario)?;
 
         // The simulator interprets any count prefix (e.g. "3d", "2G")
         current.execute_single(command)?;
@@ -652,12 +652,12 @@ impl<R: Rng> MiniGameSession<R> {
     pub(crate) fn apply_command(
         &mut self,
         command: &crate::helix::normal_command::NormalCommand,
-    ) -> Result<(), UserError> {
+    ) -> Result<(), GameError> {
         if !self.state().is_playing() {
             return Ok(()); // Ignore commands in non-playing states
         }
 
-        let current = self.current.as_mut().ok_or(UserError::operation_failed())?;
+        let current = self.current.as_mut().ok_or(GameError::NoActiveScenario)?;
         current.apply_command(command)
     }
 
@@ -675,7 +675,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// if session.check_completion() {
     ///     session.advance_to_next();
     /// }
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn check_completion(&self) -> bool {
         self.current
@@ -698,7 +698,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.advance_to_next();
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     #[expect(
         clippy::cast_precision_loss,
@@ -766,8 +766,8 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Errors
     ///
-    /// Returns `UserError` if scenario loading fails.
-    pub fn complete_transition(&mut self) -> Result<(), UserError> {
+    /// Returns [`GameError`] if scenario loading fails.
+    pub fn complete_transition(&mut self) -> Result<(), GameError> {
         if matches!(self.phase, Phase::Transition { .. }) {
             self.phase = Phase::Playing;
             self.load_next_scenario()?;
@@ -802,7 +802,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// let scenarios = Arc::new(ScenarioLoader::new().load_from_embedded("en")?);
     /// let mut session = MiniGameSession::new(scenarios, None);
     /// session.handle_timeout();
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn handle_timeout(&mut self) {
         // Update multiplier state (handles grace mechanics) and failure counter
@@ -861,7 +861,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// if let Some(time) = session.remaining_time() {
     ///     println!("Time left: {:?}", time);
     /// }
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn remaining_time(&self) -> Option<Duration> {
         self.current
@@ -901,7 +901,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// if session.is_session_expired() {
     ///     session.end_session_on_timeout();
     /// }
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn is_session_expired(&self) -> bool {
         self.mode
@@ -936,7 +936,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// }
     /// session.pause();
     /// assert!(session.state().is_paused());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn pause(&mut self) {
         if matches!(self.phase, Phase::Playing) {
@@ -968,7 +968,7 @@ impl<R: Rng> MiniGameSession<R> {
     /// session.pause();
     /// session.resume();
     /// assert!(session.state().is_playing());
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn resume(&mut self) {
         if matches!(self.phase, Phase::Paused) {
@@ -1052,7 +1052,7 @@ impl<R: Rng> MiniGameSession<R> {
     ///         LevelChange::Decreased { from, to } => println!("Level down: {} -> {}", from.get(), to.get()),
     ///     }
     /// }
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn take_level_change(&mut self) -> Option<LevelChange> {
         self.difficulty.take_level_change()
@@ -1155,7 +1155,7 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// // After scenario completion
     /// session.record_to_fsrs(&mut tracker, true);
-    /// # Ok::<(), helix_trainer::security::UserError>(())
+    /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn record_to_fsrs(&self, tracker: &mut crate::learning::PerformanceTracker, success: bool) {
         if let Some(ref scenario) = self.current {
@@ -1211,13 +1211,10 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// # Errors
     ///
-    /// Returns `UserError` if scenario initialization fails or queue is empty.
-    fn load_next_scenario(&mut self) -> Result<(), UserError> {
+    /// Returns [`GameError`] if scenario initialization fails or queue is empty.
+    fn load_next_scenario(&mut self) -> Result<(), GameError> {
         // Pop from queue
-        let scenario = self
-            .queue
-            .pop_front()
-            .ok_or(UserError::operation_failed())?;
+        let scenario = self.queue.pop_front().ok_or(GameError::NoActiveScenario)?;
 
         // Get time limit based on mode
         let time_limit = self.get_scenario_time_limit(&scenario);

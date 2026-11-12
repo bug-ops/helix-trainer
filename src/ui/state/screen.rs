@@ -919,6 +919,7 @@ impl InputStateAccess for MiniGameData {
 mod tests {
     use super::*;
     use crate::testing::sid;
+    use std::assert_matches;
 
     #[test]
     fn test_menu_data_default() {
@@ -1136,7 +1137,7 @@ mod tests {
     fn test_category_filters_data_default() {
         let data = CategoryFiltersData::default();
         assert_eq!(data.selected_index, 0);
-        assert!(matches!(data.return_to, ReturnDestination::Menu));
+        assert_matches!(data.return_to, ReturnDestination::Menu);
     }
 
     #[test]

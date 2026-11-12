@@ -80,6 +80,10 @@ fn test_menu_navigation_down() {
 }
 
 #[test]
+#[expect(
+    clippy::assert_is_empty,
+    reason = "assert!(x.is_empty()) reads better than the machine fix"
+)]
 fn test_menu_select_start_training() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);

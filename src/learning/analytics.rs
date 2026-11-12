@@ -257,6 +257,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_get_commands_by_mastery() {
         let tracker = setup_tracker_with_varied_mastery();
 
@@ -285,6 +289,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::assert_is_empty,
+        reason = "assert!(x.is_empty()) reads better than the machine fix"
+    )]
     fn test_progress_over_time_zero_days() {
         let tracker = setup_tracker_with_varied_mastery();
 
@@ -303,8 +311,8 @@ mod tests {
         assert_eq!(progress.len(), (days + 1) as usize);
 
         // Check timestamps are in ascending order
-        for window in progress.windows(2) {
-            assert!(window[0].0 < window[1].0);
+        for [(earlier, _), (later, _)] in progress.array_windows::<2>() {
+            assert!(earlier < later);
         }
 
         // Check values are non-negative and ascending
@@ -327,8 +335,8 @@ mod tests {
         assert_eq!(progress.last().unwrap().1, f64::from(summary.avg_stability));
 
         // Values should increase monotonically
-        for window in progress.windows(2) {
-            assert!(window[0].1 <= window[1].1);
+        for [(_, earlier), (_, later)] in progress.array_windows::<2>() {
+            assert!(earlier <= later);
         }
     }
 

@@ -3,9 +3,7 @@
 use super::IdError;
 use crate::grammar::commands::normalize_command_id;
 use crate::limits::MAX_COMMAND_LINE_LEN;
-use serde::{Deserialize, Serialize, Serializer};
-use std::borrow::Borrow;
-use std::fmt;
+use serde::Deserialize;
 
 /// A command string in the form produced by [`normalize_command_id`].
 ///
@@ -47,12 +45,6 @@ impl NormalizedCommand {
         }
         Ok(Self(normalized.into()))
     }
-
-    /// The normalized command as a string slice.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 impl TryFrom<String> for NormalizedCommand {
@@ -63,23 +55,7 @@ impl TryFrom<String> for NormalizedCommand {
     }
 }
 
-impl fmt::Display for NormalizedCommand {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl Borrow<str> for NormalizedCommand {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Serialize for NormalizedCommand {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.0)
-    }
-}
+str_id_impls!(NormalizedCommand);
 
 #[cfg(test)]
 mod tests {

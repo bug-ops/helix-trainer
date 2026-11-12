@@ -4,11 +4,11 @@
 
 use super::apply_quest_progress;
 use crate::config::Difficulty;
+use crate::error::UserError;
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
 use crate::gamification::UserProfile;
 use crate::learning::{Analytics, ProgressionTier, ReferenceTime};
-use crate::security::UserError;
 use crate::security::error_chain;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;

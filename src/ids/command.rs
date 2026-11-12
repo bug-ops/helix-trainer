@@ -9,9 +9,7 @@
 use super::IdError;
 use crate::grammar::find::takes_char_argument;
 use crate::limits::MAX_ID_LENGTH;
-use serde::{Deserialize, Serialize, Serializer};
-use std::borrow::Borrow;
-use std::fmt;
+use serde::Deserialize;
 
 use crate::grammar::commands::{
     CMD_APPEND, CMD_APPEND_LINE_END, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK, CMD_ESCAPE,
@@ -52,19 +50,13 @@ const PUNCTUATION_COMMANDS: &str = "$^%;,.<>~`&_*/?()=";
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
 #[serde(try_from = "String")]
-pub struct CommandId(String);
+pub struct CommandId(Box<str>);
 
 impl CommandId {
-    /// Card id of this command.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
     /// Consume the command, yielding its card id.
     #[must_use]
     pub fn into_string(self) -> String {
-        self.0
+        self.0.into_string()
     }
 
     /// Mint a card id from one recorded action, ignoring Insert-mode context.
@@ -90,14 +82,14 @@ impl CommandId {
             return None;
         }
         if let Some(search) = search_command(rest) {
-            return Some(Self(search.to_string()));
+            return Some(Self(search.into()));
         }
         let mut chars = rest.chars();
         let first = chars.next()?;
         match (chars.next(), takes_char_argument(first)) {
-            (Some(_), true) => Some(Self(first.to_string())),
+            (Some(_), true) => Some(Self(first.to_string().into())),
             (None, _) if !first.is_alphanumeric() && !PUNCTUATION_COMMANDS.contains(first) => None,
-            _ => Some(Self(normalize_command_id(rest).into_owned())),
+            _ => Some(Self(normalize_command_id(rest).into())),
         }
     }
 
@@ -152,23 +144,7 @@ impl TryFrom<String> for CommandId {
     }
 }
 
-impl fmt::Display for CommandId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl Borrow<str> for CommandId {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Serialize for CommandId {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.0)
-    }
-}
+str_id_impls!(CommandId);
 
 /// Register-scoped change (`"c`, normalized from `"ac`) also enters Insert mode.
 fn enters_insert(card: &str) -> bool {

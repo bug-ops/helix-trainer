@@ -93,9 +93,5 @@ redundant_clone = "warn"
 cast_possible_truncation = "warn"
 unnecessary_wraps = "warn"
 # Pedantic lints kept allowed on purpose.
-assert_is_empty = "allow" # fixing 100+ test assertions hurts readability
-match_same_arms = "allow" # exhaustive per-variant mappings stay explicit
 module_name_repetitions = "allow" # 71 public names, renaming adds churn without safety gain
 must_use_candidate = "allow" # 461 sites, attribute noise outweighs the benefit
-similar_names = "allow" # name heuristic, renames give no benefit
-too_many_lines = "allow" # needs dedicated function-splitting refactors

@@ -588,6 +588,7 @@ fn write_count(f: &mut fmt::Formatter<'_>, count: Option<NonZeroUsize>) -> fmt::
 mod tests {
     use super::*;
     use proptest::prelude::*;
+    use std::assert_matches;
 
     fn nz(n: usize) -> NonZeroUsize {
         NonZeroUsize::new(n).unwrap()
@@ -622,18 +623,18 @@ mod tests {
 
     #[test]
     fn parse_rejects_what_the_simulator_rejected() {
-        assert!(matches!(
+        assert_matches!(
             NormalCommand::parse("no-such"),
             Err(SimulatorError::UnknownCommand { .. })
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             NormalCommand::parse("\"az"),
             Err(SimulatorError::UnknownRegisterOp { op: 'z' })
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             NormalCommand::parse("3rx"),
             Err(SimulatorError::CountNotAccepted)
-        ));
+        );
         assert!(NormalCommand::parse("\u{e9}").is_err());
         assert!(NormalCommand::parse("\"").is_err());
         assert!(NormalCommand::parse("\"aay").is_err());

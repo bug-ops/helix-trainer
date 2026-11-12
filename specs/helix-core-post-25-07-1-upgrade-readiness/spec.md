@@ -242,6 +242,7 @@ Known keymap changes on master relevant here:
 | FR-063 | THE language rules SHALL carry the tab width as a typed `TabWidth` newtype: `rs` 4, `py` 4, `md` 2 (the hx 25.07.1 `languages.toml` values), and 4 for the bare-simulator rules `LanguageRules::PLAIN` only. `&` (FR-037), `<` (FR-030), the whitespace-only Backspace (FR-053), and `C`/`Alt-C` (FR-061) read the tab width from the active language rules, never from a constant. Tests cover `md` (width 2) next to `rs` | #542 | must |
 | FR-064 | THE simulator SHALL model ONE logical viewport so that `Ctrl-d`, `Ctrl-u`, `Ctrl-f`, `Ctrl-b`, `zj` and `zk` and the view after every command match hx 25.07.1 on a fixed 24-row view (user decision D-541 = B: a fixed logical view height, a port of hx scrolling; the rendered terminal height is NOT used and no real-height input exists). The full model, formulas and golden setup are in section 3.8.8. The fixed `PAGE_SIZE` is deleted. | #541 | must |
 | FR-065 | WHILE an Insert session records its changes THE SIMULATOR SHALL keep the cost of recording one key independent of the number of keys already typed in the session (amortized constant): composing the session's changes into the accumulated set SHALL NOT clone and re-compose the whole accumulated set per key. The composed result SHALL equal sequential composition by op structure (`changes()` slice, `len`, `len_after`), checked by a property test that compares batched against sequential composition (not by applied text). Acceptance: a bench with 10 cursors where the cost per key at key 8000 is at most 1.5 times the cost per key at key 200; a failing measurement reopens the issue before the PR is merged. NFR-003 of [[undo-insert-session-granularity/spec]] is the standing rule | #617 | must |
+| FR-066 | THE SIMULATOR SHALL model `.` as hx 25.07.1 `repeat_last_insert`: it replays ONLY the last Insert-mode command (the entry command `i`, `a`, `I`, `A`, `o`, `O`, `c` or a count-bearing form, the keys typed in Insert mode, and the closing `Escape`; FR-053, FR-065, [[undo-insert-session-granularity/spec]]). Non-insert edits (`d`, `Alt-d`, `x` followed by `d`, `>`, `<`, `J`, `~`, `p`, `P`, `R`, `y`, `r`, `u`, `U`) SHALL NOT record or replace the repeat buffer, and selection plus operator compounds are NOT recorded as one compound action. WHEN `.` runs and no Insert session has been recorded THE SIMULATOR SHALL do nothing (no buffer change, no selection change, no error). WHEN a non-insert edit follows an Insert session THEN `.` SHALL still replay that earlier Insert session (`i Z Escape g g x d .` re-inserts `Z`). A count before `.` stays ignored (known divergence of [[module-layering-and-typed-commands/spec]]) and is out of scope here. The module documentation of `src/helix/repeat.rs` (section "Compound Actions" and the `is_selection_command` / `is_operator_command` notes), `docs/HELIX_KEYBINDINGS.md` (`.` rows: "Repeat last insert operation") and the `CMD_REPEAT` doc comment in `src/grammar/commands.rs` ("Repeat the last insert or change") SHALL state this rule and SHALL NOT claim compound-action or change repetition. Decision (recommended direction, 2026-11-12): match hx 25.07.1, no documented divergence; see Open Questions | dot-repeat parity bug | must |
 
 > [!info] Former explicit gaps, closed 2026-11-11
 > Counted `o`/`O` (#577), multi-cursor `o`/`O`/Enter newline indent (#546 case 6) and the unclosed-opener indent 0 (#546 case 4, needs typed auto-pair) were explicit gaps while Insert mode was single-cursor. They are specified as IMPLEMENTED by FR-053, FR-055 and the FR-039 amendments (#596, #597). The simulator still does not model `Ctrl-s` (`commit_undo_checkpoint`), tree-sitter indentation, or the hx trailing-newline quirk of 3.8.6 table E.
@@ -431,6 +432,7 @@ Scenario corrections: `dedent_001` and `dedent_line_001` were rewritten with 4-s
 | SC-105 | Goldens for FR-039 recorded with `hx -c <empty config>` pass; the FR-037 detection, `&` display-width and FR-038 comment-token cases and the FR-036 Select-mode cases assert buffer and selection; the divergence table of 3.8.4 is complete | Pass |
 | SC-106 | Every golden of 3.8.6 (tables A-D) exists as a simulator test asserting the exact buffer; the FR-052 CRLF property test and the FR-055 one-char-at-a-time auto-pair cases pass; the code-fence scenario completes with 13 commands (Task and MiniGame) | Pass |
 | SC-107 | Every golden of FR-059..FR-064 and of the FR-050, FR-053 amendments is a simulator test asserting buffer AND selection; the viewport goldens of 3.8.8 exist for every listed case; the FR-065 bench ratio is at most 1.5; the opt-in live differential of FR-040 reports no drift | Pass |
+| SC-108 | The differential check of 3.8.9 (every sequence of the table, run against real `hx` 25.07.1 and the simulator on the same text) shows identical buffers; `cargo nextest run scenario` and the solve-all scenario test pass with the rewritten repeat scenarios | Pass |
 
 ### 3.8.6 Recorded hx goldens for the #592-#599 batch (E0)
 
@@ -547,6 +549,64 @@ One logical viewport: `ViewState` with H = 24 inner rows (the existing `DEFAULT_
 - Search centering (hx `search_impl` `commands.rs` 2211, `ensure_cursor_in_view_center`, `view.rs` 341-347): after `/`, `?`, `n` or `N` place a match, if the primary cursor line lies outside `[top, top + H - 1]` (no scrolloff) then `top = cursor_line - (H-1)/2` (saturating; hx `align_view` Center with `relative = (H-1)/2`, helix-view `lib.rs` 51-74; 11 for H = 24). Golden evidence on a 70-line document: `/ L50 Enter C-f` leaves the cursor on line 68 (top 39 = 50 - 11), and `/ L50 Enter C-b` gives 33; otherwise nothing changes. The post-command ensure then runs. `*` and `Alt-*` do not move the cursor, so they do not center. hx also centers on jumplist jumps and pickers, which the simulator does not have (a residual row).
 - Golden setup: hx 25.07.1 started with `hx -c <empty config>`, an 80x26 terminal (24 inner rows, one status line, one command line, bufferline off), and a document of at least 60 lines. Cases: `Ctrl-d`, `Ctrl-u`, `Ctrl-f` and `Ctrl-b` from the top, the middle and near the end; `v` then `Ctrl-d`; two cursors then `Ctrl-d`; `/<far match> Enter Ctrl-u`; `n Ctrl-d`; `zj` then `Ctrl-f`; `/ L50 Enter C-f` and `/ L50 Enter C-b` on a 70-line document. Each case asserts the selection (and the text). The partial closure of #541 (paging by the RENDERED editor height) is the P4 follow-up #629, open and deferred by user decision.
 
+### 3.8.9 Dot-repeat replays only the last insert (FR-066)
+
+> [!bug] Finding
+> P2, Helix fidelity. The simulator records and replays selection plus operator compounds and other edit commands under `.`, so three bundled repeat scenarios teach `d .`, `x d .` and `> j .`, which do nothing in hx 25.07.1.
+
+Recorded hx goldens. Text `fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}`; keys are prefixed by `~` (case switch, not an insert) so no insert precedes. hx behavior is the oracle; the "Trainer today" column is the defect.
+
+| Keys | hx 25.07.1 | Trainer today |
+|------|-----------|---------------|
+| `~ x d .` | `.` does nothing | second line removed |
+| `~ x d . .` | text untouched by `.` | everything deleted |
+| `~ d .`, `~ w d .`, `~ w d j .` | `.` does nothing | repeats the delete |
+| `~ > .` | one indent only | second indent |
+| `~ J .` | one join only | second join |
+| `~ y p .`, `~ x y p .` | one paste only | extra paste |
+| `i Z Escape g g x d .` | `.` re-inserts `Z` (last insert) | repeats the delete |
+| `i ab Escape j .`, `a`, `A`, `o`, `O`, `c <text> Escape` forms | replay of the insert session | already matches (#607, #608, #622, #641); MUST stay green |
+
+**Scenarios to rewrite** (all in `scenarios/en/repeat/basic-repeat.toml`, which keeps 5 scenarios):
+
+| Scenario id | Current solution | Problem |
+|-------------|------------------|---------|
+| `repeat_delete_char_001` | `d .` | `.` does not repeat `d` in hx |
+| `repeat_delete_line_001` | `x d .` | `.` does not repeat `x d` in hx |
+| `repeat_indent_001` | `> j .` | `.` does not repeat `>` in hx |
+
+Unchanged and correct: `repeat_insert_001` (`a x Escape .`). `repeat_replace_001` (`r_ llll .`) is NOT confirmed by the finding: the differential check MUST include it, and it is rewritten too if hx does not repeat `r`.
+
+Requirements for the rewrite:
+
+- Every canonical solution of every scenario in the file SHALL produce the target in real hx 25.07.1, not only in the simulator.
+- Each rewritten scenario SHALL still teach `.` through an Insert-session repeat (for example append or open-line text on one place, move, `.` on another) or SHALL be re-expressed with a count, `d` per line, or a non-`.` solution; the scenario IDs and the scenario count of the file are kept so progress and FSRS cards keyed by id survive; `name`, `description`, `solution.description`, `optimal_count` and `target` are updated to match.
+- `commands_taught` coverage of [[scenario-coverage-for-implemented-commands/spec]] stays intact: `.` remains taught by at least one scenario, and `x` and `d` stay covered by the scenarios of that package (the removal of `["." , "x", "d"]` from `repeat_delete_line_001` SHALL NOT create an allow-list entry; if `x`/`d` lose their only teaching scenario elsewhere, the rewritten scenario keeps them in `commands_taught`).
+- Tags drop `delete`/`indent` repeat claims that no longer hold.
+
+**Acceptance criteria**
+
+```
+GIVEN the text above and no earlier Insert session
+WHEN the keys `~ x d .` run
+THEN the buffer equals the buffer after `~ x d` (the `.` is a no-op), as in hx
+
+GIVEN an Insert session `i Z Escape` followed by `g g x d`
+WHEN `.` runs
+THEN `Z` is inserted again at the cursor, as in hx
+
+GIVEN every sequence of the table above
+WHEN run against the simulator and against real hx 25.07.1
+THEN buffers and primary selections match
+
+GIVEN the rewritten basic-repeat.toml
+WHEN the solve-all scenario test and each solution replayed in hx run
+THEN every scenario reaches its target and the file still has 5 scenarios
+```
+
+**Verification method**: (1) simulator tests, one per table row, asserting buffer AND selection; (2) differential check by driving real `hx` 25.07.1 through tmux with the same text and keys; (3) `cargo nextest run scenario` plus the solve-all test; (4) `cargo nextest run --workspace --all-features --lib --bins`; (5) docs build with broken intra-doc links denied (the doc edits of FR-066).
+
+
 ## 4. Non-Functional Requirements
 
 | ID | Category | Requirement |
@@ -607,6 +667,10 @@ One logical viewport: `ViewState` with H = 24 inner rows (the existing `DEFAULT_
 > - [NEEDS CLARIFICATION: should there be an automated trigger (scheduled check of upstream tags, e.g. in the continuous-improvement cycle's dependency monitoring) or is manual detection enough?]
 > - [NEEDS CLARIFICATION: how long to wait before filing an issue to move to a `rev` pin if no tag appears (it has been about 16 months since 25.07.1)?]
 > - [NEEDS CLARIFICATION: whether upstream will publish a tag before the master changes listed here are altered or reverted; re-verify the compare at bump time.] Re-verified 2026-11-12: no tag yet, master diverged (ahead 1004, behind 2).
+
+> [!question] Dot-repeat parity (FR-066)
+> - [NEEDS CLARIFICATION: confirm no documented divergence. Recommended and specified: match hx 25.07.1 exactly. A divergence (repeating `x d`, `>`) would be friendlier but teaches commands that fail in real Helix, defeating the trainer's purpose, so none is proposed.]
+> - [NEEDS CLARIFICATION: does `r` (`repeat_replace_001`) repeat in hx 25.07.1? Settle by the differential check; the finding says replace already matches.]
 
 ## 9. See Also
 

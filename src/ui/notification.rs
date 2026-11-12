@@ -13,6 +13,7 @@ use crate::constants::{
 };
 use crate::game::services::CompletionEvent;
 use crate::time::{MonotonicClock, SystemMonotonicClock};
+use crate::ui::text;
 use rust_i18n::t;
 use std::fmt;
 use std::sync::Arc;
@@ -98,9 +99,10 @@ pub enum NotificationType {
 impl From<CompletionEvent> for NotificationType {
     fn from(event: CompletionEvent) -> Self {
         match event {
-            CompletionEvent::AchievementUnlocked { name, description } => {
-                Self::Achievement { name, description }
-            }
+            CompletionEvent::AchievementUnlocked { id } => Self::Achievement {
+                name: text::achievement_name(id),
+                description: text::achievement_description(id),
+            },
             CompletionEvent::LevelUp { new_level } => Self::LevelUp { new_level },
         }
     }

@@ -5,9 +5,9 @@
 
 use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
 use crate::limits::{
-    MAX_CUSTOM_XP_REWARD, MAX_LOCALE_LENGTH, MAX_QUEST_DESCRIPTION_LENGTH, MAX_QUEST_NAME_LENGTH,
-    MAX_QUEST_TARGET, MAX_QUEST_TEMPLATES_PER_FILE, MAX_REQUIRED_CONDITIONS,
-    MAX_SCENARIO_FILE_SIZE, MAX_SPEED_RUN_TIME_SECONDS, MAX_VERSION_LENGTH,
+    MAX_CUSTOM_XP_REWARD, MAX_LOCALE_LENGTH, MAX_QUEST_TARGET, MAX_QUEST_TEMPLATES_PER_FILE,
+    MAX_REQUIRED_CONDITIONS, MAX_SCENARIO_FILE_SIZE, MAX_SPEED_RUN_TIME_SECONDS,
+    MAX_VERSION_LENGTH,
 };
 use crate::security::{SecurityError, UserError, path_validator, sanitizer};
 
@@ -47,10 +47,6 @@ pub struct QuestsMetadata {
 pub struct QuestTemplate {
     /// Unique identifier, validated as a safe id.
     pub id: QuestId,
-    /// Display name shown on the quest card.
-    pub name: String,
-    /// One-line goal description shown to the player.
-    pub description: String,
 
     /// Difficulty tier, which selects the default XP reward.
     pub difficulty: QuestDifficulty,
@@ -356,19 +352,6 @@ impl QuestLoader {
     }
 
     fn check_quest(quest: &QuestTemplate) -> Result<(), QuestTemplateError> {
-        if quest.name.len() > MAX_QUEST_NAME_LENGTH {
-            return Err(QuestTemplateError::NameTooLong {
-                max: MAX_QUEST_NAME_LENGTH,
-                actual: quest.name.len(),
-            });
-        }
-        if quest.description.len() > MAX_QUEST_DESCRIPTION_LENGTH {
-            return Err(QuestTemplateError::DescriptionTooLong {
-                max: MAX_QUEST_DESCRIPTION_LENGTH,
-                actual: quest.description.len(),
-            });
-        }
-
         if let Some(xp_config) = &quest.xp
             && let Some(reward) = xp_config.base_reward
             && reward > MAX_CUSTOM_XP_REWARD

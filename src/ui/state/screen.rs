@@ -1100,17 +1100,17 @@ mod tests {
         assert!(selection.selected_mode(today).is_challenge());
     }
 
-    /// `all_modes` must stay in lockstep with `MiniGameModeKind::ALL`, and each
-    /// mode must have a name and description.
+    /// `all_modes` must stay in lockstep with `MiniGameModeKind::ALL`.
     #[test]
     fn test_all_modes_follow_the_kind_order() {
         let today = chrono::Utc::now().date_naive();
         let modes = MiniGameModeSelection::all_modes(today);
 
         for (kind, mode) in MiniGameModeKind::ALL.into_iter().zip(&modes) {
-            assert_eq!(kind.mode(today).name(), mode.name());
-            assert!(!mode.name().is_empty());
-            assert!(!mode.description().is_empty());
+            assert_eq!(
+                std::mem::discriminant(&kind.mode(today)),
+                std::mem::discriminant(mode)
+            );
         }
     }
 

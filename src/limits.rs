@@ -57,12 +57,6 @@ pub(crate) const MAX_SPEED_RUN_TIME_SECONDS: u64 = 3600;
 /// Maximum custom XP reward
 pub(crate) const MAX_CUSTOM_XP_REWARD: u32 = 1000;
 
-/// Maximum quest name length
-pub(crate) const MAX_QUEST_NAME_LENGTH: usize = 100;
-
-/// Maximum quest description length
-pub(crate) const MAX_QUEST_DESCRIPTION_LENGTH: usize = 500;
-
 /// Maximum version string length
 pub(crate) const MAX_VERSION_LENGTH: usize = 20;
 

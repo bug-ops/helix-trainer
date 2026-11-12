@@ -178,6 +178,7 @@ impl CompletionRule {
 
 /// Scenario metadata for filtering, sorting, and quest generation
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ScenarioMetadata {
     /// Completion rule (defaults to [`CompletionRule::TargetState`])
     #[serde(default)]

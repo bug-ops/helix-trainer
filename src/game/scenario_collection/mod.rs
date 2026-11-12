@@ -162,7 +162,7 @@ impl ScenarioCollection {
 
             SortMode::ByProgress => {
                 if let Some(prof) = profile {
-                    self.filtered_indices.sort_by_key(|&idx| {
+                    self.filtered_indices.sort_by_cached_key(|&idx| {
                         // Completed scenarios go to the end
                         self.scenarios
                             .get(idx)
@@ -196,7 +196,7 @@ impl ScenarioCollection {
 
             SortMode::ByMastery => {
                 if let Some(prof) = profile {
-                    self.filtered_indices.sort_by_key(|&idx| {
+                    self.filtered_indices.sort_by_cached_key(|&idx| {
                         // Sort by completion count (fewer completions = lower mastery = higher priority)
                         self.scenarios
                             .get(idx)

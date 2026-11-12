@@ -196,8 +196,6 @@ pub struct Quest {
     pub id: QuestId,
     /// Quest type with its progress.
     pub quest_type: QuestType,
-    /// Text shown to the player.
-    pub description: String,
     /// Difficulty tier.
     pub difficulty: QuestDifficulty,
     /// XP granted on completion.
@@ -253,28 +251,17 @@ impl From<&QuestTemplate> for Quest {
             TemplateDifficulty::Medium => QuestDifficulty::Medium,
             TemplateDifficulty::Hard => QuestDifficulty::Hard,
         };
-        Self::new(
-            template.id.clone(),
-            quest_type,
-            template.description.clone(),
-            difficulty,
-        )
+        Self::new(template.id.clone(), quest_type, difficulty)
     }
 }
 
 impl Quest {
     /// Create a new quest
-    pub fn new(
-        id: QuestId,
-        quest_type: QuestType,
-        description: String,
-        difficulty: QuestDifficulty,
-    ) -> Self {
+    pub fn new(id: QuestId, quest_type: QuestType, difficulty: QuestDifficulty) -> Self {
         let xp_reward = XPCalculator::quest_xp_reward(&quest_type, difficulty);
         Self {
             id,
             quest_type,
-            description,
             difficulty,
             xp_reward,
             completed: false,
@@ -790,12 +777,7 @@ mod tests {
             target: 5,
             current: 0,
         };
-        let quest = Quest::new(
-            qid("test_quest"),
-            quest_type,
-            "Test quest".to_string(),
-            QuestDifficulty::Easy,
-        );
+        let quest = Quest::new(qid("test_quest"), quest_type, QuestDifficulty::Easy);
 
         assert_eq!(quest.id.as_str(), "test_quest");
         assert_eq!(quest.xp_reward, 25); // Easy command practice
@@ -899,7 +881,6 @@ mod tests {
                 target: 3,
                 current: 0,
             },
-            "Test".to_string(),
             QuestDifficulty::Easy,
         )];
 
@@ -919,7 +900,6 @@ mod tests {
                 target: 2,
                 current: 0,
             },
-            "Test".to_string(),
             QuestDifficulty::Medium,
         )];
 
@@ -946,7 +926,6 @@ mod tests {
                 scenario_id: sid("delete_line_001"),
                 time_limit: Duration::from_secs(5),
             },
-            "Test".to_string(),
             QuestDifficulty::Hard,
         )];
 
@@ -975,7 +954,6 @@ mod tests {
                 target_commands: 3,
                 commands_used: HashSet::new(),
             },
-            "Test".to_string(),
             QuestDifficulty::Hard,
         )];
 
@@ -998,7 +976,6 @@ mod tests {
                 target_minutes: 10,
                 current_minutes: 0,
             },
-            "Test".to_string(),
             QuestDifficulty::Medium,
         )];
 

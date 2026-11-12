@@ -2,6 +2,7 @@
 
 use helix_trainer::gamification::*;
 use helix_trainer::learning::PerformanceTracker;
+use helix_trainer::ui::text;
 use std::assert_matches;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -202,7 +203,6 @@ fn test_quest_progress_tracking() {
             target: 5,
             current: 0,
         },
-        "Practice x 5 times".to_string(),
         QuestDifficulty::Easy,
     )];
 
@@ -301,7 +301,6 @@ fn test_exploration_quest_tracking() {
             target_commands: 5,
             commands_used: std::collections::HashSet::new(),
         },
-        "Use 5 different commands".to_string(),
         QuestDifficulty::Hard,
     )];
 
@@ -332,7 +331,6 @@ fn test_speed_run_quest() {
             scenario_id: sid("delete_line_001"),
             time_limit: Duration::from_secs(5),
         },
-        "Complete scenario in under 5 seconds".to_string(),
         QuestDifficulty::Hard,
     )];
 
@@ -361,7 +359,6 @@ fn test_time_invested_quest() {
             target_minutes: 10,
             current_minutes: 0,
         },
-        "Practice for 10 minutes".to_string(),
         QuestDifficulty::Medium,
     )];
 
@@ -382,8 +379,8 @@ fn test_all_achievement_metadata() {
 
     // Verify all achievements have metadata
     for achievement in achievements {
-        assert_ne!(achievement.name, "");
-        assert_ne!(achievement.description, "");
+        assert!(!text::achievement_name(achievement.id).starts_with("achievements."));
+        assert!(!text::achievement_description(achievement.id).starts_with("achievements."));
         assert!(!achievement.is_unlocked());
     }
 }
@@ -413,7 +410,6 @@ fn test_freeze_eligibility() {
                 target: 1,
                 current: 0,
             },
-            format!("Quest {i}"),
             QuestDifficulty::Easy,
         ));
     }

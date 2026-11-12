@@ -576,7 +576,6 @@ mod tests {
                     target: 1,
                     current: 0,
                 },
-                format!("Quest {i}"),
                 QuestDifficulty::Easy,
             ));
         }

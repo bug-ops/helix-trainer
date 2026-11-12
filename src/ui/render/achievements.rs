@@ -3,6 +3,7 @@
 use crate::gamification::AchievementEngine;
 use crate::ui::layout::{achievement_chunks, clamp_achievement_scroll};
 use crate::ui::state::{AppState, TypedScreen};
+use crate::ui::text;
 use ratatui::{
     Frame,
     layout::Alignment,
@@ -112,9 +113,12 @@ fn render_achievements_content(
 
         lines.push(Line::from(vec![
             Span::raw(format!("  {marker} ")),
-            Span::styled(format!("{:20}", achievement.name), name_style),
+            Span::styled(
+                format!("{:20}", text::achievement_name(achievement.id)),
+                name_style,
+            ),
             Span::raw(" - "),
-            Span::styled(achievement.description.clone(), desc_style),
+            Span::styled(text::achievement_description(achievement.id), desc_style),
         ]));
     }
 

@@ -160,7 +160,10 @@ pub struct UserProfile {
     /// mismatch means FSRS review history was built under a different key
     /// mapping than the one now active, which callers surface as a
     /// notification rather than silently trusting stale scheduling data.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::config::keymap::fingerprint::lenient_stored_fingerprint"
+    )]
     pub keymap_fingerprint: Option<StoredKeymapFingerprint>,
 }
 
@@ -684,6 +687,17 @@ impl XPCalculator {
 mod tests {
     use super::*;
     use crate::testing::qid;
+
+    #[test]
+    fn profile_with_unknown_keymap_fingerprint_tag_loads_without_fingerprint() {
+        let mut json = serde_json::to_value(UserProfile::new()).unwrap();
+        json["keymap_fingerprint"] = serde_json::json!({"Sha256V2": "abc"});
+        let profile: UserProfile = serde_json::from_str(&json.to_string()).unwrap();
+        assert_eq!(profile.keymap_fingerprint, None);
+
+        json["keymap_fingerprint"] = serde_json::json!("garbage");
+        assert!(serde_json::from_str::<UserProfile>(&json.to_string()).is_err());
+    }
 
     /// Golden values derived from the pre-#485 inline formulas; they pin current
     /// behavior so the move into `XPCalculator` cannot change any award.

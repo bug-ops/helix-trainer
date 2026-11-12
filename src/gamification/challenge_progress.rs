@@ -4,21 +4,57 @@
 //! scenario selection itself lives in `minigame::challenge`.
 
 use chrono::NaiveDate;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::constants::{CHALLENGE_MAX_ATTEMPTS, CHALLENGE_SCENARIO_COUNT};
+
+/// The calendar day a daily challenge was last attempted.
+///
+/// `Unreadable` keeps a malformed stored date distinct from "never played" so
+/// that it never refills the attempt allowance. It serializes as `null`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChallengeDay {
+    /// No challenge has been attempted yet.
+    #[default]
+    NotStarted,
+    /// The last attempt happened on this day.
+    On(NaiveDate),
+    /// The stored day could not be read; counters are kept and never reset.
+    Unreadable,
+}
+
+impl Serialize for ChallengeDay {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::On(date) => date.serialize(serializer),
+            Self::NotStarted | Self::Unreadable => serializer.serialize_none(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ChallengeDay {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // Buffer as a Value first so a mismatched shape is fully consumed before being discarded.
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if value.is_null() {
+            return Ok(Self::NotStarted);
+        }
+        Ok(NaiveDate::deserialize(value).map_or(Self::Unreadable, Self::On))
+    }
+}
 
 /// Tracks player's progress on daily challenges.
 ///
 /// Persisted to `UserProfile` for cross-session tracking.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(from = "ChallengeProgressWire")]
 pub struct ChallengeProgress {
-    /// Date of current/last challenge; serialized as `YYYY-MM-DD`.
+    /// Day of the current/last challenge; serialized as `YYYY-MM-DD` or `null`.
     ///
-    /// A malformed stored value loads as `None` so one bad field does not fail
-    /// the whole profile load.
-    #[serde(default, deserialize_with = "lenient_date")]
-    pub last_challenge_date: Option<NaiveDate>,
+    /// A malformed stored value, or a missing one with used attempts, loads as
+    /// [`ChallengeDay::Unreadable`] so one bad field neither fails the profile
+    /// load nor resets the attempt limit.
+    pub last_challenge_date: ChallengeDay,
 
     /// Attempts used today (0-3)
     pub attempts_used_today: u8,
@@ -42,13 +78,36 @@ pub struct ChallengeProgress {
     pub total_challenges_completed: u32,
 }
 
-fn lenient_date<'de, D>(deserializer: D) -> Result<Option<NaiveDate>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    // Buffer as a Value first so a mismatched shape is fully consumed before being discarded.
-    let value = serde_json::Value::deserialize(deserializer)?;
-    Ok(NaiveDate::deserialize(value).ok())
+#[derive(Deserialize)]
+struct ChallengeProgressWire {
+    #[serde(default)]
+    last_challenge_date: ChallengeDay,
+    attempts_used_today: u8,
+    best_score_today: u64,
+    best_scenarios_today: u8,
+    all_time_best_score: u64,
+    all_time_best_scenarios: u8,
+    total_challenges_attempted: u32,
+    total_challenges_completed: u32,
+}
+
+impl From<ChallengeProgressWire> for ChallengeProgress {
+    fn from(wire: ChallengeProgressWire) -> Self {
+        let last_challenge_date = match wire.last_challenge_date {
+            ChallengeDay::NotStarted if wire.attempts_used_today > 0 => ChallengeDay::Unreadable,
+            day => day,
+        };
+        Self {
+            last_challenge_date,
+            attempts_used_today: wire.attempts_used_today,
+            best_score_today: wire.best_score_today,
+            best_scenarios_today: wire.best_scenarios_today,
+            all_time_best_score: wire.all_time_best_score,
+            all_time_best_scenarios: wire.all_time_best_scenarios,
+            total_challenges_attempted: wire.total_challenges_attempted,
+            total_challenges_completed: wire.total_challenges_completed,
+        }
+    }
 }
 
 impl ChallengeProgress {
@@ -84,7 +143,7 @@ impl ChallengeProgress {
     pub fn start_attempt(&mut self, today: NaiveDate) {
         // Reset for new day
         if self.is_new_day(today) {
-            self.last_challenge_date = Some(today);
+            self.last_challenge_date = ChallengeDay::On(today);
             self.attempts_used_today = 0;
             self.best_score_today = 0;
             self.best_scenarios_today = 0;
@@ -120,7 +179,19 @@ impl ChallengeProgress {
 
     /// Check whether the calendar day has rolled over since `last_challenge_date`
     fn is_new_day(&self, today: NaiveDate) -> bool {
-        self.last_challenge_date != Some(today)
+        match self.last_challenge_date {
+            ChallengeDay::NotStarted => true,
+            ChallengeDay::On(day) => day != today,
+            ChallengeDay::Unreadable => false,
+        }
+    }
+
+    /// Counts a [`ChallengeDay::Unreadable`] day as `today`, keeping the used
+    /// attempts and best-today score instead of refilling the allowance.
+    pub fn settle_unreadable_day(&mut self, today: NaiveDate) {
+        if self.last_challenge_date == ChallengeDay::Unreadable {
+            self.last_challenge_date = ChallengeDay::On(today);
+        }
     }
 
     /// Check if progress is for the given date

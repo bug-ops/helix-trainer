@@ -211,7 +211,6 @@ fn test_previously_completed_quests_tracking() {
                 target: 1,
                 current: 0,
             },
-            "Select 1 line".to_string(),
             QuestDifficulty::Easy,
         ));
     }

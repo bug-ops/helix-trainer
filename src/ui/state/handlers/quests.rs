@@ -7,6 +7,7 @@ use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::QuestBonus;
 use crate::ui::state::{AppState, QuestProgressChange};
+use crate::ui::text;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -78,7 +79,11 @@ pub(crate) fn award_quest_completion_xp(
             .enumerate()
             .filter_map(|(idx, quest)| {
                 if idx < was_completed.len() && !was_completed[idx] && quest.completed {
-                    Some((quest.id.clone(), quest.description.clone(), quest.xp_reward))
+                    Some((
+                        quest.id.clone(),
+                        text::quest_description(quest),
+                        quest.xp_reward,
+                    ))
                 } else {
                     None
                 }

@@ -38,6 +38,7 @@ pub mod layout;
 pub mod notification;
 pub mod render;
 pub mod state;
+pub mod text;
 
 pub use key_dispatch::handle_key_event;
 pub use layout::Viewport;

@@ -2,6 +2,7 @@
 
 use crate::ui::layout::{FIXED_MENU_ITEMS, RENDERED_FIXED_ROWS, clamp_menu_view, menu_chunks};
 use crate::ui::state::{AppState, TypedScreen};
+use crate::ui::text;
 use ratatui::{
     Frame,
     layout::Alignment,
@@ -413,7 +414,10 @@ fn render_quest_panel(frame: &mut Frame, area: ratatui::layout::Rect, state: &Ap
             // Format: "✓ Delete 3 lines (3/3)    +25 XP"
             format!(
                 " {} {}{}    +{} XP",
-                icon, quest.description, progress_str, quest.xp_reward
+                icon,
+                text::quest_description(quest),
+                progress_str,
+                quest.xp_reward
             )
         })
         .collect();

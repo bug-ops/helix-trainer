@@ -731,7 +731,10 @@ mod tests {
             let loaded = storage
                 .load()
                 .unwrap_or_else(|e| panic!("{malformed}: {e}"));
-            assert!(loaded.challenge_progress.last_challenge_date.is_none());
+            assert_eq!(
+                loaded.challenge_progress.last_challenge_date,
+                crate::gamification::ChallengeDay::Unreadable
+            );
             assert_eq!(loaded.challenge_progress.all_time_best_score, 42);
             assert_eq!(loaded.total_xp, profile.total_xp);
         }

@@ -6,7 +6,7 @@ use crate::config::Difficulty;
 use crate::constants::{FLASH_TIME_RATIO, SPEED_DEMON_TIME_RATIO};
 use crate::game::Feedback;
 use crate::gamification::{
-    Achievement, AchievementEngine, UserProfile, XPCalculator, XPComponents, speed_time_ratio,
+    AchievementEngine, AchievementId, UserProfile, XPCalculator, XPComponents, speed_time_ratio,
 };
 use crate::ids::{CommandId, ScenarioId};
 use crate::learning::{
@@ -62,10 +62,8 @@ pub struct XPScalingResult {
 pub enum CompletionEvent {
     /// An achievement was unlocked.
     AchievementUnlocked {
-        /// Achievement name.
-        name: String,
-        /// How it was earned.
-        description: String,
+        /// The achievement that was unlocked.
+        id: AchievementId,
     },
     /// The account level went up.
     LevelUp {
@@ -246,13 +244,7 @@ impl ScenarioCompletionService {
     ) -> Vec<CompletionEvent> {
         AchievementEngine::check_and_unlock(profile, tracker)
             .into_iter()
-            .map(|achievement_id| {
-                let achievement = Achievement::new(achievement_id);
-                CompletionEvent::AchievementUnlocked {
-                    name: achievement.name,
-                    description: achievement.description,
-                }
-            })
+            .map(|id| CompletionEvent::AchievementUnlocked { id })
             .collect()
     }
 

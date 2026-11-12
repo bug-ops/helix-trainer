@@ -584,13 +584,12 @@ mod tests {
 
         let mut state = create_test_state();
         state.progress.profile.daily_quests = vec![Quest {
-            id: qid("cmd_practice_h"),
+            id: qid("cmd_h_easy"),
             quest_type: QuestType::CommandPractice {
                 command: ncmd("h"),
                 target: 1,
                 current: 0,
             },
-            description: "Use 'h' 1 time".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: 50,
             completed: false,
@@ -623,7 +622,7 @@ mod tests {
             state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
                 crate::ui::notification::NotificationType::QuestComplete { description, .. }
-                    if description == "Use 'h' 1 time"
+                    if description == "Move cursor left 1 times using 'h'"
             )),
             "expected a QuestComplete notification"
         );
@@ -643,13 +642,12 @@ mod tests {
         state.progress.profile.total_xp = xp_for_level_2 - 1;
         state.progress.profile.level = 1;
         state.progress.profile.daily_quests = vec![Quest {
-            id: qid("cmd_practice_h"),
+            id: qid("cmd_h_easy"),
             quest_type: QuestType::CommandPractice {
                 command: ncmd("h"),
                 target: 1,
                 current: 0,
             },
-            description: "Use 'h' 1 time".to_string(),
             difficulty: QuestDifficulty::Easy,
             xp_reward: 1,
             completed: false,
@@ -1040,7 +1038,6 @@ mod tests {
                     target: 5,
                     current: 0,
                 },
-                description: "Practice j command".to_string(),
                 difficulty: QuestDifficulty::Easy,
                 xp_reward: 100,
                 completed: false,

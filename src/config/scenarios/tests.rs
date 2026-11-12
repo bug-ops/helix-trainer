@@ -493,14 +493,17 @@ fn test_removed_alternatives_field_is_rejected() {
     assert!(toml::from_str::<ScenariosFile>(base).is_ok());
 }
 
-/// Legacy keys inside `[scenarios.metadata]` stay silently ignored: only the scenario table
-/// itself rejects unknown fields.
+/// Stale keys inside `[scenarios.metadata]` are a load error naming the key.
 #[test]
-fn test_legacy_keys_in_metadata_table_are_ignored() {
-    let toml = create_test_scenario_toml();
-    let toml = format!("{toml}\nestimated_time_seconds = 30\nlocale = \"en\"\n");
-    let file: ScenariosFile = toml::from_str(&toml).unwrap();
-    assert_eq!(file.scenarios.len(), 1);
+fn test_unknown_keys_in_metadata_table_are_rejected() {
+    for key in ["estimated_time_seconds = 30", "locale = \"en\""] {
+        let toml = format!("{}\n{key}\n", create_test_scenario_toml());
+        let err = toml::from_str::<ScenariosFile>(&toml)
+            .unwrap_err()
+            .to_string();
+        let name = key.split(' ').next().unwrap();
+        assert!(err.contains(name), "{err}");
+    }
 }
 
 #[test]

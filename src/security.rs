@@ -1071,7 +1071,7 @@ mod tests {
         );
         assert!(SecurityError::InvalidEncoding.to_string().contains("UTF-8"));
         assert!(
-            SecurityError::from(crate::config::quests::QuestTemplateError::NameTooLong {
+            SecurityError::from(crate::config::quests::QuestTemplateError::XpRewardTooHigh {
                 max: 1,
                 actual: 2
             })

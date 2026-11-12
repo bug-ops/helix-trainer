@@ -81,7 +81,7 @@ mod tests {
     use std::collections::HashSet;
 
     use crate::constants::{CHALLENGE_MAX_ATTEMPTS, CHALLENGE_SCENARIO_COUNT};
-    use crate::gamification::ChallengeProgress;
+    use crate::gamification::{ChallengeDay, ChallengeProgress};
     use chrono::NaiveDate;
 
     use proptest::prelude::*;
@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn test_challenge_progress_new() {
         let progress = ChallengeProgress::new();
-        assert!(progress.last_challenge_date.is_none());
+        assert_eq!(progress.last_challenge_date, ChallengeDay::NotStarted);
         assert_eq!(progress.attempts_used_today, 0);
         assert_eq!(progress.best_score_today, 0);
         assert_eq!(progress.all_time_best_score, 0);
@@ -123,7 +123,7 @@ mod tests {
     fn test_can_attempt_after_using_attempts() {
         let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date = Some(today);
+        progress.last_challenge_date = ChallengeDay::On(today);
         progress.attempts_used_today = 2;
 
         assert!(progress.can_attempt(today));
@@ -138,7 +138,8 @@ mod tests {
     fn test_start_attempt_new_day() {
         let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date = NaiveDate::from_ymd_opt(2020, 1, 1);
+        progress.last_challenge_date =
+            ChallengeDay::On(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
         progress.attempts_used_today = 3;
         progress.best_score_today = 5000;
         progress.best_scenarios_today = 8;
@@ -156,7 +157,7 @@ mod tests {
     fn test_start_attempt_same_day() {
         let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date = Some(today);
+        progress.last_challenge_date = ChallengeDay::On(today);
         progress.attempts_used_today = 1;
         progress.best_score_today = 5000;
 
@@ -165,7 +166,7 @@ mod tests {
         // Should not reset, just increment
         assert_eq!(progress.attempts_used_today, 2);
         assert_eq!(progress.best_score_today, 5000);
-        assert_eq!(progress.last_challenge_date, Some(today));
+        assert_eq!(progress.last_challenge_date, ChallengeDay::On(today));
     }
 
     #[test]
@@ -332,7 +333,7 @@ mod tests {
     fn test_challenge_progress_default_values() {
         // Verify that Default provides sensible initial values
         let progress = ChallengeProgress::default();
-        assert!(progress.last_challenge_date.is_none());
+        assert_eq!(progress.last_challenge_date, ChallengeDay::NotStarted);
         assert_eq!(progress.attempts_used_today, 0);
         assert_eq!(progress.best_score_today, 0);
         assert_eq!(progress.best_scenarios_today, 0);
@@ -342,9 +343,10 @@ mod tests {
         assert_eq!(progress.total_challenges_completed, 0);
     }
 
-    fn load_with_date(date: Option<serde_json::Value>) -> ChallengeProgress {
+    fn load_with_date(date: Option<serde_json::Value>, attempts: u8) -> ChallengeProgress {
         let mut json = serde_json::to_value(ChallengeProgress {
             all_time_best_score: 42,
+            attempts_used_today: attempts,
             ..ChallengeProgress::new()
         })
         .unwrap();
@@ -359,40 +361,66 @@ mod tests {
 
     #[test]
     fn test_last_challenge_date_deserialize_valid() {
-        let p = load_with_date(Some("2026-01-15".into()));
-        assert_eq!(p.last_challenge_date, NaiveDate::from_ymd_opt(2026, 1, 15));
+        let p = load_with_date(Some("2026-01-15".into()), 2);
+        assert_eq!(
+            p.last_challenge_date,
+            ChallengeDay::On(NaiveDate::from_ymd_opt(2026, 1, 15).unwrap())
+        );
     }
 
     #[test]
-    fn test_last_challenge_date_deserialize_malformed_degrades_to_none() {
+    fn test_last_challenge_date_deserialize_malformed_is_unreadable() {
         for text in ["not-a-date", "2026-02-30", "2026-01-15T10:00:00"] {
-            let p = load_with_date(Some(text.into()));
-            assert!(p.last_challenge_date.is_none(), "{text}");
+            let p = load_with_date(Some(text.into()), 3);
+            assert_eq!(p.last_challenge_date, ChallengeDay::Unreadable, "{text}");
             assert_eq!(p.all_time_best_score, 42, "{text}");
+            assert_eq!(p.attempts_used_today, 3, "{text}");
         }
     }
 
     #[test]
-    fn test_last_challenge_date_deserialize_wrong_type_degrades_to_none() {
+    fn test_last_challenge_date_deserialize_wrong_type_is_unreadable() {
         for value in [
             serde_json::json!(12345),
             serde_json::json!([1, 2]),
             serde_json::json!({"a": 1}),
         ] {
-            let p = load_with_date(Some(value));
-            assert!(p.last_challenge_date.is_none());
+            let p = load_with_date(Some(value), 0);
+            assert_eq!(p.last_challenge_date, ChallengeDay::Unreadable);
             assert_eq!(p.all_time_best_score, 42);
         }
     }
 
     #[test]
-    fn test_last_challenge_date_deserialize_missing_and_null() {
-        assert!(load_with_date(None).last_challenge_date.is_none());
-        assert!(
-            load_with_date(Some(serde_json::Value::Null))
-                .last_challenge_date
-                .is_none()
-        );
+    fn test_last_challenge_date_missing_or_null_depends_on_attempts() {
+        for date in [None, Some(serde_json::Value::Null)] {
+            let fresh = load_with_date(date.clone(), 0);
+            assert_eq!(fresh.last_challenge_date, ChallengeDay::NotStarted);
+            let used = load_with_date(date, 2);
+            assert_eq!(used.last_challenge_date, ChallengeDay::Unreadable);
+        }
+    }
+
+    #[test]
+    fn test_unreadable_day_never_resets_attempts() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let mut p = load_with_date(Some("garbage".into()), CHALLENGE_MAX_ATTEMPTS);
+        assert!(!p.can_attempt(today));
+        assert_eq!(p.attempts_remaining(today), 0);
+
+        p.settle_unreadable_day(today);
+        assert_eq!(p.last_challenge_date, ChallengeDay::On(today));
+        assert!(!p.can_attempt(today));
+        assert_eq!(p.attempts_used_today, CHALLENGE_MAX_ATTEMPTS);
+    }
+
+    #[test]
+    fn test_unreadable_day_serializes_as_null_and_reloads_unreadable() {
+        let p = load_with_date(Some("garbage".into()), 2);
+        let json = serde_json::to_value(&p).unwrap();
+        assert!(json["last_challenge_date"].is_null());
+        let reloaded: ChallengeProgress = serde_json::from_str(&json.to_string()).unwrap();
+        assert_eq!(reloaded.last_challenge_date, ChallengeDay::Unreadable);
     }
 
     #[test]
@@ -413,7 +441,8 @@ mod tests {
         progress.start_attempt(today);
         assert!(progress.is_today(today)); // Now has today's date
 
-        progress.last_challenge_date = NaiveDate::from_ymd_opt(2020, 1, 1);
+        progress.last_challenge_date =
+            ChallengeDay::On(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
         assert!(!progress.is_today(today)); // Past date
     }
 

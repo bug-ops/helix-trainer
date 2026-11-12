@@ -301,3 +301,359 @@ best_streak = "Best Streak: "
 best_combo = "Best Combo: "
 game_over_menu = "Esc/m - Back to Menu"
 game_over_quit = "q - Quit"
+
+# Achievement texts, keyed by AchievementId variant name
+
+[achievements.Streak7Days]
+name = "7-Day Warrior"
+description = "Practice every day for a week"
+
+[achievements.Streak30Days]
+name = "Month Master"
+description = "Maintain a 30-day practice streak"
+
+[achievements.Streak90Days]
+name = "Quarter Champion"
+description = "Maintain a 90-day practice streak"
+
+[achievements.Streak365Days]
+name = "Year Legend"
+description = "Maintain a 365-day practice streak"
+
+[achievements.FirstPerfect]
+name = "First Perfect"
+description = "Complete a scenario with perfect score"
+
+[achievements.Perfect10]
+name = "Perfect 10"
+description = "Complete 10 scenarios perfectly"
+
+[achievements.Perfect100]
+name = "Perfectionist"
+description = "Complete 100 scenarios perfectly"
+
+[achievements.MasterOneCommand]
+name = "Command Master"
+description = "Master a single command"
+
+[achievements.MasterTenCommands]
+name = "Master of Many"
+description = "Master 10 different commands"
+
+[achievements.SpeedDemon]
+name = "Speed Demon"
+description = "Complete a scenario in under 50% of optimal time"
+
+[achievements.Speedrunner]
+name = "Speedrunner"
+description = "Complete 10 speed challenges"
+
+[achievements.Flash]
+name = "Flash"
+description = "Complete a scenario in under 25% of optimal time"
+
+[achievements.JackOfAllTrades]
+name = "Jack of All Trades"
+description = "Use 20 different commands"
+
+[achievements.Specialist]
+name = "Specialist"
+description = "Master a single command to perfection"
+
+[achievements.Polyglot]
+name = "Polyglot"
+description = "Complete scenarios of all difficulty levels"
+
+[achievements.Centurion]
+name = "Centurion"
+description = "Complete 100 scenarios"
+
+[achievements.Veteran]
+name = "Veteran"
+description = "Complete 500 scenarios"
+
+[achievements.Legend]
+name = "Legend"
+description = "Complete 1000 scenarios"
+
+# Quest texts, keyed by template id (quests/en/daily.toml)
+
+[quests.cmd_h_easy]
+name = "Move Left Practice"
+description = "Move cursor left %{target} times using '%{command}'"
+
+[quests.cmd_j_easy]
+name = "Move Down Practice"
+description = "Move cursor down %{target} times using '%{command}'"
+
+[quests.cmd_k_easy]
+name = "Move Up Practice"
+description = "Move cursor up %{target} times using '%{command}'"
+
+[quests.cmd_l_easy]
+name = "Move Right Practice"
+description = "Move cursor right %{target} times using '%{command}'"
+
+[quests.cmd_w_easy]
+name = "Word Navigation"
+description = "Move forward %{target} words using '%{command}'"
+
+[quests.cmd_b_easy]
+name = "Word Back Navigation"
+description = "Move back %{target} words using '%{command}'"
+
+[quests.cmd_0_easy]
+name = "Line Start Navigation"
+description = "Jump to line start %{target} times using '%{command}'"
+
+[quests.cmd_gg_easy]
+name = "Document Start"
+description = "Jump to document start %{target} times using '%{command}'"
+
+[quests.cmd_G_easy]
+name = "Document End"
+description = "Jump to document end %{target} times using '%{command}'"
+
+[quests.cmd_x_easy]
+name = "Character Deletion"
+description = "Delete %{target} characters using '%{command}'"
+
+[quests.cmd_dd_easy]
+name = "Line Selection Practice"
+description = "Select %{target} lines using the '%{command}' command"
+
+[quests.cmd_yy_easy]
+name = "Yank Lines"
+description = "Copy %{target} lines to clipboard using '%{command}'"
+
+[quests.scenario_1_easy]
+name = "First Scenario"
+description = "Complete %{target} scenario"
+
+[quests.time_2_easy]
+name = "Quick Practice"
+description = "Practice for %{minutes} minutes"
+
+[quests.cmd_w_medium]
+name = "Word Warrior"
+description = "Move forward %{target} words using '%{command}'"
+
+[quests.cmd_b_medium]
+name = "Word Navigator"
+description = "Move back %{target} words using '%{command}'"
+
+[quests.cmd_e_medium]
+name = "Word End Master"
+description = "Jump to word end %{target} times using '%{command}'"
+
+[quests.cmd_0_medium]
+name = "Line Start Expert"
+description = "Jump to line start %{target} times using '%{command}'"
+
+[quests.cmd_dollar_medium]
+name = "Line End Expert"
+description = "Jump to line end %{target} times using '%{command}'"
+
+[quests.cmd_x_medium]
+name = "Character Surgeon"
+description = "Delete %{target} characters using '%{command}'"
+
+[quests.cmd_dd_medium]
+name = "Line Selector"
+description = "Select %{target} lines using '%{command}'"
+
+[quests.cmd_i_medium]
+name = "Insert Mode Master"
+description = "Use insert mode %{target} times"
+
+[quests.cmd_a_medium]
+name = "Append Mode Master"
+description = "Use append mode %{target} times"
+
+[quests.cmd_o_medium]
+name = "Open Line Master"
+description = "Open new lines %{target} times using '%{command}'"
+
+[quests.cmd_c_medium]
+name = "Change Command"
+description = "Use change command %{target} times"
+
+[quests.cmd_r_medium]
+name = "Replace Characters"
+description = "Replace %{target} characters using '%{command}'"
+
+[quests.cmd_J_medium]
+name = "Join Lines"
+description = "Join %{target} lines using '%{command}'"
+
+[quests.cmd_y_medium]
+name = "Yank Practice"
+description = "Yank (copy) %{target} times using '%{command}'"
+
+[quests.cmd_p_medium]
+name = "Paste After"
+description = "Paste %{target} times using '%{command}'"
+
+[quests.cmd_P_medium]
+name = "Paste Before"
+description = "Paste before cursor %{target} times using '%{command}'"
+
+[quests.cmd_u_medium]
+name = "Undo Practice"
+description = "Use undo %{target} times"
+
+[quests.cmd_U_medium]
+name = "Redo Practice"
+description = "Use redo %{target} times"
+
+[quests.scenario_2_medium]
+name = "Scenario Practice"
+description = "Complete %{target} scenarios"
+
+[quests.scenario_3_medium]
+name = "Scenario Trio"
+description = "Complete %{target} scenarios"
+
+[quests.time_5_medium]
+name = "Consistent Practice"
+description = "Practice for %{minutes} minutes"
+
+[quests.time_10_medium]
+name = "Extended Practice"
+description = "Practice for %{minutes} minutes"
+
+[quests.explore_5_medium]
+name = "Command Variety"
+description = "Use %{target} different commands today"
+
+[quests.cmd_w_hard]
+name = "Word Marathon"
+description = "Move forward %{target} words using '%{command}'"
+
+[quests.cmd_hjkl_hard]
+name = "Navigation Expert"
+description = "Use h, j, k, l a total of %{target} times"
+
+[quests.cmd_dd_hard]
+name = "Line Selection Master"
+description = "Select %{target} lines using '%{command}'"
+
+[quests.cmd_x_hard]
+name = "Character Assassin"
+description = "Delete %{target} characters using '%{command}'"
+
+[quests.cmd_c_hard]
+name = "Change Expert"
+description = "Use change command %{target} times"
+
+[quests.cmd_i_hard]
+name = "Insert Virtuoso"
+description = "Use insert mode %{target} times"
+
+[quests.scenario_5_hard]
+name = "Scenario Marathon"
+description = "Complete %{target} scenarios"
+
+[quests.scenario_7_hard]
+name = "Scenario Champion"
+description = "Complete %{target} scenarios"
+
+[quests.scenario_10_hard]
+name = "Scenario Legend"
+description = "Complete %{target} scenarios"
+
+[quests.speed_delete_hard]
+name = "Speed Run: Delete Line"
+description = "Complete 'delete_line_001' in under 5 seconds"
+
+[quests.speed_move_hard]
+name = "Speed Run: Navigation"
+description = "Complete 'move_down_basic_001' in under 3 seconds"
+
+[quests.speed_word_hard]
+name = "Speed Run: Word Jump"
+description = "Complete 'word_forward_basic_001' in under 3 seconds"
+
+[quests.time_15_hard]
+name = "Dedicated Practice"
+description = "Practice for %{minutes} minutes"
+
+[quests.time_20_hard]
+name = "Training Session"
+description = "Practice for %{minutes} minutes"
+
+[quests.time_30_hard]
+name = "Intensive Training"
+description = "Practice for %{minutes} minutes"
+
+[quests.explore_10_hard]
+name = "Command Explorer"
+description = "Use %{target} different commands today"
+
+[quests.explore_15_hard]
+name = "Command Master"
+description = "Use %{target} different commands today"
+
+[quests.explore_20_hard]
+name = "Command Guru"
+description = "Use %{target} different commands today"
+
+[quests.cmd_miw_medium]
+name = "Inner Word Selection"
+description = "Select inner word %{target} times using '%{command}'"
+
+[quests.cmd_maw_medium]
+name = "Around Word Selection"
+description = "Select around word %{target} times using '%{command}'"
+
+[quests.cmd_mip_hard]
+name = "Inner Paragraph"
+description = "Select inner paragraph %{target} times using '%{command}'"
+
+[quests.cmd_ms_medium]
+name = "Add Surround"
+description = "Add surrounding pairs %{target} times using '%{command}'"
+
+[quests.cmd_md_medium]
+name = "Delete Surround"
+description = "Delete surrounding pairs %{target} times using '%{command}'"
+
+[quests.cmd_mr_hard]
+name = "Replace Surround"
+description = "Replace surrounding pairs %{target} times using '%{command}'"
+
+[quests.cmd_prev_paragraph_medium]
+name = "Previous Paragraph"
+description = "Jump to previous paragraph %{target} times using '%{command}'"
+
+[quests.cmd_next_paragraph_medium]
+name = "Next Paragraph"
+description = "Jump to next paragraph %{target} times using '%{command}'"
+
+[quests.cmd_underscore_medium]
+name = "Trim Selection"
+description = "Trim whitespace from selection %{target} times using '%{command}'"
+
+[quests.cmd_C_hard]
+name = "Copy Selection Next"
+description = "Copy selection to next line %{target} times using '%{command}'"
+
+[quests.cmd_tilde_medium]
+name = "Toggle Case"
+description = "Toggle character case %{target} times using '%{command}'"
+
+[quests.cmd_indent_medium]
+name = "Indent Lines"
+description = "Indent lines %{target} times using '%{command}'"
+
+[quests.cmd_dedent_medium]
+name = "Dedent Lines"
+description = "Remove indentation %{target} times using '%{command}'"
+
+[quests.cmd_star_medium]
+name = "Word Search"
+description = "Search for word under cursor %{target} times using '%{command}'"
+
+[quests.cmd_n_medium]
+name = "Next Match Navigation"
+description = "Navigate to next search match %{target} times using '%{command}'"

@@ -176,10 +176,14 @@ fn sort_string_sets(value: &mut Value) {
 
 #[test]
 fn profile_json_shape_is_unchanged_by_the_id_types() {
-    let original = legacy_profile_json();
+    let mut original = legacy_profile_json();
     let profile: UserProfile = serde_json::from_value(original.clone()).unwrap();
     let rewritten = serde_json::to_value(&profile).unwrap();
 
+    // Quest text moved to the locale files (#612); an old `description` is read and dropped.
+    for quest in original["daily_quests"].as_array_mut().unwrap() {
+        quest.as_object_mut().unwrap().remove("description");
+    }
     for field in ["completed_quests_today", "daily_quests", "scenario_history"] {
         let mut expected = original[field].clone();
         let mut actual = rewritten[field].clone();

@@ -56,24 +56,6 @@ impl MiniGameMode {
         self.session_duration().is_some()
     }
 
-    /// Get mode display name
-    pub fn name(&self) -> &'static str {
-        match self {
-            Self::Arcade(_) => "Arcade",
-            Self::Survival(_) => "Survival",
-            Self::Challenge(_) => "Daily Challenge",
-        }
-    }
-
-    /// Get mode description for UI
-    pub fn description(&self) -> &'static str {
-        match self {
-            Self::Arcade(_) => "60 seconds, 3 lives, chase the high score!",
-            Self::Survival(_) => "One life. How long can you survive?",
-            Self::Challenge(_) => "Daily puzzle. 10 scenarios. 3 attempts.",
-        }
-    }
-
     /// Check if this is Arcade mode
     pub fn is_arcade(&self) -> bool {
         match self {
@@ -278,7 +260,6 @@ mod tests {
         assert_eq!(mode.starting_lives(), 3);
         assert!(mode.has_session_timer());
         assert_eq!(mode.session_duration(), Some(Duration::from_secs(60)));
-        assert_eq!(mode.name(), "Arcade");
     }
 
     #[test]
@@ -288,7 +269,6 @@ mod tests {
         assert_eq!(mode.starting_lives(), 1);
         assert!(!mode.has_session_timer());
         assert_eq!(mode.session_duration(), None);
-        assert_eq!(mode.name(), "Survival");
     }
 
     #[test]
@@ -299,7 +279,6 @@ mod tests {
         assert_eq!(mode.starting_lives(), 3);
         assert!(!mode.has_session_timer());
         assert_eq!(mode.session_duration(), None);
-        assert_eq!(mode.name(), "Daily Challenge");
     }
 
     #[test]
@@ -412,18 +391,6 @@ mod tests {
     }
 
     #[test]
-    fn test_mode_descriptions() {
-        let arcade = MiniGameMode::Arcade(ArcadeConfig::default());
-        let survival = MiniGameMode::Survival(SurvivalConfig::default());
-        let challenge =
-            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
-
-        assert!(!arcade.description().is_empty());
-        assert!(!survival.description().is_empty());
-        assert!(!challenge.description().is_empty());
-    }
-
-    #[test]
     fn test_survival_time_at_max_level_never_below_minimum() {
         for decrease_mode in [TimeDecreaseMode::Linear, TimeDecreaseMode::Exponential] {
             let config = SurvivalConfig {
@@ -434,39 +401,5 @@ mod tests {
             assert!(time >= config.min_time_per_scenario);
             assert!(time < config.time_limit_for_level(DifficultyLevel::MIN));
         }
-    }
-
-    // CR-006: Test exact mode name/description return values
-    #[test]
-    fn test_mode_name_values() {
-        let arcade = MiniGameMode::Arcade(ArcadeConfig::default());
-        let survival = MiniGameMode::Survival(SurvivalConfig::default());
-        let challenge =
-            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
-
-        assert_eq!(arcade.name(), "Arcade");
-        assert_eq!(survival.name(), "Survival");
-        assert_eq!(challenge.name(), "Daily Challenge");
-    }
-
-    #[test]
-    fn test_mode_description_values() {
-        let arcade = MiniGameMode::Arcade(ArcadeConfig::default());
-        let survival = MiniGameMode::Survival(SurvivalConfig::default());
-        let challenge =
-            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
-
-        assert_eq!(
-            arcade.description(),
-            "60 seconds, 3 lives, chase the high score!"
-        );
-        assert_eq!(
-            survival.description(),
-            "One life. How long can you survive?"
-        );
-        assert_eq!(
-            challenge.description(),
-            "Daily puzzle. 10 scenarios. 3 attempts."
-        );
     }
 }

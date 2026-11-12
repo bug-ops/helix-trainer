@@ -1983,7 +1983,8 @@ mod mode_selection_extended_tests {
             .map(ratatui::buffer::Cell::symbol)
             .collect();
         for mode in MiniGameModeSelection::all_modes(chrono::Utc::now().date_naive()) {
-            let mode_name = mode.name();
+            let mode_name = crate::ui::render::mode_selection::mode_label(&mode);
+            let mode_name = mode_name.as_str();
             assert!(
                 text.contains(mode_name),
                 "submenu entry '{mode_name}' must be visible at 80x24, got buffer text: {text}"
@@ -2650,7 +2651,6 @@ mod shared_definitions {
                         target: 5,
                         current: 0,
                     },
-                    "Quest".to_string(),
                     QuestDifficulty::Easy,
                 )
             })

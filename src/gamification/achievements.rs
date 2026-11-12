@@ -86,68 +86,21 @@ pub enum AchievementId {
     Legend,
 }
 
-/// Achievement metadata
+/// An achievement and its unlock state; display text lives in the locale files.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Achievement {
     /// Stable identifier of the achievement.
     pub id: AchievementId,
-    /// Display name.
-    pub name: String,
-    /// How to earn the achievement.
-    pub description: String,
     /// When it was unlocked; `None` while locked.
     pub unlocked_at: Option<DateTime<Utc>>,
 }
 
 impl Achievement {
-    /// Create achievement metadata
+    /// Create a locked achievement
     pub fn new(id: AchievementId) -> Self {
-        let (name, description) = Self::metadata(id);
         Self {
             id,
-            name: name.to_string(),
-            description: description.to_string(),
             unlocked_at: None,
-        }
-    }
-
-    /// Get achievement name and description
-    fn metadata(id: AchievementId) -> (&'static str, &'static str) {
-        match id {
-            // Streaks
-            AchievementId::Streak7Days => ("7-Day Warrior", "Practice every day for a week"),
-            AchievementId::Streak30Days => ("Month Master", "Maintain a 30-day practice streak"),
-            AchievementId::Streak90Days => {
-                ("Quarter Champion", "Maintain a 90-day practice streak")
-            }
-            AchievementId::Streak365Days => ("Year Legend", "Maintain a 365-day practice streak"),
-
-            // Mastery
-            AchievementId::FirstPerfect => {
-                ("First Perfect", "Complete a scenario with perfect score")
-            }
-            AchievementId::Perfect10 => ("Perfect 10", "Complete 10 scenarios perfectly"),
-            AchievementId::Perfect100 => ("Perfectionist", "Complete 100 scenarios perfectly"),
-            AchievementId::MasterOneCommand => ("Command Master", "Master a single command"),
-            AchievementId::MasterTenCommands => ("Master of Many", "Master 10 different commands"),
-
-            // Speed
-            AchievementId::SpeedDemon => (
-                "Speed Demon",
-                "Complete a scenario in under 50% of optimal time",
-            ),
-            AchievementId::Speedrunner => ("Speedrunner", "Complete 10 speed challenges"),
-            AchievementId::Flash => ("Flash", "Complete a scenario in under 25% of optimal time"),
-
-            // Exploration
-            AchievementId::JackOfAllTrades => ("Jack of All Trades", "Use 20 different commands"),
-            AchievementId::Specialist => ("Specialist", "Master a single command to perfection"),
-            AchievementId::Polyglot => ("Polyglot", "Complete scenarios of all difficulty levels"),
-
-            // Milestones
-            AchievementId::Centurion => ("Centurion", "Complete 100 scenarios"),
-            AchievementId::Veteran => ("Veteran", "Complete 500 scenarios"),
-            AchievementId::Legend => ("Legend", "Complete 1000 scenarios"),
         }
     }
 
@@ -389,7 +342,6 @@ mod tests {
     fn test_achievement_creation() {
         let achievement = Achievement::new(AchievementId::FirstPerfect);
         assert_eq!(achievement.id, AchievementId::FirstPerfect);
-        assert_eq!(achievement.name, "First Perfect");
         assert!(!achievement.is_unlocked());
     }
 
@@ -531,15 +483,6 @@ mod tests {
         // Calling again should not re-unlock the same achievement
         let unlocked_again = AchievementEngine::check_and_unlock(&mut profile, &tracker);
         assert!(unlocked_again.is_empty());
-    }
-
-    #[test]
-    fn test_achievement_metadata_all_variants() {
-        // Ensure all achievement IDs have metadata
-        for achievement in AchievementEngine::all_achievements() {
-            assert!(!achievement.name.is_empty());
-            assert!(!achievement.description.is_empty());
-        }
     }
 
     #[test]

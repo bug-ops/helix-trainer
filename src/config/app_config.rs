@@ -103,11 +103,7 @@ impl ConfigStorage {
     /// let config = storage.load().unwrap();
     /// ```
     pub fn load(&self) -> Result<AppConfig, StorageError> {
-        Ok(self
-            .store
-            .load()?
-            .map(|data| data.config)
-            .unwrap_or_default())
+        Ok(self.store.load()?.map_or_default(|data| data.config))
     }
 
     /// Save configuration to disk

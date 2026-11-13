@@ -13,10 +13,9 @@ use helix_trainer::{
         AchievementEngine, LockStatus, QuarantineOutcome, QuestGenerator, QuestRegistrySlot,
         StreakChange, StreakManager, UserProfile,
     },
-    input::keymap::keymap_fingerprint_mismatch_message,
     learning::PerformanceTracker,
     security::error_chain,
-    ui::{AppState, Notification, NotificationType, state::Quarantine, text},
+    ui::{AppState, Notification, NotificationType, ProfileBackup, state::Quarantine},
 };
 
 /// How long a data-loss-risk warning notification stays visible.
@@ -28,28 +27,18 @@ const WARNING_NOTIFICATION_DURATION: Duration = Duration::from_secs(8);
 
 /// Short popup text for a failed profile load; the persistent banner (see
 /// `ui::render`) carries the backup location.
-fn profile_load_failure_message(backup: &QuarantineOutcome) -> String {
+fn profile_backup(backup: &QuarantineOutcome) -> ProfileBackup {
     match backup {
-        QuarantineOutcome::BackedUp(_) => {
-            "Progress could not be loaded. Saving is disabled this session; a backup was kept."
-        }
-        QuarantineOutcome::Failed(_) => {
-            "Progress could not be loaded and no backup was made. Saving is disabled this session."
-        }
+        QuarantineOutcome::BackedUp(_) => ProfileBackup::Kept,
+        QuarantineOutcome::Failed(_) => ProfileBackup::Missing,
     }
-    .to_string()
 }
 
 /// Warning shown when a profile save fails; the next save retries.
 ///
 /// Carries no error detail: paths and OS messages go to the log, not the screen.
 fn save_failed_notification() -> Notification {
-    Notification::with_duration(
-        NotificationType::Info {
-            message: "Failed to save progress. Will retry automatically.".to_string(),
-        },
-        WARNING_NOTIFICATION_DURATION,
-    )
+    Notification::with_duration(NotificationType::SaveFailed, WARNING_NOTIFICATION_DURATION)
 }
 
 /// Check if daily quests should be refreshed
@@ -91,11 +80,7 @@ fn refresh_daily_quests_if_due(state: &mut AppState) {
             "Quest templates missing; daily quests incomplete"
         );
         state.ui.notifications.push(Notification::with_duration(
-            NotificationType::Info {
-                message:
-                    "Daily quests could not be fully generated: quest templates are unavailable."
-                        .to_string(),
-            },
+            NotificationType::QuestTemplatesMissing,
             WARNING_NOTIFICATION_DURATION,
         ));
     }
@@ -128,12 +113,7 @@ fn warn_if_other_instance_running(state: &mut AppState) {
             "Another instance of helix-trainer appears to be running"
         );
         state.ui.notifications.push(Notification::with_duration(
-            NotificationType::Info {
-                message: format!(
-                    "Another instance (pid {pid}) appears to be running. \
-                     Progress may be overwritten if both instances save."
-                ),
-            },
+            NotificationType::OtherInstanceRunning { pid },
             WARNING_NOTIFICATION_DURATION,
         ));
     }
@@ -163,9 +143,7 @@ fn warn_keymap_fingerprint_mismatch(state: &mut AppState) {
         && stored.contradicts(current)
     {
         state.ui.notifications.push(Notification::with_duration(
-            NotificationType::Info {
-                message: keymap_fingerprint_mismatch_message(),
-            },
+            NotificationType::KeymapFingerprintMismatch,
             WARNING_NOTIFICATION_DURATION,
         ));
     }
@@ -249,10 +227,9 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
                     state
                         .ui
                         .notifications
-                        .push(Notification::new(NotificationType::Achievement {
-                            name: text::achievement_name(achievement_id),
-                            description: text::achievement_description(achievement_id),
-                        }));
+                        .push(Notification::new(NotificationType::Achievement(
+                            achievement_id,
+                        )));
                 }
                 if let Err(e) = state.progress.save_immediate() {
                     tracing::error!(
@@ -279,9 +256,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
                 "Profile load failed, saving disabled"
             );
             state.ui.notifications.push(Notification::with_duration(
-                NotificationType::Info {
-                    message: profile_load_failure_message(&backup),
-                },
+                NotificationType::ProfileLoadFailed(profile_backup(&backup)),
                 WARNING_NOTIFICATION_DURATION,
             ));
             state
@@ -500,11 +475,10 @@ mod tests {
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            !state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            !state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "a legacy fingerprint must not raise the mismatch notification"
         );
         assert_eq!(
@@ -529,12 +503,10 @@ mod tests {
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(&n.notification_type, NotificationType::Info { message }
-                    if message == &helix_trainer::input::keymap::keymap_fingerprint_mismatch_message())),
+            state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "expected a keymap fingerprint mismatch notification"
         );
         assert_eq!(
@@ -558,11 +530,10 @@ mod tests {
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            !state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            !state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "an unchanged custom keymap must not renotify on every launch"
         );
         assert_eq!(
@@ -583,11 +554,10 @@ mod tests {
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            !state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            !state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "first-time keymap activation must not notify a mismatch"
         );
         assert_eq!(
@@ -612,11 +582,10 @@ mod tests {
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            !state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            !state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "first-ever activation (even of the stock keymap) must not notify a mismatch"
         );
         assert_eq!(
@@ -647,11 +616,10 @@ mod tests {
         );
 
         assert!(
-            state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "disabling a custom keymap must notify that history now spans a different mapping"
         );
         assert_eq!(
@@ -681,11 +649,10 @@ mod tests {
             DataLoadMessage::ProfileReady(profile_with_fingerprint(custom_fingerprint)),
         );
         assert!(
-            disabled_state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            disabled_state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "disabling a custom keymap must notify that history now spans a different mapping"
         );
         assert_eq!(
@@ -705,11 +672,10 @@ mod tests {
         );
 
         assert!(
-            state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "re-enabling after a stock-keymap gap must notify, not silently match a stale fingerprint"
         );
         assert_eq!(
@@ -750,11 +716,10 @@ mod tests {
         );
 
         assert!(
-            state_b
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            state_b.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "switching to a different custom keymap after a stock gap must still notify"
         );
         assert_eq!(
@@ -812,7 +777,7 @@ mod tests {
         );
         assert!(state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
-            NotificationType::Achievement { ref name, .. } if name == "7-Day Warrior"
+            NotificationType::Achievement(AchievementId::Streak7Days)
         )));
     }
 
@@ -853,7 +818,7 @@ mod tests {
         assert!(
             state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
-                NotificationType::Info { message } if message.contains(&other_pid.to_string())
+                NotificationType::OtherInstanceRunning { pid } if *pid == other_pid
             )),
             "expected a notification warning about the other running instance"
         );
@@ -1043,10 +1008,11 @@ mod tests {
         };
         assert_eq!(std::fs::read_to_string(backup_path).unwrap(), "{broken");
         assert!(
-            state.ui.notifications.visible().any(|n| matches!(
-                &n.notification_type,
-                NotificationType::Info { message } if message.contains("Saving is disabled")
-            )),
+            state
+                .ui
+                .notifications
+                .visible()
+                .any(|n| matches!(&n.notification_type, NotificationType::ProfileLoadFailed(_))),
             "a failed profile load must be announced"
         );
     }
@@ -1107,10 +1073,11 @@ mod tests {
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            state.ui.notifications.visible().any(|n| matches!(
-                &n.notification_type,
-                NotificationType::Info { message } if message.contains("Failed to save progress")
-            )),
+            state
+                .ui
+                .notifications
+                .visible()
+                .any(|n| matches!(&n.notification_type, NotificationType::SaveFailed)),
             "the failed startup save must be surfaced"
         );
     }
@@ -1185,7 +1152,7 @@ mod tests {
         assert!(
             state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
-                NotificationType::Info { message } if message.contains(&other_pid.to_string())
+                NotificationType::OtherInstanceRunning { pid } if *pid == other_pid
             )),
             "expected a notification warning about the other running instance"
         );
@@ -1260,10 +1227,11 @@ mod tests {
             "a failed save must re-dirty the profile so the next save retries"
         );
         assert!(
-            state.ui.notifications.visible().any(|n| matches!(
-                &n.notification_type,
-                NotificationType::Info { message } if message.contains("Failed to save progress")
-            )),
+            state
+                .ui
+                .notifications
+                .visible()
+                .any(|n| matches!(&n.notification_type, NotificationType::SaveFailed)),
             "a failed save must surface a user-facing notification"
         );
     }
@@ -1277,10 +1245,7 @@ mod tests {
             .ui
             .notifications
             .visible()
-            .filter(|n| {
-                matches!(&n.notification_type, NotificationType::Info { message }
-                if message.contains("Daily quests could not be fully generated"))
-            })
+            .filter(|n| matches!(n.notification_type, NotificationType::QuestTemplatesMissing))
             .count()
     }
 

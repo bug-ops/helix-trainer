@@ -1764,11 +1764,11 @@ mod tests {
 
         assert!(state.ui.notifications.visible().any(|n| matches!(
             &n.notification_type,
-            NotificationType::Achievement { name, .. } if name == "Speed Demon"
+            NotificationType::Achievement(AchievementId::SpeedDemon)
         )));
         assert!(state.ui.notifications.visible().any(|n| matches!(
             &n.notification_type,
-            NotificationType::Achievement { name, .. } if name == "Flash"
+            NotificationType::Achievement(AchievementId::Flash)
         )));
     }
 

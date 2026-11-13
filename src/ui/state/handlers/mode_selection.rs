@@ -10,7 +10,6 @@ use crate::ui::state::{
     HandlerContext, HandlerOutcome, MenuData, MiniGameData, MiniGameModeSelection,
     ModeSelectionData, TopMode, TypedScreen,
 };
-use rust_i18n::t;
 use std::sync::Arc;
 
 /// Handle mode selection up navigation
@@ -110,9 +109,7 @@ pub(in crate::ui::state) fn handle_select_arcade_mode(
 
 fn notify_no_scenarios(ui: &mut crate::ui::state::UIState) {
     ui.notifications
-        .push(Notification::new(NotificationType::Info {
-            message: t!("minigame.no_scenarios_available").to_string(),
-        }));
+        .push(Notification::new(NotificationType::NoScenariosAvailable));
 }
 
 /// Handle launching a specific mini-game mode
@@ -126,11 +123,9 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
 
     let today = ctx.progress.today();
     if mode.is_challenge() && !ctx.progress.profile.challenge_progress.can_attempt(today) {
-        ctx.ui
-            .notifications
-            .push(Notification::new(NotificationType::Info {
-                message: t!("minigame.challenge_no_attempts_left").to_string(),
-            }));
+        ctx.ui.notifications.push(Notification::new(
+            NotificationType::ChallengeAttemptsExhausted,
+        ));
         return HandlerOutcome::Stay;
     }
 
@@ -501,7 +496,7 @@ mod tests {
                 .next()
                 .unwrap()
                 .notification_type,
-            crate::ui::notification::NotificationType::Info { .. }
+            crate::ui::notification::NotificationType::ChallengeAttemptsExhausted
         );
     }
 

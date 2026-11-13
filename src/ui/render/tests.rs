@@ -924,10 +924,9 @@ mod popup_tests {
         state
             .ui
             .notifications
-            .push(Notification::new(NotificationType::Achievement {
-                name: "Speed Demon".to_string(),
-                description: "Complete a scenario in under 5 seconds".to_string(),
-            }));
+            .push(Notification::new(NotificationType::Achievement(
+                crate::gamification::AchievementId::SpeedDemon,
+            )));
 
         terminal
             .draw(|f| {
@@ -1005,9 +1004,7 @@ mod popup_tests {
         state
             .ui
             .notifications
-            .push(Notification::new(NotificationType::Info {
-                message: "Welcome to the training session!".to_string(),
-            }));
+            .push(Notification::new(NotificationType::SaveFailed));
 
         terminal
             .draw(|f| {

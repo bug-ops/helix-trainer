@@ -48,9 +48,7 @@ fn report_update_error(state: &mut AppState, error: &UserError) {
     state
         .ui
         .notifications
-        .push(Notification::new(NotificationType::Info {
-            message: error.to_string(),
-        }));
+        .push(Notification::new(NotificationType::Error(error.kind())));
 }
 
 /// Execute the effects an update requested; those that need the async runtime are returned.

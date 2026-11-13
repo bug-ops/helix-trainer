@@ -9,8 +9,6 @@
 
 use std::path::PathBuf;
 
-use rust_i18n::t;
-
 pub use super::parse::{
     KeymapLoadError, KeymapReport, KeymapWarning, KeymapWarningReason, load_keymap_file,
     resolve_str,
@@ -138,17 +136,6 @@ pub fn resolve_startup_overlay(config: &AppConfig) -> StartupKeymap {
             StartupKeymap::fallback(KeymapStatus::Invalid)
         }
     }
-}
-
-/// Localized notification text for a keymap fingerprint mismatch: the
-/// loaded profile's FSRS review history was recorded under a different
-/// resolved keymap than the one now active.
-///
-/// A free function rather than inline `t!` at the call site because the
-/// caller (`data_handling.rs`) lives in the binary crate, which never
-/// invokes `rust_i18n::i18n!` itself - only this library crate does.
-pub fn keymap_fingerprint_mismatch_message() -> String {
-    t!("keymap.fingerprint_mismatch").to_string()
 }
 
 #[cfg(test)]

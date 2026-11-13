@@ -8,7 +8,6 @@ use crate::security::error_chain;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
 use crate::ui::state::{HandlerContext, HandlerOutcome, MenuData, ReviewData, TypedScreen};
-use rust_i18n::t;
 
 /// Handle `StartReviewSession` message
 ///
@@ -22,9 +21,7 @@ pub(crate) fn handle_start_review_session(ctx: &mut HandlerContext<'_>) -> Handl
     let Some(session) = ReviewSession::start(due_commands, ctx.progress.monotonic_now()) else {
         ctx.ui
             .notifications
-            .push(Notification::new(NotificationType::Info {
-                message: t!("review.no_due").to_string(),
-            }));
+            .push(Notification::new(NotificationType::NoDueReviews));
         return HandlerOutcome::Stay;
     };
 

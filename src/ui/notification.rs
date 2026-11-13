@@ -11,7 +11,9 @@
 use crate::constants::{
     DEFAULT_NOTIFICATION_DURATION, MAX_VISIBLE_NOTIFICATIONS, STREAK_FREEZE_MAX_GAP_DAYS,
 };
+use crate::error::UserErrorKind;
 use crate::game::services::CompletionEvent;
+use crate::gamification::AchievementId;
 use crate::input::keymap::{KeymapStatus, StartupKeymap};
 use crate::time::{MonotonicClock, SystemMonotonicClock};
 use crate::ui::text;
@@ -20,7 +22,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// The startup notification text for how the keymap resolved, or `None` when the keymap
+/// The startup notification for how the keymap resolved, or `None` when the keymap
 /// is disabled and there is nothing to tell.
 ///
 /// # Examples
@@ -28,25 +30,30 @@ use std::time::{Duration, Instant};
 /// ```
 /// use helix_trainer::config::AppConfig;
 /// use helix_trainer::input::keymap::resolve_startup_overlay;
-/// use helix_trainer::ui::keymap_status_message;
+/// use helix_trainer::ui::keymap_status_notification;
 ///
 /// let keymap = resolve_startup_overlay(&AppConfig::default());
-/// assert!(keymap_status_message(&keymap).is_none());
+/// assert!(keymap_status_notification(&keymap).is_none());
 /// ```
-pub fn keymap_status_message(keymap: &StartupKeymap) -> Option<String> {
+pub fn keymap_status_notification(keymap: &StartupKeymap) -> Option<NotificationType> {
     match keymap.status {
         KeymapStatus::Disabled => None,
-        KeymapStatus::Applied => Some(
-            t!(
-                "keymap.startup_summary",
-                applied = keymap.report.applied,
-                ignored = keymap.report.ignored.len()
-            )
-            .to_string(),
-        ),
-        KeymapStatus::NotFound => Some(t!("keymap.startup_not_found").to_string()),
-        KeymapStatus::Invalid => Some(t!("keymap.startup_invalid").to_string()),
+        KeymapStatus::Applied => Some(NotificationType::KeymapApplied {
+            applied: keymap.report.applied,
+            ignored: keymap.report.ignored.len(),
+        }),
+        KeymapStatus::NotFound => Some(NotificationType::KeymapNotFound),
+        KeymapStatus::Invalid => Some(NotificationType::KeymapInvalid),
     }
+}
+
+/// What became of the backup of a profile that failed to load.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileBackup {
+    /// The unreadable file was copied aside.
+    Kept,
+    /// No backup could be made.
+    Missing,
 }
 
 /// Type of notification to display
@@ -59,12 +66,7 @@ pub enum NotificationType {
     },
 
     /// Achievement unlocked
-    Achievement {
-        /// Achievement name.
-        name: String,
-        /// How it was earned.
-        description: String,
-    },
+    Achievement(AchievementId),
 
     /// Quest completed
     QuestComplete {
@@ -101,11 +103,55 @@ pub enum NotificationType {
         freeze_could_not_cover_gap: bool,
     },
 
-    /// Informational message
-    Info {
-        /// Text to show.
-        message: String,
+    /// A user-facing error; the text resolves from its kind.
+    Error(UserErrorKind),
+
+    /// A profile save failed; the next save retries.
+    SaveFailed,
+
+    /// Daily quests could not be generated in full.
+    QuestTemplatesMissing,
+
+    /// Another instance appears to be running and may overwrite saved progress.
+    OtherInstanceRunning {
+        /// The other instance's process id.
+        pid: u32,
     },
+
+    /// Review history was recorded under a different keymap.
+    KeymapFingerprintMismatch,
+
+    /// The profile could not be loaded; saving is disabled this session.
+    ProfileLoadFailed(ProfileBackup),
+
+    /// The configuration could not be loaded; defaults are in use.
+    ConfigLoadFailed,
+
+    /// The Helix keymap was applied at startup.
+    KeymapApplied {
+        /// Bindings that took effect.
+        applied: usize,
+        /// Bindings that were ignored.
+        ignored: usize,
+    },
+
+    /// The Helix keymap is enabled but its config file was not found.
+    KeymapNotFound,
+
+    /// The Helix keymap config could not be loaded.
+    KeymapInvalid,
+
+    /// No reviews are due.
+    NoDueReviews,
+
+    /// No scenario matches the current filters.
+    NoScenariosAvailable,
+
+    /// The daily challenge has no attempts left today.
+    ChallengeAttemptsExhausted,
+
+    /// The scenario list has no further scenario.
+    NoMoreScenarios,
 
     /// Review session completed
     ReviewSessionComplete {
@@ -129,10 +175,7 @@ pub enum NotificationType {
 impl From<CompletionEvent> for NotificationType {
     fn from(event: CompletionEvent) -> Self {
         match event {
-            CompletionEvent::AchievementUnlocked { id } => Self::Achievement {
-                name: text::achievement_name(id),
-                description: text::achievement_description(id),
-            },
+            CompletionEvent::AchievementUnlocked { id } => Self::Achievement(id),
             CompletionEvent::LevelUp { new_level } => Self::LevelUp { new_level },
         }
     }
@@ -199,9 +242,11 @@ impl Notification {
             NotificationType::LevelUp { new_level } => {
                 t!("notification.level_up_title", level = new_level).to_string()
             }
-            NotificationType::Achievement { name, .. } => {
-                t!("notification.achievement_title", name = name).to_string()
-            }
+            NotificationType::Achievement(id) => t!(
+                "notification.achievement_title",
+                name = text::achievement_name(*id)
+            )
+            .to_string(),
             NotificationType::QuestComplete { .. } => t!("notification.quest_title").to_string(),
             NotificationType::StreakMilestone { streak } => {
                 t!("notification.streak_milestone_title", streak = streak).to_string()
@@ -215,7 +260,20 @@ impl Notification {
             NotificationType::StreakBroken { .. } => {
                 t!("notification.streak_broken_title").to_string()
             }
-            NotificationType::Info { .. } => t!("notification.info_title").to_string(),
+            NotificationType::Error(_)
+            | NotificationType::SaveFailed
+            | NotificationType::QuestTemplatesMissing
+            | NotificationType::OtherInstanceRunning { .. }
+            | NotificationType::KeymapFingerprintMismatch
+            | NotificationType::ProfileLoadFailed(_)
+            | NotificationType::ConfigLoadFailed
+            | NotificationType::KeymapApplied { .. }
+            | NotificationType::KeymapNotFound
+            | NotificationType::KeymapInvalid
+            | NotificationType::NoDueReviews
+            | NotificationType::NoScenariosAvailable
+            | NotificationType::ChallengeAttemptsExhausted
+            | NotificationType::NoMoreScenarios => t!("notification.info_title").to_string(),
             NotificationType::ReviewSessionComplete { .. } => {
                 t!("notification.review_complete_title").to_string()
             }
@@ -231,7 +289,7 @@ impl Notification {
             NotificationType::LevelUp { new_level } => {
                 t!("notification.level_up_message", level = new_level).to_string()
             }
-            NotificationType::Achievement { description, .. } => description.clone(),
+            NotificationType::Achievement(id) => text::achievement_description(*id),
             NotificationType::QuestComplete {
                 description,
                 xp_reward,
@@ -264,7 +322,40 @@ impl Notification {
             NotificationType::StreakBroken { was_streak, .. } => {
                 t!("notification.streak_broken_message", streak = was_streak).to_string()
             }
-            NotificationType::Info { message } => message.clone(),
+            NotificationType::Error(kind) => text::user_error(kind),
+            NotificationType::SaveFailed => t!("notification.save_failed").to_string(),
+            NotificationType::QuestTemplatesMissing => {
+                t!("notification.quest_templates_missing").to_string()
+            }
+            NotificationType::OtherInstanceRunning { pid } => {
+                t!("notification.other_instance_running", pid = pid).to_string()
+            }
+            NotificationType::KeymapFingerprintMismatch => {
+                t!("keymap.fingerprint_mismatch").to_string()
+            }
+            NotificationType::ProfileLoadFailed(ProfileBackup::Kept) => {
+                t!("notification.profile_load_failed_backup").to_string()
+            }
+            NotificationType::ProfileLoadFailed(ProfileBackup::Missing) => {
+                t!("notification.profile_load_failed_no_backup").to_string()
+            }
+            NotificationType::ConfigLoadFailed => t!("config.load_failed").to_string(),
+            NotificationType::KeymapApplied { applied, ignored } => t!(
+                "keymap.startup_summary",
+                applied = applied,
+                ignored = ignored
+            )
+            .to_string(),
+            NotificationType::KeymapNotFound => t!("keymap.startup_not_found").to_string(),
+            NotificationType::KeymapInvalid => t!("keymap.startup_invalid").to_string(),
+            NotificationType::NoDueReviews => t!("review.no_due").to_string(),
+            NotificationType::NoScenariosAvailable => {
+                t!("minigame.no_scenarios_available").to_string()
+            }
+            NotificationType::ChallengeAttemptsExhausted => {
+                t!("minigame.challenge_no_attempts_left").to_string()
+            }
+            NotificationType::NoMoreScenarios => t!("results.no_more_scenarios").to_string(),
             NotificationType::ReviewSessionComplete {
                 completed,
                 success_count,
@@ -297,7 +388,20 @@ impl Notification {
             NotificationType::StreakFreezeGranted => Color::Cyan,
             NotificationType::StreakFreezeUsed => Color::Cyan,
             NotificationType::StreakBroken { .. } => Color::Red,
-            NotificationType::Info { .. } => Color::Blue,
+            NotificationType::Error(_)
+            | NotificationType::SaveFailed
+            | NotificationType::QuestTemplatesMissing
+            | NotificationType::OtherInstanceRunning { .. }
+            | NotificationType::KeymapFingerprintMismatch
+            | NotificationType::ProfileLoadFailed(_)
+            | NotificationType::ConfigLoadFailed
+            | NotificationType::KeymapApplied { .. }
+            | NotificationType::KeymapNotFound
+            | NotificationType::KeymapInvalid
+            | NotificationType::NoDueReviews
+            | NotificationType::NoScenariosAvailable
+            | NotificationType::ChallengeAttemptsExhausted
+            | NotificationType::NoMoreScenarios => Color::Blue,
             NotificationType::ReviewSessionComplete { .. } => Color::Green,
             NotificationType::MasteryLevelUp { .. } => Color::Yellow,
         }
@@ -439,18 +543,19 @@ mod tests {
     use crate::time::FakeMonotonicClock;
 
     #[test]
-    fn keymap_status_messages_keep_their_text() {
+    fn keymap_status_notifications_keep_their_text() {
         use crate::input::keymap::KeymapOverlay;
         use crate::input::keymap::KeymapReport;
 
-        let message = |status| {
-            keymap_status_message(&StartupKeymap {
+        let notice = |status| {
+            keymap_status_notification(&StartupKeymap {
                 overlay: KeymapOverlay::identity(),
                 report: KeymapReport::default(),
                 status,
             })
         };
-        assert_eq!(message(KeymapStatus::Disabled), None);
+        let message = |status| notice(status).map(|kind| Notification::new(kind).message());
+        assert_eq!(notice(KeymapStatus::Disabled), None);
         assert_eq!(
             message(KeymapStatus::Applied).as_deref(),
             Some("Helix keymap loaded: 0 binding(s) applied, 0 ignored")
@@ -598,14 +703,12 @@ mod tests {
         assert_eq!(level_up.title(), "Level Up! Level 10");
         assert_eq!(level_up.message(), "You've reached level 10!");
 
-        let achievement = Notification::new(NotificationType::Achievement {
-            name: "Speed Demon".to_string(),
-            description: "Complete 10 scenarios in under 30 seconds".to_string(),
-        });
+        let achievement =
+            Notification::new(NotificationType::Achievement(AchievementId::SpeedDemon));
         assert_eq!(achievement.title(), "Achievement Unlocked: Speed Demon");
         assert_eq!(
             achievement.message(),
-            "Complete 10 scenarios in under 30 seconds"
+            "Complete a scenario in under 50% of optimal time"
         );
 
         let quest = Notification::new(NotificationType::QuestComplete {
@@ -619,11 +722,12 @@ mod tests {
         assert_eq!(streak.title(), "7 Day Streak!");
         assert_eq!(streak.message(), "Keep it up! 7 days in a row");
 
-        let info = Notification::new(NotificationType::Info {
-            message: "Test info message".to_string(),
-        });
+        let info = Notification::new(NotificationType::SaveFailed);
         assert_eq!(info.title(), "Info");
-        assert_eq!(info.message(), "Test info message");
+        assert_eq!(
+            info.message(),
+            "Failed to save progress. Will retry automatically."
+        );
 
         let freeze_granted = Notification::new(NotificationType::StreakFreezeGranted);
         assert_eq!(freeze_granted.title(), "Streak Freeze Earned!");
@@ -689,10 +793,7 @@ mod tests {
         let level_up = Notification::new(NotificationType::LevelUp { new_level: 2 });
         assert_eq!(level_up.color(), Color::Yellow);
 
-        let achievement = Notification::new(NotificationType::Achievement {
-            name: "Test".to_string(),
-            description: "Test".to_string(),
-        });
+        let achievement = Notification::new(NotificationType::Achievement(AchievementId::Flash));
         assert_eq!(achievement.color(), Color::Magenta);
 
         let quest = Notification::new(NotificationType::QuestComplete {
@@ -707,9 +808,7 @@ mod tests {
         let freeze_granted = Notification::new(NotificationType::StreakFreezeGranted);
         assert_eq!(freeze_granted.color(), Color::Cyan);
 
-        let info = Notification::new(NotificationType::Info {
-            message: "Test".to_string(),
-        });
+        let info = Notification::new(NotificationType::SaveFailed);
         assert_eq!(info.color(), Color::Blue);
 
         let review_complete = Notification::new(NotificationType::ReviewSessionComplete {

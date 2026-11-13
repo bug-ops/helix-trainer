@@ -3,11 +3,175 @@
 //! [`UserError`] is the sanitized error the UI shows. It sits above every domain module in
 //! the layer order, so each domain returns its own typed error ([`SecurityError`],
 //! [`GameError`](crate::game::GameError), [`ConfigError`](crate::config::ConfigError),
-//! [`SimulatorError`](crate::helix::error::SimulatorError), `GamificationError`,
+//! [`SimulatorError`], `GamificationError`,
 //! `LearningError`) and the layers above convert it with `?` through the `From` impls here.
 
+use crate::helix::error::{CommandLineError, SimulatorError};
+use crate::helix::register::ReadOnlyRegister;
 use crate::security::SecurityError;
 use thiserror::Error;
+
+/// What a user-facing error is, without its English text.
+///
+/// The UI resolves the text from the kind (`ui::text::user_error`), so a locale can
+/// translate every error and tests match on the variant, never on a sentence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UserErrorKind {
+    /// An internal invariant was violated.
+    InvalidState,
+    /// A message arrived for a screen other than the current one.
+    WrongScreen,
+    /// A scenario file could not be loaded or parsed.
+    ScenarioLoad,
+    /// A scenario file breaches a size or count limit.
+    ScenarioTooComplex,
+    /// A generic failure with no actionable detail.
+    OperationFailed,
+    /// The simulator rejected a command.
+    Command(SimulatorErrorKind),
+    /// A command had no performance record.
+    CommandNotFound,
+    /// Reading or writing the saved profile or configuration failed.
+    Storage,
+}
+
+/// Why the simulator rejected a command, as owned data without English text.
+///
+/// One variant per [`SimulatorError`] and [`CommandLineError`] variant, so a new
+/// simulator failure fails the build until it has a kind and a locale key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SimulatorErrorKind {
+    /// The key names no registered command.
+    UnknownCommand {
+        /// The offending key, bounded and sanitized.
+        command: String,
+    },
+    /// A count was given to a command that does not take one.
+    CountNotAccepted,
+    /// The pattern is not a valid regex.
+    InvalidRegex {
+        /// The regex engine's description of the problem.
+        detail: String,
+    },
+    /// The pattern is longer than the allowed maximum.
+    PatternTooLong {
+        /// The maximum pattern length in characters.
+        max: usize,
+    },
+    /// The bare command needs a pattern that only its prompt supplies.
+    PatternRequired,
+    /// `align` met a range that spans several lines.
+    AlignSpansLines,
+    /// The command would create more cursors than the simulator allows.
+    TooManyCursors {
+        /// The maximum number of cursors.
+        max: usize,
+    },
+    /// The operation would leave no selection.
+    NoSelections,
+    /// A register prefix was followed by an operation that does not use registers.
+    UnknownRegisterOp {
+        /// The operation character.
+        op: char,
+    },
+    /// A command tried to write to a register that Helix computes.
+    ReadOnlyRegister {
+        /// The register that rejected the write.
+        register: ReadOnlyRegister,
+    },
+    /// A `:` command line reached Insert mode.
+    CommandLineInInsertMode,
+    /// The input did not start with `:`.
+    NotACommand {
+        /// The offending input.
+        input: String,
+    },
+    /// Nothing followed the `:`.
+    EmptyCommandLine,
+    /// The command needs an argument and got none.
+    MissingArgument {
+        /// The command name.
+        name: String,
+    },
+    /// The command got more than one argument.
+    TooManyArguments {
+        /// The command name.
+        name: String,
+    },
+    /// The argument is not an unsigned number.
+    NotANumber {
+        /// The command name.
+        name: String,
+        /// The offending argument.
+        argument: String,
+    },
+    /// The command name is not a supported typable command.
+    UnknownCommandLine {
+        /// The command name.
+        name: String,
+    },
+}
+
+impl From<&SimulatorError> for SimulatorErrorKind {
+    fn from(error: &SimulatorError) -> Self {
+        match error {
+            SimulatorError::UnknownCommand { command } => Self::UnknownCommand {
+                command: command.clone(),
+            },
+            SimulatorError::CountNotAccepted => Self::CountNotAccepted,
+            SimulatorError::InvalidRegex(source) => Self::InvalidRegex {
+                detail: source.to_string(),
+            },
+            SimulatorError::PatternTooLong { max } => Self::PatternTooLong { max: *max },
+            SimulatorError::PatternRequired => Self::PatternRequired,
+            SimulatorError::AlignSpansLines => Self::AlignSpansLines,
+            SimulatorError::TooManyCursors { max } => Self::TooManyCursors { max: *max },
+            SimulatorError::NoSelections => Self::NoSelections,
+            SimulatorError::UnknownRegisterOp { op } => Self::UnknownRegisterOp { op: *op },
+            SimulatorError::ReadOnlyRegister { register } => Self::ReadOnlyRegister {
+                register: *register,
+            },
+            SimulatorError::CommandLineInInsertMode => Self::CommandLineInInsertMode,
+            SimulatorError::CommandLine(error) => Self::from(error),
+        }
+    }
+}
+
+impl From<&CommandLineError> for SimulatorErrorKind {
+    fn from(error: &CommandLineError) -> Self {
+        match error {
+            CommandLineError::NotACommand { input } => Self::NotACommand {
+                input: input.clone(),
+            },
+            CommandLineError::Empty => Self::EmptyCommandLine,
+            CommandLineError::MissingArgument { name } => {
+                Self::MissingArgument { name: name.clone() }
+            }
+            CommandLineError::TooManyArguments { name } => {
+                Self::TooManyArguments { name: name.clone() }
+            }
+            CommandLineError::NotANumber { name, argument } => Self::NotANumber {
+                name: name.clone(),
+                argument: argument.clone(),
+            },
+            CommandLineError::UnknownCommand { name } => {
+                Self::UnknownCommandLine { name: name.clone() }
+            }
+        }
+    }
+}
+
+/// Why a command failed to execute.
+#[derive(Error, Debug)]
+pub enum CommandFailure {
+    /// The simulator rejected the command.
+    #[error(transparent)]
+    Simulator(#[from] SimulatorError),
+
+    /// No performance record exists for the command.
+    #[error("Command not found in registry")]
+    CommandNotFound(#[source] crate::learning::LearningError),
+}
 
 /// Typed internal cause kept below a sanitized [`UserError`].
 ///
@@ -29,7 +193,7 @@ pub enum ErrorCause {
 
     /// Helix simulator command failure.
     #[error(transparent)]
-    Simulator(#[from] crate::helix::error::SimulatorError),
+    Simulator(#[from] SimulatorError),
 
     /// Scenario or quest template validation failure.
     #[error(transparent)]
@@ -82,14 +246,12 @@ pub enum UserError {
         cause: Option<ErrorCause>,
     },
 
-    /// A Helix command failed to execute in the simulator.
-    #[error("Command execution failed: {context}")]
+    /// A Helix command failed to execute.
+    #[error("Command execution failed: {failure}")]
     CommandFailed {
-        /// What was being executed, for debugging.
-        context: String,
-        /// Original failure, if any.
+        /// What failed; the source of this error.
         #[source]
-        cause: Option<ErrorCause>,
+        failure: CommandFailure,
     },
 
     /// Reading or writing the saved profile or configuration failed. The cause is kept as a
@@ -107,11 +269,22 @@ impl UserError {
         }
     }
 
-    /// Create a `CommandFailed` error with context for debugging
-    pub fn command_failed(context: impl Into<String>) -> Self {
-        Self::CommandFailed {
-            context: context.into(),
-            cause: None,
+    /// What this error is, without its English text.
+    #[must_use]
+    pub fn kind(&self) -> UserErrorKind {
+        match self {
+            Self::InvalidState { .. } => UserErrorKind::InvalidState,
+            Self::WrongScreen => UserErrorKind::WrongScreen,
+            Self::ScenarioLoadError { .. } => UserErrorKind::ScenarioLoad,
+            Self::ScenarioTooComplex { .. } => UserErrorKind::ScenarioTooComplex,
+            Self::OperationFailed { .. } => UserErrorKind::OperationFailed,
+            Self::CommandFailed {
+                failure: CommandFailure::Simulator(error),
+            } => UserErrorKind::Command(error.into()),
+            Self::CommandFailed {
+                failure: CommandFailure::CommandNotFound(_),
+            } => UserErrorKind::CommandNotFound,
+            Self::Storage(_) => UserErrorKind::Storage,
         }
     }
 
@@ -204,8 +377,7 @@ impl From<crate::learning::LearningError> for UserError {
                 cause: Some(e.into()),
             },
             e @ LearningError::CommandNotFound(_) => UserError::CommandFailed {
-                context: "Command not found in registry".to_string(),
-                cause: Some(e.into()),
+                failure: CommandFailure::CommandNotFound(e),
             },
             e @ LearningError::FsrsError(_) => UserError::OperationFailed {
                 cause: Some(e.into()),
@@ -233,11 +405,10 @@ impl From<crate::config::ConfigError> for UserError {
     }
 }
 
-impl From<crate::helix::error::SimulatorError> for UserError {
-    fn from(err: crate::helix::error::SimulatorError) -> Self {
+impl From<SimulatorError> for UserError {
+    fn from(err: SimulatorError) -> Self {
         Self::CommandFailed {
-            context: err.to_string(),
-            cause: Some(err.into()),
+            failure: CommandFailure::Simulator(err),
         }
     }
 }
@@ -263,7 +434,6 @@ impl From<crate::config::json_store::StorageError> for UserError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::helix::error::SimulatorError;
     use crate::security::error_chain;
     use std::assert_matches;
 
@@ -338,13 +508,6 @@ mod tests {
     }
 
     #[test]
-    fn test_user_error_command_failed_constructor() {
-        let err = UserError::command_failed("test context");
-        assert!(err.to_string().contains("Command execution failed"));
-        assert!(err.to_string().contains("test context"));
-    }
-
-    #[test]
     fn test_user_error_display() {
         assert!(
             UserError::invalid_state("test")
@@ -367,7 +530,7 @@ mod tests {
                 .contains("Operation failed")
         );
         assert!(
-            UserError::command_failed("test")
+            UserError::from(SimulatorError::NoSelections)
                 .to_string()
                 .contains("Command")
         );
@@ -423,9 +586,9 @@ mod tests {
         let user = UserError::from(SimulatorError::NoSelections);
         assert_matches!(user, UserError::CommandFailed { .. });
         assert!(user.to_string().contains("no selections remaining"));
-        assert_matches!(
-            std::error::Error::source(&user).and_then(|e| e.downcast_ref::<ErrorCause>()),
-            Some(ErrorCause::Simulator(SimulatorError::NoSelections))
+        assert_eq!(
+            user.kind(),
+            UserErrorKind::Command(SimulatorErrorKind::NoSelections)
         );
     }
 

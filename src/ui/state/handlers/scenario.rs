@@ -17,7 +17,6 @@ use crate::ui::state::{
     NextStep, QuestEvent, ResultsData, TaskData, TaskSession, TypedScreen, XPBreakdown,
 };
 use crate::ui::state::{CategoryProgress, MasteryInfo};
-use rust_i18n::t;
 use std::num::NonZeroUsize;
 
 /// Handle `StartScenario` message
@@ -348,9 +347,7 @@ pub(crate) fn handle_next_lesson(
         }
         ctx.ui
             .notifications
-            .push(Notification::new(NotificationType::Info {
-                message: t!("results.no_more_scenarios").to_string(),
-            }));
+            .push(Notification::new(NotificationType::NoMoreScenarios));
         return Ok(HandlerOutcome::Stay);
     }
 
@@ -862,8 +859,7 @@ mod tests {
         );
         assert!(state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
-            crate::ui::notification::NotificationType::Achievement { ref name, .. }
-                if name == "Centurion"
+            crate::ui::notification::NotificationType::Achievement(AchievementId::Centurion)
         )));
     }
 
@@ -945,8 +941,7 @@ mod tests {
         );
         assert!(state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
-            crate::ui::notification::NotificationType::Achievement { ref name, .. }
-                if name == "Polyglot"
+            crate::ui::notification::NotificationType::Achievement(AchievementId::Polyglot)
         )));
     }
 
@@ -1924,7 +1919,7 @@ mod tests {
         assert!(
             ctx.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
-                crate::ui::notification::NotificationType::Info { .. }
+                crate::ui::notification::NotificationType::NoMoreScenarios
             )),
             "expected the no-more-scenarios notification"
         );

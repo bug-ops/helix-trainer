@@ -149,7 +149,7 @@ THEN  the count prefix is normalized and the rule is evaluated on u/U as for the
 | ID | Requirement | Priority |
 |----|------------|----------|
 | FR-011 | `ScenarioLoader::validate_scenario`, shared by every loading path (embedded, `load`, `load_directory`), SHALL reject a scenario with a typed load error that names the scenario id and both values when `scoring.optimal_count != solution.commands.len()` (FR-001), and a scenario using `AfterTaughtCommands` with an empty `commands_taught` (FR-010). The test-suite checks of FR-003 and FR-010 stay as additional guards | must |
-| FR-012 | THE scorer SHALL take the scoring configuration and the actual action count as non-zero types, with no zero checks in the scoring function; a zero count is never reported as `ScoreOverflow`. A scenario cannot complete with zero actions, so a zero actual count is not a scoring input; the caller that may hold zero handles it explicitly. `ScoreOverflow` is reserved for real arithmetic overflow | must |
+| FR-012 | THE scorer SHALL take the scoring configuration and the actual action count as non-zero types, with no zero checks in the scoring function; scoring is infallible (`Scorer::score` returns a score, not a `Result`), and the `ScoreOverflow` error and the checked scoring helpers (`checked_score_calculation`, `calculate_total_score`) no longer exist. A scenario cannot complete with zero actions, so a zero actual count is not a scoring input; the caller that may hold zero handles it explicitly; arithmetic is saturating | must |
 | FR-013 | THE action cap SHALL be one named constant `MAX_USER_ACTIONS` in `src/limits.rs` (value 1,000,000, unchanged), and the `TooManyActions` error message SHALL be built from that value, not repeat the number. The cap applies to training and arcade sessions alike: WHEN an action would exceed it THE SYSTEM SHALL return `TooManyActions` and leave the session state unchanged (arcade previously had no cap; stated in the PR text) | must |
 
 ### 8.2 Acceptance Criteria
@@ -167,7 +167,7 @@ THEN  loading fails naming the scenario id
 ```
 GIVEN any ScoringConfig and a non-zero actual count
 WHEN  the score is calculated
-THEN  a score is returned with no error path for zero counts; ScoreOverflow is reachable only from checked arithmetic overflow
+THEN  a score is returned; the scoring function has no error path and no ScoreOverflow variant exists
 ```
 
 ### 8.3 Edge Cases

@@ -117,7 +117,7 @@ THEN  the label reads 50/100 XP and the bar is half full
 | ID | Metric | Target |
 |----|--------|--------|
 | SC-001 | Test over several `(level, total_xp)` pairs (level 1/50, level 22/9822, boundary exactly at a level start, over-range) asserts menu, Profile, results text and Profile gauge ratio all derive from the helper and agree | Pass |
-| SC-002 | Property test: for any `(level, total_xp)`, `earned <= span` and percent `<= 100`; no panic | Pass |
+| SC-002 | Property test: for any `total_xp`, with the level derived from it (`UserProfile::level()`, [[profile-invariants-and-private-fields/spec]] FR-002), `earned <= span` and percent `<= 100`; no panic. Amended 2026-11-13: the stored `level` no longer exists as an independent input; the over-range and stale-level rows of the edge-case table remain as legacy-load cases, where the load repair derives the level from `total_xp` | Pass |
 | SC-003 | `rg "xp_for_next_level"` in `src/ui/` | 0 matches |
 | SC-004 | Private span math in `end_game.rs` removed | 0 duplicate computations |
 

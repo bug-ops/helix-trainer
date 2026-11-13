@@ -357,7 +357,66 @@ THEN  the trailing `{` is removed (not the letter `w` inserted)
 | SC-202 | Simulator tests for linewise `p`/`P`, last-line paste, multi-range yank/paste | Match hx 25.07.1 |
 | SC-203 | Insert-mode tests for each key in FR-220 plus `.` repeat | Match hx 25.07.1 |
 
-## 13. See Also
+## 13. Typed Registers and Read-Only Registers (#658)
+
+> [!info] Added 2026-11-13 (spec-first update for the typed-position batch)
+> FR numbers continue after FR-223. Today a register is a raw `char` and "none given" is `Option<char>`, so `None` and `"` are two representations of the unnamed register, blackhole is a runtime comparison, and `"%y`, `"#y` and `".y` store a value that `"%p` pastes back. In hx 25.07.1 `%`, `#` and `.` are special read-only registers computed from the editor.
+
+### 13.1 Requirements
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-230 | THE SYSTEM SHALL address registers by one closed type `Register` with the cases: unnamed (`"`), blackhole (`_`), read-only special (`%`, `#`, `.`) and named (every other character hx 25.07.1 accepts as a general-purpose register name). "No register given" is the unnamed register; there is no `Option<char>` register parameter anywhere in the simulator or input layer. `Register` implements `Display` printing the typed character, so the pending-register preview (`"` plus the character) is unchanged | must |
+| FR-231 | THE input layer SHALL parse the character after `"` once, into a `Register`; downstream code receives only the typed value. Blackhole is a distinct case, not a runtime comparison inside the write path | must |
+| FR-232 | THE special registers SHALL be read-only and computed from the editor on read: `%` is the buffer display name (the trainer has no file argument, so `"%p` pastes `[scratch]`, the hx display name of a scratch buffer), `#` is the 1-based selection indices (one per range, as hx), `.` is the contents of the selection ranges | must |
+| FR-233 | WHEN a command writes to a read-only register (`"%y`, `"#y`, `".y`, `"%d`, `"#c`, ...) THE SYSTEM SHALL surface a typed user-visible error naming the register, SHALL NOT store anything in any register, and SHALL leave the document, selection and mode exactly as hx 25.07.1 leaves them for the same keys (probed in tmux, recorded in the parity table of the implementing PR). A read-only register is never reachable through `RegisterFile` storage | must |
+| FR-234 | WHEN a command reads a read-only register (`"%p`, `"#p`, `".p`, `"%P`, `".R`) THE SYSTEM SHALL use the computed value as the register content, with the same paste semantics as a stored value | must |
+| FR-235 | `RegisterFile` SHALL keep every other behavior of the existing registers unchanged (multi-value yank for multi-range selections, linewise detection, blackhole discards writes). The `*`, `+` (clipboard) and `/` (last search) registers remain plain named storage; their hx special behavior is a known residual (open row of section 13.3) | must |
+
+### 13.2 Acceptance Criteria
+
+```
+GIVEN a scratch buffer started like hx without a file argument
+WHEN  the user presses "%p
+THEN  the text [scratch] is pasted (hx 25.07.1 behavior)
+```
+```
+GIVEN a buffer with three selection ranges
+WHEN  the user presses "#p
+THEN  the indices 1, 2 and 3 are pasted, one per range
+```
+```
+GIVEN any selection
+WHEN  the user presses "%y
+THEN  an error naming register % is shown, no register changes, and a later "%p pastes [scratch], not the yanked text
+```
+```
+GIVEN "_y followed by "_p
+THEN  behavior equals today's blackhole behavior (writes discarded)
+```
+```
+GIVEN the key " followed by a register character
+THEN  the pending-register preview shows the same text as before this change
+```
+
+### 13.3 Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| `""y` and `y` | Identical (both the unnamed register; one representation) |
+| `.` (repeat) of a register-scoped command | Repeats with the same typed register |
+| Macro replay of `"%p` | Computed at replay time from the then-current editor state |
+| `"*`, `"+`, `"/` | Plain named storage (hx gives them special read or write behavior: open residual, P4 follow-up) |
+
+### 13.4 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-204 | Simulator tests for FR-232..FR-234 with expectations taken from hx 25.07.1 (scratch buffer, no file argument) | Pass |
+| SC-205 | `rg "Option<char>" src/helix/simulator src/input` for register parameters | 0 matches |
+| SC-206 | Input-layer test: a register character is parsed into `Register` once; the existing register case of the multi-key UI tests passes | Pass |
+
+## 14. See Also
 
 - [[constitution]] — project principles
 - [[BRD]] — business rationale and what actually shipped

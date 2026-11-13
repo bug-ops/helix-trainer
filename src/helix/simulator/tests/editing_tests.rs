@@ -1029,3 +1029,53 @@ fn test_counted_join_joins_one_pair_only() {
         );
     }
 }
+
+/// Oracle: hx 25.07.1, the same keys after `i Z Escape gg`, then `d`.
+#[test]
+fn test_surround_add_and_closest_pair_match_hx() {
+    let rest = "    let sum = a + b;\n    sum\n}";
+    let cases: [(&[&str], String); 8] = [
+        (
+            &["l", "ms(", "d"],
+            format!("Zn add(a: i32, b: i32) -> i32 {{\n{rest}"),
+        ),
+        (
+            &["l", "l", "l", "ms'", "d"],
+            format!("Zfnadd(a: i32, b: i32) -> i32 {{\n{rest}"),
+        ),
+        (
+            &["j", "ms(", "d"],
+            "Zfn add(a: i32, b: i32) -> i32 {\n   let sum = a + b;\n    sum\n}".to_string(),
+        ),
+        (
+            &["f(", "l", "mim", "d"],
+            format!("Zfn add() -> i32 {{\n{rest}"),
+        ),
+        (
+            &["f(", "l", "mam", "d"],
+            format!("Zfn add -> i32 {{\n{rest}"),
+        ),
+        (
+            &["j", "fa", "mim", "d"],
+            "Zfn add(a: i32, b: i32) -> i32 {}".to_string(),
+        ),
+        (
+            &["j", "w", "w", "mam", "d"],
+            "Zfn add(a: i32, b: i32) -> i32 ".to_string(),
+        ),
+        (
+            &["f{", "mim", "d"],
+            "\n    let sum = a + b;\n    sum\n}".to_string(),
+        ),
+    ];
+    for (commands, expected) in cases {
+        let mut sim = AnyModeSimulator::new(SNIPPET.to_string());
+        for command in ["i", "Z", "Escape", "gg"]
+            .into_iter()
+            .chain(commands.iter().copied())
+        {
+            sim.execute_command(command).unwrap();
+        }
+        assert_eq!(sim.display().content(), expected, "keys: {commands:?}");
+    }
+}

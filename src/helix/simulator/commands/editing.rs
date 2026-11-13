@@ -9,7 +9,9 @@ use helix_core::graphemes::next_grapheme_boundary;
 use helix_core::line_ending::line_end_char_index;
 use helix_core::movement::skip_while;
 use helix_core::surround::find_nth_pairs_pos;
-use helix_core::textobject::{TextObject, textobject_paragraph, textobject_word};
+use helix_core::textobject::{
+    TextObject, textobject_pair_surround_closest, textobject_paragraph, textobject_word,
+};
 use helix_core::{Range, Selection, Tendril, Transaction};
 
 /// Changes that join the lines of every range, as upstream Helix's
@@ -564,22 +566,18 @@ pub fn surround_selection<M: EditorMode>(
 
     let mut changes = Vec::with_capacity(sim.selection.len() * 2);
     let mut ranges = Vec::with_capacity(sim.selection.len());
+    let slice = sim.doc.slice(..);
     let mut offset = 0;
     for range in sim.selection.ranges() {
-        changes.push((
-            range.from(),
-            range.from(),
-            Some(Tendril::from(open.to_string())),
-        ));
-        changes.push((
-            range.to(),
-            range.to(),
-            Some(Tendril::from(close.to_string())),
-        ));
-        ranges.push(
-            Range::new(offset + range.from(), offset + range.to() + 2)
-                .with_direction(range.direction()),
-        );
+        // A point range is a one-grapheme cursor, which Helix wraps.
+        let (from, to) = if range.anchor == range.head {
+            (range.head, next_grapheme_boundary(slice, range.head))
+        } else {
+            (range.from(), range.to())
+        };
+        changes.push((from, from, Some(Tendril::from(open.to_string()))));
+        changes.push((to, to, Some(Tendril::from(close.to_string()))));
+        ranges.push(Range::new(offset + from, offset + to + 2).with_direction(range.direction()));
         offset += 2;
     }
 
@@ -710,6 +708,7 @@ pub fn select_around_textobject<M: EditorMode>(
         '\'' => select_around_quote(sim, '\''),
         '`' => select_around_quote(sim, '`'),
         'p' => select_around_paragraph(sim),
+        'm' => select_closest_pair(sim, TextObject::Around),
         _ => {}
     }
     Ok(())
@@ -736,9 +735,20 @@ pub fn select_inside_textobject<M: EditorMode>(
         '\'' => select_inside_quote(sim, '\''),
         '`' => select_inside_quote(sim, '`'),
         'p' => select_inside_paragraph(sim),
+        'm' => select_closest_pair(sim, TextObject::Inside),
         _ => {}
     }
     Ok(())
+}
+
+/// `mim` / `mam`: the closest bracket pair around the cursor, as hx
+/// `textobject_pair_surround_closest` (no syntax tree needed).
+fn select_closest_pair<M: EditorMode>(sim: &mut HelixSimulator<M>, object: TextObject) {
+    let slice = sim.doc.slice(..);
+    let new_range =
+        textobject_pair_surround_closest(None, slice, sim.selection.primary(), object, 1);
+
+    sim.selection = Selection::single(new_range.anchor, new_range.head);
 }
 
 fn select_around_word<M: EditorMode>(sim: &mut HelixSimulator<M>, big_word: bool) {

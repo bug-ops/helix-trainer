@@ -469,7 +469,7 @@ mod tests {
 
             assert_eq!(run("a caf\u{e9} b", "f\u{e9}").selection.primary().head, 6);
             assert_eq!(run("abc", "r\u{1f600}").doc.to_string(), "\u{1f600}bc");
-            assert_eq!(run("abc", "ms\u{e9}").doc.to_string(), "\u{e9}\u{e9}abc");
+            assert_eq!(run("abc", "ms\u{e9}").doc.to_string(), "\u{e9}a\u{e9}bc");
             for cmd in ["md\u{e9}", "mr\u{e9}\u{1f600}", "mi\u{e9}", "ma\u{1f600}"] {
                 run("abc", cmd);
             }

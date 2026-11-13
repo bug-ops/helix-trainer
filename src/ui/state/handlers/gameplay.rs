@@ -7,6 +7,7 @@ use super::key_history;
 use super::quests::quest_command;
 use crate::error::UserError;
 use crate::grammar::commands::CMD_ESCAPE;
+use crate::helix::InsertInput;
 use crate::ids::NormalizedCommand;
 use crate::input::resolve::{Resolution, resolve_keys};
 use crate::security::error_chain;
@@ -133,12 +134,11 @@ fn execute_on_task(
 
     let mode = task_data.session.playable().mode_kind();
     match resolve_keys(task_data.input_state_mut(), mode, keys) {
-        Resolution::Insert(cmd) => {
-            let is_escape = cmd == CMD_ESCAPE;
-            apply_to_session(task_data, SessionInput::Text(&cmd))?;
+        Resolution::Insert(input) => {
+            apply_to_session(task_data, SessionInput::Insert(&input))?;
 
             // Store last command for display (only for Escape), once it was accepted
-            if is_escape {
+            if input == InsertInput::Escape {
                 task_data.last_command = Some(CMD_ESCAPE.to_string());
             }
             Ok(None)
@@ -175,7 +175,7 @@ fn apply_to_session(
 ) -> Result<(), UserError> {
     apply_with(task_data, |session| {
         match input {
-            SessionInput::Text(text) => session.apply_action(text),
+            SessionInput::Insert(input) => session.apply_insert(input),
             SessionInput::Command(command) => session.apply_command(command),
         }
         .map_err(UserError::from)
@@ -226,7 +226,11 @@ mod tests {
             unreachable!()
         };
 
-        let result = apply_to_session(&mut task_data, SessionInput::Text("not_a_command"));
+        let result = apply_with(&mut task_data, |session| {
+            session
+                .apply_action("not_a_command")
+                .map_err(UserError::from)
+        });
 
         assert!(result.is_err());
         assert_eq!(task_data.session.playable().action_count(), 0);

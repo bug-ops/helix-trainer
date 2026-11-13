@@ -1032,17 +1032,9 @@ mod tests {
     /// to reviewable commands.
     #[test]
     fn test_record_scenario_completion_counts_all_actions_but_only_reviewable_cards() {
-        use crate::game::UserAction;
-
         let mut state = create_test_state();
         let mut feedback = minimal_feedback();
-        feedback.user_actions = ["i", "!", "Escape", "3h", "f="]
-            .iter()
-            .map(|c| UserAction {
-                command: (*c).to_string(),
-                timestamp: std::time::Duration::ZERO,
-            })
-            .collect();
+        feedback.user_actions = crate::testing::user_actions(&["i", "!", "Escape", "3h", "f="]);
         let before = state.progress.profile.commands_executed;
 
         let mut ctx = HandlerContext::new(

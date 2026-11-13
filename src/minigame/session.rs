@@ -204,6 +204,12 @@ impl ActiveMiniScenario {
         let at = self.elapsed();
         self.live.apply_command(command, at)
     }
+
+    /// Run one typed Insert-mode input and record it as one action.
+    fn apply_insert(&mut self, input: &crate::helix::InsertInput) -> Result<(), GameError> {
+        let at = self.elapsed();
+        self.live.apply_insert(input, at)
+    }
 }
 
 impl crate::game::PlayableScenario for ActiveMiniScenario {
@@ -536,6 +542,23 @@ impl<R: Rng> MiniGameSession<R> {
 
         let current = self.current.as_mut().ok_or(GameError::NoActiveScenario)?;
         current.apply_command(command)
+    }
+
+    /// Run one typed Insert-mode input, recorded as one action.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there is no current scenario or the simulator rejects the input.
+    pub(crate) fn apply_insert(
+        &mut self,
+        input: &crate::helix::InsertInput,
+    ) -> Result<(), GameError> {
+        if !self.state().is_playing() {
+            return Ok(()); // Ignore commands in non-playing states
+        }
+
+        let current = self.current.as_mut().ok_or(GameError::NoActiveScenario)?;
+        current.apply_insert(input)
     }
 
     /// Check if current scenario is complete
@@ -1056,12 +1079,10 @@ impl<R: Rng> MiniGameSession<R> {
             // Same card ids as training mode, so arcade and training practice of one
             // skill share a card; typed text and arguments never become cards.
             let mut recorded_commands = std::collections::HashSet::new();
-            for command in crate::ids::CommandId::from_actions(
-                actions.iter().map(|action| action.command.as_str()),
-            ) {
-                if recorded_commands.insert(command.clone()) {
+            for command in actions.iter().filter_map(UserAction::command_id) {
+                if recorded_commands.insert(command) {
                     tracker.record_attempt(
-                        &command,
+                        command,
                         time_per_command,
                         success,
                         optimal_time_per_command,

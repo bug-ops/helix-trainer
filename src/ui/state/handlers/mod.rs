@@ -40,8 +40,8 @@ pub(super) use scenario::{
 /// parsed Normal-mode command.
 #[derive(Clone, Copy)]
 pub(super) enum SessionInput<'a> {
-    /// Text typed (or an Insert-mode key name) in Insert mode
-    Text(&'a str),
+    /// Text, `Escape` or a key typed in Insert mode
+    Insert(&'a crate::helix::InsertInput),
     /// A parsed Normal-mode command, count included
     Command(&'a crate::helix::normal_command::NormalCommand),
 }

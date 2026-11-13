@@ -31,55 +31,17 @@
 
 use crate::config::Scenario;
 use crate::game::GameError;
-use crate::game::{LiveScenario, PerformanceRating, Scorer};
+use crate::game::{LiveScenario, PerformanceRating, Scorer, UserAction};
 use crate::helix::{EditorSnapshot, Mode};
 use crate::ids::ScenarioId;
 use crate::security::SecurityError;
 use crate::time::{MonotonicClock, SystemMonotonicClock};
-use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub use typestate::{Abandoned, Active, Completed, SessionState};
-
-/// Represents a single user action during gameplay
-///
-/// Stores the command/key sequence and timestamp for tracking
-/// action sequence and timing analytics.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct UserAction {
-    /// The command or key sequence entered by user
-    pub command: String,
-    /// Elapsed time when action was performed
-    pub timestamp: Duration,
-}
-
-impl UserAction {
-    /// Create a new user action with timestamp
-    ///
-    /// # Arguments
-    /// * `command` - The command/key sequence entered
-    /// * `elapsed` - Elapsed time since session start
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use helix_trainer::game::UserAction;
-    /// use std::time::Duration;
-    ///
-    /// let action = UserAction::new("d".to_string(), Duration::from_secs(1));
-    /// assert_eq!(action.command, "d");
-    /// # Ok::<(), helix_trainer::security::SecurityError>(())
-    /// ```
-    pub fn new(command: String, elapsed: Duration) -> Self {
-        Self {
-            command,
-            timestamp: elapsed,
-        }
-    }
-}
 
 /// How a scenario run ended
 ///
@@ -587,6 +549,23 @@ impl GameSession<Active> {
     ) -> Result<(), GameError> {
         let at = self.elapsed();
         self.live.apply_command(command, at)?;
+        self.progress_needs_update.set(true);
+        Ok(())
+    }
+
+    /// Execute and record one typed Insert-mode input, as
+    /// [`GameSession::apply_action`] does for its string form.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the action limit is exceeded or the simulator
+    /// rejects the input.
+    pub(crate) fn apply_insert(
+        &mut self,
+        input: &crate::helix::InsertInput,
+    ) -> Result<(), GameError> {
+        let at = self.elapsed();
+        self.live.apply_insert(input, at)?;
         self.progress_needs_update.set(true);
         Ok(())
     }

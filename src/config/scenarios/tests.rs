@@ -1502,11 +1502,15 @@ tolerance = 0
 mod completion_rule {
     use super::*;
 
-    fn taught(commands: &[&str]) -> Vec<NormalizedCommand> {
-        commands.iter().map(|c| ncmd(c)).collect()
+    fn taught(commands: &[&str]) -> Vec<CommandId> {
+        commands.iter().map(|c| id(c).unwrap()).collect()
     }
 
-    fn last(command: &str, target_held_before: bool) -> LastAction<'_> {
+    fn id(raw: &str) -> Option<CommandId> {
+        CommandId::from_action(raw)
+    }
+
+    fn last(command: Option<&CommandId>, target_held_before: bool) -> LastAction<'_> {
         LastAction {
             command,
             target_held_before,
@@ -1555,7 +1559,10 @@ mod completion_rule {
             ),
         ];
         for (name, rule, reached, action, expected) in cases {
-            let action = action.map(|(command, held)| last(command, held));
+            let ids = action.map(|(command, held)| (id(command), held));
+            let action = ids
+                .as_ref()
+                .map(|(command, held)| last(command.as_ref(), *held));
             assert_eq!(
                 rule.is_satisfied(reached, &undo_redo, action),
                 expected,
@@ -1567,7 +1574,8 @@ mod completion_rule {
     #[test]
     fn test_u_does_not_match_taught_redo_only() {
         let rule = CompletionRule::AfterTaughtCommands;
-        assert!(!rule.is_satisfied(true, &taught(&["U"]), Some(last("u", false))));
+        let undo = id("u");
+        assert!(!rule.is_satisfied(true, &taught(&["U"]), Some(last(undo.as_ref(), false))));
     }
 }
 

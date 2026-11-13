@@ -160,7 +160,11 @@ impl ScenarioCompletionService {
     /// one learning card per skill.
     #[must_use]
     pub fn extract_commands(feedback: &Feedback) -> Vec<CommandId> {
-        CommandId::from_actions(feedback.user_actions.iter().map(|a| a.command.as_str()))
+        feedback
+            .user_actions
+            .iter()
+            .filter_map(|action| action.command_id().cloned())
+            .collect()
     }
 
     /// Track exploration/speed achievement signals for a scenario completion:
@@ -421,37 +425,17 @@ mod tests {
 
     #[test]
     fn test_extract_commands_single() {
-        use crate::game::UserAction;
-
         let mut feedback = create_test_feedback(100, 100);
-        feedback.user_actions = vec![UserAction {
-            command: "dd".to_string(),
-            timestamp: Duration::from_millis(100),
-        }];
+        feedback.user_actions = crate::testing::user_actions(&["d"]);
 
         let commands = ScenarioCompletionService::extract_commands(&feedback);
-        assert_eq!(commands, vec![cid("dd")]);
+        assert_eq!(commands, vec![cid("d")]);
     }
 
     #[test]
     fn test_extract_commands_multiple() {
-        use crate::game::UserAction;
-
         let mut feedback = create_test_feedback(100, 100);
-        feedback.user_actions = vec![
-            UserAction {
-                command: "d".to_string(),
-                timestamp: Duration::from_millis(100),
-            },
-            UserAction {
-                command: "w".to_string(),
-                timestamp: Duration::from_millis(200),
-            },
-            UserAction {
-                command: "j".to_string(),
-                timestamp: Duration::from_millis(300),
-            },
-        ];
+        feedback.user_actions = crate::testing::user_actions(&["d", "w", "j"]);
 
         let commands = ScenarioCompletionService::extract_commands(&feedback);
         assert_eq!(commands, vec![cid("d"), cid("w"), cid("j")]);
@@ -459,16 +443,10 @@ mod tests {
 
     #[test]
     fn test_extract_commands_skips_typed_text_and_arguments() {
-        use crate::game::UserAction;
-
         let mut feedback = create_test_feedback(100, 100);
-        feedback.user_actions = ["!", "Escape", " ", "3h", "f=", "T,", "r_", "/ sum", "ma("]
-            .iter()
-            .map(|c| UserAction {
-                command: (*c).to_string(),
-                timestamp: Duration::ZERO,
-            })
-            .collect();
+        feedback.user_actions = crate::testing::user_actions(&[
+            "!", "Escape", " ", "3h", "f=", "T,", "r_", "/ sum", "ma(",
+        ]);
 
         let commands = ScenarioCompletionService::extract_commands(&feedback);
         assert_eq!(commands, ["h", "f", "T", "r", "/", "ma("].map(cid).to_vec());

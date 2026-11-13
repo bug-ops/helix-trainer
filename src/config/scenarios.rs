@@ -118,8 +118,9 @@ pub enum CompletionRule {
 /// The just-executed action as seen by [`CompletionRule::is_satisfied`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LastAction<'a> {
-    /// The command string as typed (may carry a count prefix).
-    pub command: &'a str,
+    /// The review-card id of the action, `None` for one that is no command
+    /// (typed Insert-mode text, `Escape`).
+    pub command: Option<&'a CommandId>,
     /// Whether the editor already matched the target before this action ran.
     pub target_held_before: bool,
 }
@@ -129,7 +130,7 @@ impl CompletionRule {
     ///
     /// `target_reached` is the editor-versus-target comparison and
     /// `last_action` the just-executed action. Commands are compared as review
-    /// card ids, so a count prefix is ignored (`2u` matches `u`). An action
+    /// card ids, so a count prefix is ignored (`2u` is the id `u`). An action
     /// that found the target already satisfied (a no-op such as `U` on an empty
     /// redo stack) never completes an [`CompletionRule::AfterTaughtCommands`]
     /// scenario.
@@ -138,23 +139,25 @@ impl CompletionRule {
     ///
     /// ```
     /// use helix_trainer::config::{CompletionRule, LastAction};
-    /// use helix_trainer::ids::NormalizedCommand;
+    /// use helix_trainer::ids::CommandId;
     ///
-    /// let taught = [NormalizedCommand::from_raw("u").unwrap()];
+    /// let id = |raw| CommandId::from_action(raw).unwrap();
+    /// let taught = [id("u")];
     /// let rule = CompletionRule::AfterTaughtCommands;
+    /// let (undo, delete) = (id("2u"), id("d"));
     /// let action = |command, target_held_before| {
-    ///     Some(LastAction { command, target_held_before })
+    ///     Some(LastAction { command: Some(command), target_held_before })
     /// };
-    /// assert!(rule.is_satisfied(true, &taught, action("2u", false)));
-    /// assert!(!rule.is_satisfied(true, &taught, action("2u", true)));
-    /// assert!(!rule.is_satisfied(true, &taught, action("d", false)));
-    /// assert!(CompletionRule::TargetState.is_satisfied(true, &taught, action("d", true)));
+    /// assert!(rule.is_satisfied(true, &taught, action(&undo, false)));
+    /// assert!(!rule.is_satisfied(true, &taught, action(&undo, true)));
+    /// assert!(!rule.is_satisfied(true, &taught, action(&delete, false)));
+    /// assert!(CompletionRule::TargetState.is_satisfied(true, &taught, action(&delete, true)));
     /// ```
     #[must_use]
     pub fn is_satisfied(
         self,
         target_reached: bool,
-        commands_taught: &[NormalizedCommand],
+        commands_taught: &[CommandId],
         last_action: Option<LastAction<'_>>,
     ) -> bool {
         if !target_reached {
@@ -166,13 +169,10 @@ impl CompletionRule {
                 let Some(last_action) = last_action.filter(|a| !a.target_held_before) else {
                     return false;
                 };
-                let Some(last) = CommandId::from_action(last_action.command) else {
+                let Some(last) = last_action.command else {
                     return false;
                 };
-                commands_taught
-                    .iter()
-                    .filter_map(|taught| CommandId::from_action(taught.as_str()))
-                    .any(|taught| taught == last)
+                commands_taught.contains(last)
             }
         }
     }
@@ -310,32 +310,11 @@ pub struct Scenario {
     pub metadata: ScenarioMetadata,
 }
 
-impl Scenario {
-    /// Whether the scenario is finished, given the editor-versus-target
-    /// comparison and the just-executed action.
-    ///
-    /// Both training and arcade completion go through this, so they cannot
-    /// diverge. See [`CompletionRule`].
-    #[must_use]
-    pub fn is_completed_by(
-        &self,
-        target_reached: bool,
-        last_action: Option<LastAction<'_>>,
-    ) -> bool {
-        self.metadata.completion.is_satisfied(
-            target_reached,
-            &self.metadata.commands_taught,
-            last_action,
-        )
-    }
-}
-
 /// Effective content language used when a scenario's [`Setup::language`] is `None`.
 ///
 /// Matches the syntax highlighter's original hardcoded behavior (see FR-002 in
-/// `specs/language-aware-syntax-highlighting/spec.md`). Shared by
-/// `PlayableScenario::language`'s default implementation and its `GameSession`/
-/// `ActiveMiniScenario` overrides so the fallback exists in exactly one place.
+/// `specs/language-aware-syntax-highlighting/spec.md`). Used by
+/// `LiveScenario::language`, so the fallback exists in exactly one place.
 pub const DEFAULT_LANGUAGE: Language = Language::Rs;
 
 /// Initial editor setup

@@ -96,7 +96,7 @@ fn execute_minigame_command(
 
     match input {
         SessionInput::Command(command) => session.apply_command(command)?,
-        SessionInput::Text(text) => session.handle_command(text)?,
+        SessionInput::Insert(input) => session.apply_insert(input)?,
     }
 
     // Only a typed Normal-mode command counts as command practice; Insert-mode text does not.
@@ -271,9 +271,7 @@ pub(in crate::ui::state) fn handle_minigame_command(
     key_history::record_key(&mut state.ui, &mut minigame_data.key_history, typed);
 
     match resolve_keys(minigame_data.input_state_mut(), mode, keys) {
-        Resolution::Insert(command) => {
-            execute_minigame_command(state, SessionInput::Text(&command))
-        }
+        Resolution::Insert(input) => execute_minigame_command(state, SessionInput::Insert(&input)),
         Resolution::Execute { command, .. } => {
             execute_minigame_command(state, SessionInput::Command(&command))
         }
@@ -741,8 +739,14 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
         assert!(
             state.progress.profile.level >= 2,
@@ -1139,7 +1143,11 @@ mod tests {
 
         let enter_insert = crate::testing::normal("i");
         execute_minigame_command(&mut state, SessionInput::Command(&enter_insert)).unwrap();
-        execute_minigame_command(&mut state, SessionInput::Text("j")).unwrap();
+        execute_minigame_command(
+            &mut state,
+            SessionInput::Insert(&crate::helix::InsertInput::parse("j")),
+        )
+        .unwrap();
 
         let progress = |index: usize| match &state.progress.profile.daily_quests[index].quest_type {
             QuestType::CommandPractice { current, .. } => *current,
@@ -1565,7 +1573,16 @@ mod tests {
             session.tick_countdown();
         }
 
-        let result = execute_minigame_command(&mut state, SessionInput::Text("not_a_command"));
+        execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("i")),
+        )
+        .unwrap();
+        // An assembled command line is never inserted as text.
+        let result = execute_minigame_command(
+            &mut state,
+            SessionInput::Insert(&crate::helix::InsertInput::parse(":goto 3")),
+        );
 
         assert!(result.is_err());
         assert!(state.minigame_session().is_some());
@@ -1723,8 +1740,14 @@ mod tests {
 
         // Complete the scenario ("x" selects the line, "d" deletes it) essentially
         // immediately, so time_ratio stays near 0.0.
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
         assert_eq!(state.progress.profile.speed_run_count, 1);
         assert_eq!(state.progress.profile.flash_run_count, 1);
@@ -1775,8 +1798,14 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
         assert!(
             state
@@ -1824,8 +1853,14 @@ mod tests {
 
         clock.advance(std::time::Duration::from_millis(3_500));
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
         assert_eq!(state.progress.profile.speed_run_count, 0);
         assert_eq!(state.progress.profile.flash_run_count, 0);
@@ -1866,8 +1901,14 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
         assert_eq!(state.progress.profile.scenarios_completed, 1);
         assert_eq!(state.progress.profile.perfect_scenarios, 1);
@@ -1904,8 +1945,14 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
         assert_eq!(state.progress.profile.scenarios_completed, 1);
         assert_eq!(state.progress.profile.perfect_scenarios, 0);

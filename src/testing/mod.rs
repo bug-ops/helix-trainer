@@ -62,6 +62,25 @@ fn pos(row: usize, col: usize) -> Pos {
     Pos::try_from([row, col]).expect("valid position fixture")
 }
 
+/// Recorded actions for fixture strings: each is a Normal-mode command when it
+/// parses as one and typed Insert-mode input otherwise, all at time zero.
+#[must_use]
+pub fn user_actions(raw: &[&str]) -> Vec<crate::game::UserAction> {
+    use crate::game::{RecordedAction, UserAction};
+    use crate::helix::InsertInput;
+    use crate::helix::normal_command::NormalCommand;
+
+    raw.iter()
+        .map(|text| {
+            let action = NormalCommand::parse(text).map_or_else(
+                |_| RecordedAction::Insert(InsertInput::parse(text)),
+                RecordedAction::Command,
+            );
+            UserAction::new(action, std::time::Duration::ZERO)
+        })
+        .collect()
+}
+
 /// Parse a canonical Normal-mode command string, panicking on a bad fixture.
 ///
 /// # Panics

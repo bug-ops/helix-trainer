@@ -10,6 +10,7 @@ use crate::helix::{ModeKind, Pos, SelectionBounds};
 pub mod command_context;
 mod error;
 mod live_scenario;
+mod recorded_action;
 pub mod scenario_collection;
 pub mod scenario_state;
 pub mod scorer;
@@ -19,6 +20,7 @@ pub mod session;
 pub use command_context::format_key_for_display;
 pub use error::GameError;
 pub use live_scenario::LiveScenario;
+pub use recorded_action::{RecordedAction, UserAction};
 pub use scenario_collection::{
     CompletionFilter, CurriculumStats, ScenarioCollection, ScenarioFilter, SortMode,
 };
@@ -26,7 +28,7 @@ pub use scenario_state::ScenarioState;
 pub use scorer::{PerformanceRating, Scorer};
 pub use session::{
     Abandoned, Active, Completed, Feedback, FeedbackOutcome, GameSession, SessionAfterAction,
-    SessionState, UserAction,
+    SessionState,
 };
 
 /// Trait for types that represent a playable scenario session.

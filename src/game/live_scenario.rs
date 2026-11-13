@@ -9,11 +9,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::{GameError, ScenarioState, UserAction};
+use super::{GameError, RecordedAction, ScenarioState, UserAction};
 use crate::config::{LastAction, Scenario};
+use crate::helix::InsertInput;
 use crate::helix::normal_command::NormalCommand;
 use crate::helix::{AnyModeSimulator, EditorDisplay, EditorSnapshot, Mode, ModeKind, Pos};
 use crate::helix::{Language, SelectionBounds};
+use crate::ids::CommandId;
 use crate::security;
 
 /// A scenario in play: simulator, target and the actions taken.
@@ -35,6 +37,8 @@ use crate::security;
 /// ```
 pub struct LiveScenario {
     scenario: Arc<Scenario>,
+    /// The scenario's taught commands as card ids, derived once.
+    taught: Box<[CommandId]>,
     simulator: AnyModeSimulator,
     target_snapshot: EditorSnapshot,
     actions: Vec<UserAction>,
@@ -51,8 +55,15 @@ impl LiveScenario {
     #[must_use]
     pub fn new(scenario: Arc<Scenario>) -> Self {
         let state = ScenarioState::from_scenario(&scenario);
+        let taught = scenario
+            .metadata
+            .commands_taught
+            .iter()
+            .filter_map(|taught| CommandId::from_action(taught.as_str()))
+            .collect();
         Self {
             scenario,
+            taught,
             simulator: state.simulator,
             target_snapshot: state.target_snapshot,
             actions: Vec::new(),
@@ -78,7 +89,8 @@ impl LiveScenario {
 
     /// Run one parsed Normal-mode command and record it as one action at `at`.
     ///
-    /// The recorded action is the command's canonical string.
+    /// A simulator in Insert mode takes the command as the text it spells, and
+    /// the action is recorded as that Insert input.
     ///
     /// # Errors
     ///
@@ -89,49 +101,69 @@ impl LiveScenario {
         command: &NormalCommand,
         at: Duration,
     ) -> Result<(), GameError> {
-        self.apply(command.to_string(), at, |simulator, _| {
-            simulator.execute_normal(command)
-        })
+        let action = if self.is_insert_mode() {
+            RecordedAction::Insert(InsertInput::parse(&command.to_string()))
+        } else {
+            RecordedAction::Command(command.clone())
+        };
+        self.apply_action(action, at)
     }
 
-    /// Run one command string (a possibly counted command in Normal mode, typed
-    /// text in Insert mode) and record it as one action at `at`.
+    /// Run one typed Insert-mode input and record it as one action at `at`.
     ///
     /// # Errors
     ///
     /// Returns an error if the action limit is exceeded or the simulator
-    /// rejects the command; the action is then not recorded.
-    pub fn apply_text(&mut self, command: &str, at: Duration) -> Result<(), GameError> {
-        self.apply(command.to_string(), at, |simulator, text| {
-            simulator.execute_command(text)
-        })
+    /// rejects the input; the action is then not recorded.
+    pub fn apply_insert(&mut self, input: &InsertInput, at: Duration) -> Result<(), GameError> {
+        self.apply_action(RecordedAction::Insert(input.clone()), at)
     }
 
-    fn apply(
-        &mut self,
-        recorded: String,
-        at: Duration,
-        execute: impl FnOnce(
-            &mut AnyModeSimulator,
-            &str,
-        ) -> Result<(), crate::helix::error::SimulatorError>,
-    ) -> Result<(), GameError> {
+    /// Run one command string and record it as one action at `at`.
+    ///
+    /// The string is parsed once, by the simulator's mode: a possibly counted
+    /// command in Normal mode, typed text or a key in Insert mode.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the string names no command, the action limit is
+    /// exceeded or the simulator rejects it; the action is then not recorded.
+    pub fn apply_text(&mut self, command: &str, at: Duration) -> Result<(), GameError> {
+        let action = if self.is_insert_mode() {
+            RecordedAction::Insert(InsertInput::parse(command))
+        } else {
+            RecordedAction::Command(NormalCommand::parse(command)?)
+        };
+        self.apply_action(action, at)
+    }
+
+    /// Run `action` and record it at `at`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the action limit is exceeded or the simulator
+    /// rejects the action; the action is then not recorded.
+    pub fn apply_action(&mut self, action: RecordedAction, at: Duration) -> Result<(), GameError> {
         security::arithmetic::validate_action_count(self.actions.len() + 1)?;
 
         let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
-        execute(&mut self.simulator, &recorded)?;
+        match &action {
+            RecordedAction::Command(command) => self.simulator.execute_normal(command)?,
+            RecordedAction::Insert(input) => self.simulator.execute_insert(input)?,
+        }
         self.target_held_before_last = held_before;
-        self.actions.push(UserAction::new(recorded, at));
+        self.actions.push(UserAction::new(action, at));
         Ok(())
     }
 
     /// Whether the scenario's completion rule is satisfied by the current state.
     #[must_use]
     pub fn is_completed(&self) -> bool {
-        self.scenario.is_completed_by(
+        self.scenario.metadata.completion.is_satisfied(
             self.simulator.matches_snapshot(&self.target_snapshot),
+            &self.taught,
             self.actions.last().map(|action| LastAction {
-                command: action.command.as_str(),
+                command: action.command_id(),
                 target_held_before: self.target_held_before_last,
             }),
         )

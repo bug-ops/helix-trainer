@@ -579,6 +579,22 @@ impl AnyModeSimulator {
         commands::execute_command_any_mode(self, cmd)
     }
 
+    /// Execute typed Insert-mode input, handling the transition back to Normal mode.
+    ///
+    /// The typed counterpart of [`AnyModeSimulator::execute_command`] for
+    /// callers that already know the input is Insert-mode text or a key. A
+    /// simulator in Normal mode takes the command the input's text names.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`SimulatorError`] if the input fails.
+    pub fn execute_insert(
+        &mut self,
+        input: &crate::helix::InsertInput,
+    ) -> Result<(), SimulatorError> {
+        commands::execute_insert_any_mode(self, input)
+    }
+
     /// Execute a parsed Normal-mode command, handling mode transitions.
     ///
     /// The typed counterpart of [`AnyModeSimulator::execute_command`]: a

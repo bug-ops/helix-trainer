@@ -56,6 +56,18 @@ pub enum InsertAction {
 }
 
 impl InsertAction {
+    /// The key a command string names (arrows and the Insert-mode editing keys), if any.
+    #[must_use]
+    pub fn parse(cmd: &str) -> Option<Self> {
+        match cmd {
+            CMD_ARROW_LEFT => Some(Self::Move(Movement::Left)),
+            CMD_ARROW_RIGHT => Some(Self::Move(Movement::Right)),
+            CMD_ARROW_UP => Some(Self::Move(Movement::Up)),
+            CMD_ARROW_DOWN => Some(Self::Move(Movement::Down)),
+            _ => InsertCommand::parse(cmd).map(Self::Edit),
+        }
+    }
+
     /// The canonical command string that replays this key
     pub fn command(self) -> &'static str {
         match self {

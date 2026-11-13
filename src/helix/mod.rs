@@ -19,6 +19,7 @@ pub mod error;
 #[cfg(any(test, feature = "test-util"))]
 pub mod goldens;
 pub mod indent;
+mod insert_input;
 pub mod language;
 pub mod macro_recorder;
 mod newline_indent;
@@ -29,6 +30,7 @@ pub mod repeat;
 pub mod simulator;
 
 pub use indent::{IndentUnit, TabWidth};
+pub use insert_input::InsertInput;
 pub use language::{Language, LanguageRules, SmartTab};
 pub use position::{CursorRange, Pos};
 pub use repeat::{

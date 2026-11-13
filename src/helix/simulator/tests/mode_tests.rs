@@ -216,3 +216,31 @@ fn test_arrow_keys_in_insert_mode() {
     // Should still be in Insert mode
     assert_eq!(sim.mode(), Mode::Insert);
 }
+
+#[test]
+fn test_typed_insert_input_matches_the_string_path() {
+    use crate::helix::InsertInput;
+
+    let keys = ["hi", CMD_ARROW_LEFT, "x", CMD_BACKSPACE, CMD_ESCAPE];
+    let mut by_string = AnyModeSimulator::new("ab".to_string());
+    let mut typed = AnyModeSimulator::new("ab".to_string());
+    by_string.execute_command(CMD_INSERT).unwrap();
+    typed.execute_command(CMD_INSERT).unwrap();
+
+    for key in keys {
+        by_string.execute_command(key).unwrap();
+        typed.execute_insert(&InsertInput::parse(key)).unwrap();
+        assert_eq!(typed.to_snapshot(), by_string.to_snapshot(), "{key}");
+        assert_eq!(typed.mode(), by_string.mode(), "{key}");
+    }
+    assert_eq!(typed.mode(), Mode::Normal);
+}
+
+#[test]
+fn test_typed_insert_input_in_normal_mode_runs_the_named_command() {
+    use crate::helix::InsertInput;
+
+    let mut sim = AnyModeSimulator::new("ab".to_string());
+    sim.execute_insert(&InsertInput::parse(CMD_INSERT)).unwrap();
+    assert_eq!(sim.mode(), Mode::Insert);
+}

@@ -14,6 +14,7 @@ use std::num::NonZeroUsize;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::error::{SimulatorError, bound};
+use super::register::Register;
 use super::registry::{normal_registry, parse_counted_command};
 use super::simulator::InsertEntryCommand;
 use super::simulator::command_line::CommandLine;
@@ -285,7 +286,7 @@ pub enum NormalCommand {
     /// `"<reg><op>`: a register-scoped operation.
     Register {
         /// The register.
-        register: char,
+        register: Register,
         /// The operation.
         op: RegisterOp,
     },
@@ -401,7 +402,7 @@ impl NormalCommand {
         {
             return RegisterOp::from_key(*op)
                 .map(|op| Self::Register {
-                    register: *register,
+                    register: Register::from(*register),
                     op,
                 })
                 .ok_or(SimulatorError::UnknownRegisterOp { op: *op });
@@ -555,7 +556,7 @@ impl NormalCommand {
                 vec![plain('m'), plain(scope.key()), plain(*object)]
             }
             Self::Register { register, op } => {
-                vec![plain('"'), plain(*register), plain(op.key())]
+                vec![plain('"'), plain(register.name()), plain(op.key())]
             }
             Self::Registered { count: Some(_), .. }
             | Self::Find { count: Some(_), .. }
@@ -577,10 +578,12 @@ fn insert_entry_keys(entry: InsertEntryCommand) -> Vec<KeyEvent> {
         InsertEntryCommand::AppendLineEnd => vec![plain('A')],
         InsertEntryCommand::OpenBelow { count } if count == NonZeroUsize::MIN => vec![plain('o')],
         InsertEntryCommand::OpenAbove { count } if count == NonZeroUsize::MIN => vec![plain('O')],
-        InsertEntryCommand::Change { register: None } => vec![plain('c')],
         InsertEntryCommand::Change {
-            register: Some(register),
-        } => vec![plain('"'), plain(register), plain('c')],
+            register: Register::Unnamed,
+        } => vec![plain('c')],
+        InsertEntryCommand::Change { register } => {
+            vec![plain('"'), plain(register.name()), plain('c')]
+        }
         InsertEntryCommand::OpenBelow { .. }
         | InsertEntryCommand::OpenAbove { .. }
         | InsertEntryCommand::ChangeNoYank => Vec::new(),
@@ -797,8 +800,10 @@ mod tests {
                 },
                 object,
             }),
-            (argument(), register_op)
-                .prop_map(|(register, op)| NormalCommand::Register { register, op }),
+            (argument(), register_op).prop_map(|(register, op)| NormalCommand::Register {
+                register: Register::from(register),
+                op
+            }),
             (kind, "[a-z ()]{1,8}")
                 .prop_map(|(kind, pattern)| NormalCommand::Prompt { kind, pattern }),
             (1usize..=500).prop_map(|n| NormalCommand::CommandLine(CommandLine::Goto(n))),
@@ -862,13 +867,15 @@ mod tests {
             InsertEntryCommand::InsertLineStart,
             InsertEntryCommand::AppendLineEnd,
             InsertEntryCommand::ChangeNoYank,
-            InsertEntryCommand::Change { register: None },
+            InsertEntryCommand::Change {
+                register: Register::Unnamed,
+            },
         ] {
             all.push(NormalCommand::InsertEntry(entry));
         }
         for register in ['_', 'a', '%'] {
             all.push(NormalCommand::InsertEntry(InsertEntryCommand::Change {
-                register: Some(register),
+                register: Register::from(register),
             }));
         }
         for ch in ['x', ' ', '\u{e9}'] {
@@ -893,7 +900,10 @@ mod tests {
             RegisterOp::Delete,
         ] {
             for register in ['a', '_', '"', '%'] {
-                all.push(NormalCommand::Register { register, op });
+                all.push(NormalCommand::Register {
+                    register: Register::from(register),
+                    op,
+                });
             }
         }
         for kind in PromptKind::ALL {

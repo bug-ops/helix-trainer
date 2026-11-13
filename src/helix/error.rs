@@ -6,6 +6,8 @@
 
 use helix_core::regex;
 
+use super::register::ReadOnlyRegister;
+
 /// Longest slice of caller-supplied text echoed back in an error message.
 const MAX_ECHOED_CHARS: usize = 64;
 
@@ -119,6 +121,13 @@ pub enum SimulatorError {
     UnknownRegisterOp {
         /// The operation character.
         op: char,
+    },
+
+    /// A command tried to write to a register that Helix computes (`%`, `#`, `.`).
+    #[error("Register {register} does not support writing")]
+    ReadOnlyRegister {
+        /// The register that rejected the write.
+        register: ReadOnlyRegister,
     },
 
     /// A `:` command line reached Insert mode, where it would be typed as text.

@@ -30,6 +30,7 @@ mod multi_cursor_tests;
 mod newline_indent_rule_tests;
 mod newline_indent_tests;
 mod paste_tests;
+mod register_tests;
 mod repeat_execution_tests;
 mod repeat_recording_tests;
 mod select_mode_extend_tests;

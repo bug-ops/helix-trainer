@@ -428,7 +428,8 @@ fn test_register_yank_paste_multi_key() {
     if let TypedScreen::Task(task_data) = &state.screen {
         assert_matches!(
             task_data.input_state().state(),
-            helix_trainer::input::typestate::InputState::RegisterOpPending { register: 'a' }
+            helix_trainer::input::typestate::InputState::RegisterOpPending { register }
+                if *register == helix_trainer::helix::Register::from('a')
         );
         // Nothing executed yet
         assert_eq!(task_data.session.playable().current_content(), "alpha beta");

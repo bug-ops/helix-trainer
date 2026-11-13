@@ -16,6 +16,7 @@ use super::state_types::{
     TextObjectInsidePending, UnmatchedNextPending, UnmatchedPrevPending, ViewPending,
 };
 use crate::helix::normal_command::NormalCommand;
+use crate::helix::register::Register;
 
 /// State machine for input handling
 ///
@@ -273,5 +274,5 @@ pub enum RegisterPreview {
     /// Waiting for the register character after `"`.
     SelectingRegister,
     /// Register selected; waiting for the operator (y/p/P/R/d/c).
-    AwaitingOperator(char),
+    AwaitingOperator(Register),
 }

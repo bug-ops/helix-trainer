@@ -1,8 +1,9 @@
 //! Editing commands (delete, join, indent, dedent)
 
-use super::clipboard::{select_pasted, values_by_range, yank_to_register};
+use super::clipboard::{read_register, select_pasted, values_by_range, yank_to_register};
 use crate::helix::error::SimulatorError;
 use crate::helix::newline_indent::CommentContinuation;
+use crate::helix::register::Register;
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use helix_core::graphemes::next_grapheme_boundary;
 use helix_core::line_ending::line_end_char_index;
@@ -190,20 +191,21 @@ pub(crate) fn delete_active_selection<M: EditorMode>(sim: &mut HelixSimulator<M>
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
 pub fn delete_selection<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
-    delete_selection_from_register(sim, None)
+    delete_selection_from_register(sim, Register::Unnamed)
 }
 
 /// Delete selection, yanking to the given register (`"<reg>d`).
 ///
-/// `register: None` addresses the unnamed register, matching plain `d`. See
-/// [`delete_selection`] for the deletion/cursor rules.
+/// [`Register::Unnamed`] is plain `d`. See [`delete_selection`] for the
+/// deletion/cursor rules.
 ///
 /// # Errors
 ///
-/// Returns the error of yanking to `register`; the yank currently never fails.
+/// [`SimulatorError::ReadOnlyRegister`] when `register` is `%`, `#` or `.`; the
+/// document and selection are left unchanged.
 pub(crate) fn delete_selection_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-    register: Option<char>,
+    register: Register,
 ) -> Result<(), SimulatorError> {
     yank_to_register(sim, register)?;
     delete_selection_impl(sim);
@@ -485,12 +487,12 @@ fn map_selected_text<M: EditorMode>(sim: &mut HelixSimulator<M>, map: fn(&str) -
 pub(crate) fn replace_with_yanked<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
-    replace_with_yanked_from_register(sim, None)
+    replace_with_yanked_from_register(sim, Register::Unnamed)
 }
 
 /// Replace selection with a named register's content (Helix 'R' command)
 ///
-/// `register: None` addresses the unnamed register. See `replace_with_yanked`.
+/// [`Register::Unnamed`] is plain `R`. See `replace_with_yanked`.
 ///
 /// # Errors
 ///
@@ -498,9 +500,9 @@ pub(crate) fn replace_with_yanked<M: EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn replace_with_yanked_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-    register: Option<char>,
+    register: Register,
 ) -> Result<(), SimulatorError> {
-    let Some(values) = sim.registers.get_values(register).map(<[String]>::to_vec) else {
+    let Some(values) = read_register(sim, register) else {
         return Ok(());
     };
     let Some(last_value) = values.last() else {
@@ -919,7 +921,10 @@ mod tests {
     #[test]
     fn test_replace_with_yanked() {
         let mut sim: HelixSimulator<NormalMode> = HelixSimulator::new("hello world".to_string());
-        sim.registers.set(None, "REPLACED".to_string());
+        sim.registers.set(
+            crate::helix::register::WriteTarget::Unnamed,
+            "REPLACED".to_string(),
+        );
         sim.selection = Selection::single(0, 5);
 
         replace_with_yanked(&mut sim).unwrap();

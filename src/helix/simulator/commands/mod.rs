@@ -91,9 +91,9 @@ pub(super) fn execute_normal_mode_command(
             count: None,
         } => normal_registry().execute(sim, command.key()).map(drop),
         NormalCommand::Registered { count: Some(_), .. } => Err(SimulatorError::CountNotAccepted),
-        NormalCommand::InsertEntry(InsertEntryCommand::Change {
-            register: Some(register),
-        }) => sim.change_selection_from_register(Some(*register)),
+        NormalCommand::InsertEntry(InsertEntryCommand::Change { register }) => {
+            sim.change_selection_from_register(*register)
+        }
         NormalCommand::InsertEntry(entry) => normal_registry()
             .execute(sim, &entry.uncounted().command())
             .map(drop),
@@ -138,7 +138,7 @@ pub(super) fn execute_normal_mode_command(
             object,
         } => editing::select_inside_textobject(sim, *object),
         NormalCommand::Register { register, op } => {
-            let register = Some(*register);
+            let register = *register;
             match op {
                 RegisterOp::Yank => clipboard::yank_to_register(sim, register),
                 RegisterOp::PasteAfter => clipboard::paste_after_from_register(sim, register),

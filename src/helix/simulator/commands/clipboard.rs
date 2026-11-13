@@ -1,6 +1,7 @@
 //! Clipboard operations (yank, paste)
 
 use crate::helix::error::SimulatorError;
+use crate::helix::register::{ReadOnlyRegister, Register, SCRATCH_BUFFER_NAME};
 use crate::helix::simulator::{EditorMode, HelixSimulator};
 use helix_core::{Range, Selection, Transaction, line_ending::get_line_ending_of_str};
 use std::iter::{Chain, Repeat};
@@ -21,13 +22,13 @@ use std::slice::Iter;
 /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
 /// fallible commands that share the registry's function type.
 pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorError> {
-    yank_to_register(sim, None)
+    yank_to_register(sim, Register::Unnamed)
 }
 
 /// Yank (copy) the active selection to a named register
 ///
-/// `register: None` addresses the unnamed register, matching Helix where
-/// `""y` and `y` behave identically. See [`yank`] for the selection rules.
+/// [`Register::Unnamed`] is plain `y`, matching Helix where `""y` and `y` behave
+/// identically. See [`yank`] for the selection rules.
 ///
 /// # Errors
 ///
@@ -35,13 +36,26 @@ pub fn yank<M: EditorMode>(sim: &mut HelixSimulator<M>) -> Result<(), SimulatorE
 /// with the fallible commands that share the registry's function type.
 pub fn yank_to_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-    register: Option<char>,
+    register: Register,
 ) -> Result<(), SimulatorError> {
+    let target = register.write_target()?;
+    let fragments = selected_fragments(sim);
+
+    if fragments.iter().all(String::is_empty) {
+        return Ok(());
+    }
+
+    sim.registers.set_values(target, fragments);
+
+    Ok(())
+}
+
+/// The text of every selection range; a point range yields the character under it.
+fn selected_fragments<M: EditorMode>(sim: &HelixSimulator<M>) -> Vec<String> {
     let slice = sim.doc.slice(..);
     let len_chars = sim.doc.len_chars();
 
-    let fragments: Vec<String> = sim
-        .selection
+    sim.selection
         .ranges()
         .iter()
         .map(|range| {
@@ -55,15 +69,29 @@ pub fn yank_to_register<M: EditorMode>(
                 range.fragment(slice).into_owned()
             }
         })
-        .collect();
+        .collect()
+}
 
-    if fragments.iter().all(String::is_empty) {
-        return Ok(());
+/// The values a read of `register` sees: stored ones, or the computed value of
+/// `%`, `#` and `.`.
+pub(super) fn read_register<M: EditorMode>(
+    sim: &HelixSimulator<M>,
+    register: Register,
+) -> Option<Vec<String>> {
+    match register {
+        Register::ReadOnly(ReadOnlyRegister::FileName) => {
+            Some(vec![SCRATCH_BUFFER_NAME.to_string()])
+        }
+        Register::ReadOnly(ReadOnlyRegister::SelectionIndices) => Some(
+            (1..=sim.selection.len())
+                .map(|index| index.to_string())
+                .collect(),
+        ),
+        Register::ReadOnly(ReadOnlyRegister::SelectionContents) => Some(selected_fragments(sim)),
+        Register::Unnamed | Register::Blackhole | Register::Named(_) => {
+            sim.registers.get_values(register).map(<[String]>::to_vec)
+        }
     }
-
-    sim.registers.set_values(register, fragments);
-
-    Ok(())
 }
 
 /// Where a paste lands relative to each selection range.
@@ -84,12 +112,12 @@ enum PastePlacement {
 pub(crate) fn paste_after<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
-    paste_after_from_register(sim, None)
+    paste_after_from_register(sim, Register::Unnamed)
 }
 
 /// Paste a named register's content after the selection
 ///
-/// `register: None` addresses the unnamed register. Value `i` is pasted at
+/// Value `i` is pasted at
 /// range `i` (the last value is reused when there are more ranges than
 /// values). If any value ends with a line ending the paste is linewise: it
 /// goes at the start of the line after each range's last line, and a
@@ -104,7 +132,7 @@ pub(crate) fn paste_after<M: EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn paste_after_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-    register: Option<char>,
+    register: Register,
 ) -> Result<(), SimulatorError> {
     paste_from_register(sim, register, PastePlacement::After);
     Ok(())
@@ -121,12 +149,12 @@ pub fn paste_after_from_register<M: EditorMode>(
 pub(crate) fn paste_before<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
 ) -> Result<(), SimulatorError> {
-    paste_before_from_register(sim, None)
+    paste_before_from_register(sim, Register::Unnamed)
 }
 
 /// Paste a named register's content before the selection
 ///
-/// `register: None` addresses the unnamed register. Same value distribution
+/// Same value distribution
 /// and resulting selection as [`paste_after_from_register`]; the paste goes
 /// at the start of each range, or at the start of its first line when
 /// linewise.
@@ -137,7 +165,7 @@ pub(crate) fn paste_before<M: EditorMode>(
 /// with the fallible commands that share the registry's function type.
 pub fn paste_before_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-    register: Option<char>,
+    register: Register,
 ) -> Result<(), SimulatorError> {
     paste_from_register(sim, register, PastePlacement::Before);
     Ok(())
@@ -153,17 +181,17 @@ pub(super) fn values_by_range<'a>(
 
 fn paste_from_register<M: EditorMode>(
     sim: &mut HelixSimulator<M>,
-    register: Option<char>,
+    register: Register,
     placement: PastePlacement,
 ) {
-    let Some(values) = sim.registers.get_values(register) else {
+    let Some(values) = read_register(sim, register) else {
         return;
     };
     let Some(last_value) = values.last() else {
         return;
     };
     let linewise = values.iter().any(|v| get_line_ending_of_str(v).is_some());
-    let mut value_iter = values_by_range(values, last_value);
+    let mut value_iter = values_by_range(&values, last_value);
 
     let doc = &sim.doc;
     let len_chars = doc.len_chars();

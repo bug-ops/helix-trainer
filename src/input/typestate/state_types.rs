@@ -6,6 +6,7 @@
 use std::num::NonZeroUsize;
 
 use crate::grammar::find::FindMotion;
+use crate::helix::register::Register;
 
 // ============================================================================
 // Handler state marker types (zero-sized)
@@ -89,7 +90,7 @@ pub struct RegisterPending;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegisterOpPending {
     /// The register selected to scope the upcoming operator
-    pub register: char,
+    pub register: Register,
 }
 
 /// Accumulating a `:`-prefixed command-line buffer

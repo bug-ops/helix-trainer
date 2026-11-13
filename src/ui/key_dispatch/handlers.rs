@@ -2092,7 +2092,8 @@ mod tests {
             );
             assert_matches!(
                 input_state(&state),
-                crate::input::typestate::InputState::RegisterOpPending { register: 'a' }
+                crate::input::typestate::InputState::RegisterOpPending { register }
+                    if register == crate::helix::Register::from('a')
             );
 
             // Must not panic and must fall through to the stock key, which

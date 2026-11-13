@@ -25,6 +25,7 @@ pub mod macro_recorder;
 mod newline_indent;
 pub mod normal_command;
 mod position;
+pub mod register;
 pub mod registry;
 pub mod repeat;
 pub mod simulator;
@@ -33,6 +34,7 @@ pub use indent::{IndentUnit, TabWidth};
 pub use insert_input::InsertInput;
 pub use language::{Language, LanguageRules, SmartTab};
 pub use position::{CursorRange, Pos};
+pub use register::{NamedRegister, ReadOnlyRegister, Register};
 pub use repeat::{InsertAction, InsertKey, Movement, RecordedInsert, RepeatBuffer};
 pub use simulator::{
     AnyModeSimulator, EditorDisplay, EditorMode, EditorSnapshot, HelixSimulator, InsertMode, Mode,

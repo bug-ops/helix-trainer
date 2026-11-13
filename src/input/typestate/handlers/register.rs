@@ -12,13 +12,14 @@
 //! side effects. `d` and `c` also read/write the *default* (unnamed)
 //! register directly when invoked bare; routing them through this prefix
 //! (e.g. `"_d`, `"_c`) is how the blackhole register
-//! ([`crate::helix::simulator::register_file::BLACKHOLE_REGISTER`]) is
-//! reached, since it can't be addressed as the default register.
+//! ([`Register::Blackhole`]) is reached, since it can't be addressed as the
+//! default register.
 
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::{InputHandler, KeyHandler};
 use crate::helix::normal_command::{NormalCommand, RegisterOp};
+use crate::helix::register::Register;
 use crate::helix::simulator::InsertEntryCommand;
 use crate::input::typestate::{
     handler_result::HandlerResult,
@@ -38,10 +39,10 @@ impl InputHandler<RegisterPending> for KeyHandler {
     )]
     fn handle_key(_state: &RegisterPending, key: KeyEvent) -> HandlerResult {
         match key.code {
-            // Accept any character as the register name
-            KeyCode::Char(c) => {
-                HandlerResult::Transition(InputState::RegisterOpPending { register: c })
-            }
+            // Every character names a register; `Register` sorts out the special ones
+            KeyCode::Char(c) => HandlerResult::Transition(InputState::RegisterOpPending {
+                register: Register::from(c),
+            }),
             // Escape - cancel
             KeyCode::Esc => HandlerResult::Cancel,
             // Other keys - cancel
@@ -67,7 +68,7 @@ impl InputHandler<RegisterOpPending> for KeyHandler {
             // Only y/p/P/R/d/c are register-scoped in this trainer
             KeyCode::Char('c') => {
                 HandlerResult::Execute(NormalCommand::InsertEntry(InsertEntryCommand::Change {
-                    register: Some(state.register),
+                    register: state.register,
                 }))
             }
             KeyCode::Char(op) if let Some(op) = RegisterOp::from_key(op) => {
@@ -98,7 +99,9 @@ mod tests {
         let result = KeyHandler::handle_key(&RegisterPending, key('a'));
         assert_eq!(
             result,
-            HandlerResult::Transition(InputState::RegisterOpPending { register: 'a' })
+            HandlerResult::Transition(InputState::RegisterOpPending {
+                register: Register::from('a')
+            })
         );
     }
 
@@ -113,14 +116,18 @@ mod tests {
 
     #[test]
     fn register_op_pending_accepts_yank() {
-        let state = RegisterOpPending { register: 'a' };
+        let state = RegisterOpPending {
+            register: Register::from('a'),
+        };
         let result = KeyHandler::handle_key(&state, key('y'));
         assert_eq!(result, HandlerResult::Execute(normal("\"ay")));
     }
 
     #[test]
     fn register_op_pending_accepts_paste_after_before_and_replace() {
-        let state = RegisterOpPending { register: 'b' };
+        let state = RegisterOpPending {
+            register: Register::from('b'),
+        };
         assert_eq!(
             KeyHandler::handle_key(&state, key('p')),
             HandlerResult::Execute(normal("\"bp"))
@@ -137,7 +144,9 @@ mod tests {
 
     #[test]
     fn register_op_pending_accepts_delete_and_change() {
-        let state = RegisterOpPending { register: 'a' };
+        let state = RegisterOpPending {
+            register: Register::from('a'),
+        };
         assert_eq!(
             KeyHandler::handle_key(&state, key('d')),
             HandlerResult::Execute(normal("\"ad"))
@@ -150,7 +159,9 @@ mod tests {
 
     #[test]
     fn register_op_pending_accepts_blackhole_register_delete_and_change() {
-        let state = RegisterOpPending { register: '_' };
+        let state = RegisterOpPending {
+            register: Register::from('_'),
+        };
         assert_eq!(
             KeyHandler::handle_key(&state, key('d')),
             HandlerResult::Execute(normal("\"_d"))
@@ -163,7 +174,9 @@ mod tests {
 
     #[test]
     fn register_op_pending_rejects_out_of_scope_operator() {
-        let state = RegisterOpPending { register: 'a' };
+        let state = RegisterOpPending {
+            register: Register::from('a'),
+        };
         assert_eq!(
             KeyHandler::handle_key(&state, key('x')),
             HandlerResult::Cancel
@@ -176,7 +189,9 @@ mod tests {
 
     #[test]
     fn register_op_pending_runs_ctrl_key_as_its_own_command_and_drops_register() {
-        let state = RegisterOpPending { register: 'a' };
+        let state = RegisterOpPending {
+            register: Register::from('a'),
+        };
         for c in ['c', 'b', 'f', 'u', 'd', 'r'] {
             let key = modified(c, KeyModifiers::CONTROL);
             assert_eq!(
@@ -193,7 +208,9 @@ mod tests {
 
     #[test]
     fn register_op_pending_cancels_unbound_ctrl_key() {
-        let state = RegisterOpPending { register: 'a' };
+        let state = RegisterOpPending {
+            register: Register::from('a'),
+        };
         assert_eq!(
             KeyHandler::handle_key(&state, modified('x', KeyModifiers::CONTROL)),
             HandlerResult::Cancel
@@ -202,7 +219,9 @@ mod tests {
 
     #[test]
     fn register_op_pending_runs_alt_key_as_its_own_command() {
-        let state = RegisterOpPending { register: 'a' };
+        let state = RegisterOpPending {
+            register: Register::from('a'),
+        };
         let key = modified('c', KeyModifiers::ALT);
         assert_eq!(
             KeyHandler::handle_key(&state, key),
@@ -216,7 +235,9 @@ mod tests {
 
     #[test]
     fn register_op_pending_escape_cancels() {
-        let state = RegisterOpPending { register: 'a' };
+        let state = RegisterOpPending {
+            register: Register::from('a'),
+        };
         let result =
             KeyHandler::handle_key(&state, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(result, HandlerResult::Cancel);

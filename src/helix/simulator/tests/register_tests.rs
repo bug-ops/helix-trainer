@@ -43,7 +43,7 @@ fn writes_to_read_only_registers_fail_and_change_nothing() {
         let mut sim = typed_two_lines();
         let (content, selection) = {
             let before = sim.display();
-            (before.content().clone(), before.selection())
+            (before.content(), before.selection())
         };
         let error = sim.execute_command(command).unwrap_err();
 

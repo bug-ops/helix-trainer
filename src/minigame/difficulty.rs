@@ -1675,7 +1675,7 @@ mod tests {
                 if let Some(scenario) =
                     controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
                 {
-                    *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
+                    *selection_counts.entry(scenario.id).or_insert(0) += 1;
                 }
             }
 
@@ -1715,7 +1715,7 @@ mod tests {
 
             for _ in 0..300 {
                 if let Some(scenario) = controller.next_scenario(&scenarios, None, &mut rng) {
-                    *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
+                    *selection_counts.entry(scenario.id).or_insert(0) += 1;
                 }
             }
 
@@ -1814,7 +1814,7 @@ mod tests {
                 if let Some(scenario) =
                     controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
                 {
-                    *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
+                    *selection_counts.entry(scenario.id).or_insert(0) += 1;
                 }
             }
 

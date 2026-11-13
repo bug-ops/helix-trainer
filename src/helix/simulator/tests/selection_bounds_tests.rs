@@ -33,7 +33,7 @@ fn replace_with_yanked_with_cursors_inside_one_grapheme_keeps_the_document_intac
             text,
             &[CMD_SELECT_ALL, CMD_YANK, "s x*", CMD_REPLACE_WITH_YANKED],
         );
-        let content = sim.display().content().clone();
+        let content = sim.display().content();
         assert!(
             content.chars().count() >= text.chars().count(),
             "{text:?} -> {content:?}"

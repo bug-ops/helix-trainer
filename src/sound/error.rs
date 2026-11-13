@@ -10,8 +10,8 @@ pub enum SoundError {
     NoAudioDevice,
 
     /// Failed to create audio stream
-    #[error("Audio stream error: {0}")]
-    StreamError(String),
+    #[error("Audio stream error")]
+    StreamError(#[source] rodio::stream::DeviceSinkError),
 
     /// Failed to decode audio data
     #[error("Audio decode error: {0}")]
@@ -27,8 +27,12 @@ mod tests {
         let err = SoundError::NoAudioDevice;
         assert_eq!(err.to_string(), "No audio output device available");
 
-        let err = SoundError::StreamError("test error".to_string());
-        assert_eq!(err.to_string(), "Audio stream error: test error");
+        let err = SoundError::StreamError(rodio::stream::DeviceSinkError::NoDevice);
+        assert_eq!(err.to_string(), "Audio stream error");
+        assert_eq!(
+            std::error::Error::source(&err).unwrap().to_string(),
+            "Could not find any output device"
+        );
 
         let err = SoundError::DecodeError("invalid format".to_string());
         assert_eq!(err.to_string(), "Audio decode error: invalid format");

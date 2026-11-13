@@ -60,8 +60,7 @@ impl SoundManager {
             return Ok(());
         }
 
-        let stream = DeviceSinkBuilder::open_default_sink()
-            .map_err(|e| SoundError::StreamError(e.to_string()))?;
+        let stream = DeviceSinkBuilder::open_default_sink().map_err(SoundError::StreamError)?;
         let mixer = stream.mixer().clone();
         self.output = Output::Ready {
             _stream: stream,

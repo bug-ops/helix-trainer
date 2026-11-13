@@ -32,9 +32,9 @@ pub enum SecurityError {
         actual: u64,
     },
 
-    /// TOML parsing failed; carries the parser message for logs only.
-    #[error("Invalid TOML format: {0}")]
-    InvalidToml(String),
+    /// TOML parsing failed; the typed parser error (with line/column span) is the source.
+    #[error("Invalid TOML format")]
+    InvalidToml(#[source] Box<toml::de::Error>),
 
     /// A scenario file holds more scenarios than allowed.
     #[error("Too many scenarios in file (max {max}, got {actual})")]
@@ -84,9 +84,9 @@ pub enum SecurityError {
     #[error("Invalid content: contains null bytes or invalid encoding")]
     InvalidContent,
 
-    /// Bytes are not valid UTF-8.
+    /// Bytes are not valid UTF-8; the source carries the byte offset.
     #[error("Invalid UTF-8 encoding")]
-    InvalidEncoding,
+    InvalidEncoding(#[source] std::string::FromUtf8Error),
 
     /// The application reached a state that violates an invariant.
     #[error("Invalid state: {0}")]
@@ -105,9 +105,14 @@ pub enum SecurityError {
     #[error("Not a regular file")]
     NotRegularFile,
 
-    /// Reading a file failed; carries the I/O message for logs only.
-    #[error("Failed to read file: {0}")]
-    ReadFailed(String),
+    /// Reading a file failed; the source keeps the [`std::io::ErrorKind`].
+    #[error("Failed to read file")]
+    ReadFailed(#[source] std::io::Error),
+
+    /// The file could not be inspected or opened; the source tells "not found" from
+    /// "permission denied".
+    #[error("File could not be opened")]
+    Inaccessible(#[source] std::io::Error),
 }
 
 /// Why [`path_validator::read_capped`] refused or failed to read a file.
@@ -159,11 +164,17 @@ impl From<CappedReadError> for SecurityError {
         match err {
             CappedReadError::NotRegularFile => Self::NotRegularFile,
             CappedReadError::TooLarge { max, actual } => Self::FileTooLarge { max, actual },
-            CappedReadError::Inaccessible(_) => Self::InvalidPath,
-            CappedReadError::Io(e) => Self::ReadFailed(e.to_string()),
-            CappedReadError::InvalidUtf8(_) => Self::InvalidEncoding,
+            CappedReadError::Inaccessible(e) => Self::Inaccessible(e),
+            CappedReadError::Io(e) => Self::ReadFailed(e),
+            CappedReadError::InvalidUtf8(e) => Self::InvalidEncoding(e),
         }
     }
+}
+
+/// A real `toml::de::Error` for tests that need a typed parse failure.
+#[cfg(test)]
+pub(crate) fn sample_toml_error() -> toml::de::Error {
+    toml::from_str::<toml::Value>("key = ").unwrap_err()
 }
 
 /// Renders `error` and every cause below it as `top: cause: root cause`.
@@ -680,7 +691,7 @@ mod tests {
             .contains("too large")
         );
         assert!(
-            SecurityError::InvalidToml("error".to_string())
+            SecurityError::InvalidToml(Box::new(sample_toml_error()))
                 .to_string()
                 .contains("TOML")
         );
@@ -730,12 +741,63 @@ mod tests {
                 .to_string()
                 .contains("content")
         );
-        assert!(SecurityError::InvalidEncoding.to_string().contains("UTF-8"));
+        assert!(
+            SecurityError::InvalidEncoding(String::from_utf8(vec![0xff]).unwrap_err())
+                .to_string()
+                .contains("UTF-8")
+        );
         assert!(
             SecurityError::InvalidState("err".to_string())
                 .to_string()
                 .contains("Invalid state")
         );
+    }
+
+    mod typed_causes {
+        use super::*;
+        use std::error::Error;
+        use std::io::ErrorKind;
+
+        #[test]
+        fn capped_read_conversion_keeps_io_kind() {
+            let inaccessible = SecurityError::from(CappedReadError::Inaccessible(
+                ErrorKind::PermissionDenied.into(),
+            ));
+            let source = inaccessible.source().unwrap();
+            let io = source.downcast_ref::<std::io::Error>().unwrap();
+            assert_eq!(io.kind(), ErrorKind::PermissionDenied);
+
+            let read = SecurityError::from(CappedReadError::Io(ErrorKind::NotFound.into()));
+            let io = read
+                .source()
+                .unwrap()
+                .downcast_ref::<std::io::Error>()
+                .unwrap();
+            assert_eq!(io.kind(), ErrorKind::NotFound);
+        }
+
+        #[test]
+        fn capped_read_conversion_keeps_utf8_offset() {
+            let utf8 = String::from_utf8(vec![b'a', 0xff]).unwrap_err();
+            let err = SecurityError::from(CappedReadError::InvalidUtf8(utf8));
+            let cause = err
+                .source()
+                .unwrap()
+                .downcast_ref::<std::string::FromUtf8Error>()
+                .unwrap();
+            assert_eq!(cause.utf8_error().valid_up_to(), 1);
+        }
+
+        #[test]
+        fn toml_error_keeps_span() {
+            let err = SecurityError::InvalidToml(Box::new(sample_toml_error()));
+            let cause = err
+                .source()
+                .unwrap()
+                .downcast_ref::<Box<toml::de::Error>>()
+                .unwrap();
+            assert!(cause.span().is_some());
+        }
     }
 
     mod read_capped {
@@ -785,19 +847,19 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let err = path_validator::read_capped(&dir.path().join("nope"), 5).unwrap_err();
             assert!(err.is_not_found(), "{err}");
-            assert_matches!(SecurityError::from(err), SecurityError::InvalidPath);
+            assert_matches!(SecurityError::from(err), SecurityError::Inaccessible(_));
         }
 
         #[cfg(unix)]
         #[test]
-        fn stat_failures_other_than_not_found_map_to_invalid_path() {
+        fn stat_failures_other_than_not_found_map_to_inaccessible() {
             let dir = tempfile::tempdir().unwrap();
             let file = dir.path().join("f.txt");
             std::fs::write(&file, "x").unwrap();
             let err = path_validator::read_capped(&file.join("child"), 5).unwrap_err();
             assert_matches!(err, CappedReadError::Inaccessible(_), "{err}");
             assert!(!err.is_not_found(), "ENOTDIR is not NotFound");
-            assert_matches!(SecurityError::from(err), SecurityError::InvalidPath);
+            assert_matches!(SecurityError::from(err), SecurityError::Inaccessible(_));
         }
 
         #[test]

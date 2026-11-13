@@ -23,7 +23,7 @@ pub(crate) fn parse_and_validate<F>(
 where
     F: ItemsFile,
 {
-    let file: F = toml::from_str(content).map_err(|e| SecurityError::InvalidToml(e.to_string()))?;
+    let file: F = toml::from_str(content).map_err(|e| SecurityError::InvalidToml(Box::new(e)))?;
 
     let items = file.into_items();
 

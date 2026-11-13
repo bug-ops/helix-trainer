@@ -140,6 +140,7 @@ impl From<SecurityError> for UserError {
             e @ (SecurityError::PathTraversal
             | SecurityError::InvalidPath
             | SecurityError::SuspiciousPath
+            | SecurityError::Inaccessible(_)
             | SecurityError::InvalidToml(_)) => UserError::ScenarioLoadError {
                 cause: Some(e.into()),
             },
@@ -161,7 +162,7 @@ impl From<SecurityError> for UserError {
             | SecurityError::ScoreOverflow
             | SecurityError::CommandSequenceTooLong { .. }
             | SecurityError::InvalidContent
-            | SecurityError::InvalidEncoding
+            | SecurityError::InvalidEncoding(_)
             | SecurityError::TooManyKeymapBindings { .. }
             | SecurityError::NotRegularFile
             | SecurityError::ReadFailed(_)) => UserError::OperationFailed {
@@ -276,7 +277,7 @@ mod tests {
             (SecurityError::PathTraversal, SCENARIO_FILE),
             (SecurityError::InvalidPath, SCENARIO_FILE),
             (
-                SecurityError::InvalidToml("parse error".to_string()),
+                SecurityError::InvalidToml(Box::new(crate::security::sample_toml_error())),
                 SCENARIO_FILE,
             ),
             (
@@ -381,9 +382,12 @@ mod tests {
             "Operation failed. Please try again.: Too many actions (max: 1000000)"
         );
 
-        let user = UserError::from(SecurityError::InvalidToml("bad key".to_string()));
-        assert!(error_chain(&user).ends_with("Invalid TOML format: bad key"));
-        assert!(!user.to_string().contains("bad key"));
+        let user = UserError::from(SecurityError::InvalidToml(Box::new(
+            crate::security::sample_toml_error(),
+        )));
+        assert!(error_chain(&user).contains("Invalid TOML format: "));
+        assert!(error_chain(&user).contains("TOML parse error"));
+        assert!(!user.to_string().contains("TOML parse error"));
 
         let user = UserError::from(SecurityError::InvalidState("broken".to_string()));
         assert!(error_chain(&user).contains("Invalid state: broken"));

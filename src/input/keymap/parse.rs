@@ -132,7 +132,7 @@ pub fn load_keymap_file(path: &Path) -> Result<(KeymapOverlay, KeymapReport), Ke
 /// [`SecurityError::TooManyKeymapBindings`] if it declares more bindings than the limit.
 pub fn resolve_str(content: &str) -> Result<(KeymapOverlay, KeymapReport), SecurityError> {
     let root: Value =
-        toml::from_str(content).map_err(|e| SecurityError::InvalidToml(e.to_string()))?;
+        toml::from_str(content).map_err(|e| SecurityError::InvalidToml(Box::new(e)))?;
     resolve(&root)
 }
 

@@ -472,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_category_filters_no_categories_enabled() {
+    fn test_render_category_filters_with_unrestricted_categories() {
         use crate::game::{Criterion, ScenarioFilter};
 
         let backend = TestBackend::new(80, 24);
@@ -480,12 +480,33 @@ mod tests {
 
         let mut state = create_test_state_with_categories();
 
-        // Apply empty filter (no categories enabled)
+        // An empty selection cannot be expressed: `Any` is the unrestricted filter
         let filter = ScenarioFilter {
             categories: Criterion::Any,
             ..Default::default()
         };
         state.game.scenario_collection.apply_filter(&filter, None);
+
+        state.screen = TypedScreen::CategoryFilters(CategoryFiltersData::default());
+
+        let result = terminal.draw(|f| render_category_filters(f, &state));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_render_category_filters_with_a_category_matching_no_scenario() {
+        use crate::game::{Criterion, ScenarioFilter};
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let mut state = create_test_state_with_categories();
+        let filter = ScenarioFilter {
+            categories: Criterion::one_of(ScenarioCategory::Search, []),
+            ..Default::default()
+        };
+        state.game.scenario_collection.apply_filter(&filter, None);
+        assert_eq!(state.game.scenario_collection.count(), 0);
 
         state.screen = TypedScreen::CategoryFilters(CategoryFiltersData::default());
 

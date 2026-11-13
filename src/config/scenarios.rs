@@ -254,6 +254,18 @@ pub struct ScenarioMetadata {
     pub prerequisites: Vec<ScenarioId>,
 }
 
+impl ScenarioMetadata {
+    /// The taught commands as card ids; a command too long to be an id is skipped.
+    ///
+    /// The one derivation shared by validation and play, so a scenario that loads
+    /// always has the commands its completion rule waits for.
+    pub fn taught_command_ids(&self) -> impl Iterator<Item = CommandId> + '_ {
+        self.commands_taught
+            .iter()
+            .filter_map(|taught| CommandId::from_action(taught.as_str()))
+    }
+}
+
 /// Scenario category for organization and filtering
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -360,8 +372,8 @@ pub struct Scenario {
 /// Effective content language used when a scenario's [`Setup::language`] is `None`.
 ///
 /// Matches the syntax highlighter's original hardcoded behavior (see FR-002 in
-/// `specs/language-aware-syntax-highlighting/spec.md`). Used by
-/// `LiveScenario::language`, so the fallback exists in exactly one place.
+/// `specs/language-aware-syntax-highlighting/spec.md`). Applied only by
+/// [`Setup::language_or_default`], so the fallback exists in exactly one place.
 pub const DEFAULT_LANGUAGE: Language = Language::Rs;
 
 /// Initial editor setup
@@ -380,6 +392,14 @@ pub struct Setup {
     /// Cursor and selection placement at the start.
     #[serde(flatten)]
     pub cursor: CursorSpec,
+}
+
+impl Setup {
+    /// The content language, falling back to [`DEFAULT_LANGUAGE`].
+    #[must_use]
+    pub fn language_or_default(&self) -> Language {
+        self.language.unwrap_or(DEFAULT_LANGUAGE)
+    }
 }
 
 /// Target state to achieve
@@ -731,7 +751,7 @@ impl ScenarioLoader {
             });
         }
         if scenario.metadata.completion == CompletionRule::AfterTaughtCommands
-            && scenario.metadata.commands_taught.is_empty()
+            && scenario.metadata.taught_command_ids().next().is_none()
         {
             return Err(ScenarioValidationError::NoTaughtCommands {
                 id: scenario.id.clone(),

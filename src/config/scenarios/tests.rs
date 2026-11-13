@@ -1660,6 +1660,24 @@ fn test_loader_rejects_after_taught_commands_without_taught_commands() {
     assert!(err.to_string().contains("cursor_spec_001"));
 }
 
+/// FR-011: taught commands too long to become card ids leave nothing to complete on.
+#[test]
+fn test_loader_rejects_after_taught_commands_with_only_overlong_taught_commands() {
+    let toml = scenario_toml_with_cursors("cursor_position = [0, 0]", "cursor_position = [0, 0]")
+        + format!(
+            "\n[scenarios.metadata]\ncompletion = \"after_taught_commands\"\ncommands_taught = [\"{}\"]\n",
+            "x".repeat(200)
+        )
+        .as_str();
+
+    let err = load_toml(&toml).unwrap_err();
+
+    assert_matches!(
+        err,
+        crate::config::ConfigError::Scenario(ScenarioValidationError::NoTaughtCommands { .. })
+    );
+}
+
 #[test]
 fn test_setup_with_two_cursor_fields_is_rejected_naming_both() {
     let toml =

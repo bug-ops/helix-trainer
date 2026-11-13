@@ -188,6 +188,11 @@ mod tests {
             UserError::scenario_load_error(),
             UserError::scenario_too_complex(),
             UserError::operation_failed(),
+            UserError::from(crate::config::json_store::StorageError::Write {
+                doc: crate::config::json_store::Document::Profile,
+                path: "/secret/profile.json".into(),
+                source: std::io::Error::other("disk full"),
+            }),
         ];
         for error in errors {
             assert_eq!(user_error(&error.kind()), error.to_string(), "{error:?}");

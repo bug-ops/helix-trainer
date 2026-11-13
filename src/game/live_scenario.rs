@@ -55,12 +55,7 @@ impl LiveScenario {
     #[must_use]
     pub fn new(scenario: Arc<Scenario>) -> Self {
         let state = ScenarioState::from_scenario(&scenario);
-        let taught = scenario
-            .metadata
-            .commands_taught
-            .iter()
-            .filter_map(|taught| CommandId::from_action(taught.as_str()))
-            .collect();
+        let taught = scenario.metadata.taught_command_ids().collect();
         Self {
             scenario,
             taught,
@@ -216,10 +211,7 @@ impl LiveScenario {
     /// The scenario's content language, falling back to [`crate::config::DEFAULT_LANGUAGE`].
     #[must_use]
     pub fn language(&self) -> Language {
-        self.scenario
-            .setup
-            .language
-            .unwrap_or(crate::config::DEFAULT_LANGUAGE)
+        self.scenario.setup.language_or_default()
     }
 
     /// The current document text.

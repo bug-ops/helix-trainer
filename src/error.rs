@@ -159,14 +159,6 @@ impl From<&CommandLineError> for SimulatorErrorKind {
     }
 }
 
-/// Why a command failed to execute.
-#[derive(Error, Debug)]
-pub enum CommandFailure {
-    /// The simulator rejected the command.
-    #[error(transparent)]
-    Simulator(#[from] SimulatorError),
-}
-
 /// Typed internal cause kept below a sanitized [`UserError`].
 ///
 /// Never rendered to the user; it exists so [`error_chain`](crate::security::error_chain) can show the original failure in
@@ -243,9 +235,9 @@ pub enum UserError {
     /// A Helix command failed to execute.
     #[error("Command execution failed: {failure}")]
     CommandFailed {
-        /// What failed; the source of this error.
+        /// What the simulator rejected; the source of this error.
         #[source]
-        failure: CommandFailure,
+        failure: SimulatorError,
     },
 
     /// Reading or writing the saved profile or configuration failed. The cause is kept as a
@@ -272,9 +264,7 @@ impl UserError {
             Self::ScenarioLoadError { .. } => UserErrorKind::ScenarioLoad,
             Self::ScenarioTooComplex { .. } => UserErrorKind::ScenarioTooComplex,
             Self::OperationFailed { .. } => UserErrorKind::OperationFailed,
-            Self::CommandFailed {
-                failure: CommandFailure::Simulator(error),
-            } => UserErrorKind::Command(error.into()),
+            Self::CommandFailed { failure } => UserErrorKind::Command(failure.into()),
             Self::Storage(_) => UserErrorKind::Storage,
         }
     }
@@ -382,9 +372,7 @@ impl From<crate::config::ConfigError> for UserError {
 
 impl From<SimulatorError> for UserError {
     fn from(err: SimulatorError) -> Self {
-        Self::CommandFailed {
-            failure: CommandFailure::Simulator(err),
-        }
+        Self::CommandFailed { failure: err }
     }
 }
 

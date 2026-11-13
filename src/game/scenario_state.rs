@@ -3,7 +3,7 @@
 //! Provides shared functionality for initializing scenario states,
 //! reducing code duplication between training and arcade modes.
 
-use crate::config::{CursorSpec, DEFAULT_LANGUAGE, Scenario};
+use crate::config::{CursorSpec, Scenario};
 use crate::helix::{AnyModeSimulator, EditorSnapshot};
 
 fn snapshot_of(content: String, cursor: &CursorSpec) -> EditorSnapshot {
@@ -59,7 +59,7 @@ impl ScenarioState {
 
         // Initialize Helix simulator from initial snapshot
         let simulator = AnyModeSimulator::from_snapshot(&initial_snapshot)
-            .with_language(scenario.setup.language.unwrap_or(DEFAULT_LANGUAGE));
+            .with_language(scenario.setup.language_or_default());
 
         Self {
             simulator,

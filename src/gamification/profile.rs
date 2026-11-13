@@ -931,17 +931,17 @@ mod tests {
 
     #[test]
     fn test_sound_config_persisted_in_profile() {
-        use crate::sound::SoundConfig;
+        use crate::sound::{SoundConfig, Volume};
 
         let mut profile = UserProfile::new();
-        profile.sound_config = SoundConfig::new(0.3, false);
+        profile.sound_config = SoundConfig::new(Volume::new(0.3), false);
 
         // Serialize and deserialize (TOML is the actual format)
         let toml = toml::to_string(&profile).unwrap();
         let restored: UserProfile = toml::from_str(&toml).unwrap();
 
-        assert!((restored.sound_config.volume - 0.3).abs() < f32::EPSILON);
-        assert!(!restored.sound_config.enabled);
+        assert!((restored.sound_config.volume().get() - 0.3).abs() < f32::EPSILON);
+        assert!(!restored.sound_config.enabled());
     }
 
     // CR-016: Test backward compatibility with old profile format (missing game mode fields)

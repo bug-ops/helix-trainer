@@ -8,7 +8,7 @@ use rodio::mixer::Mixer;
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player};
 
 use super::assets;
-use super::config::SoundConfig;
+use super::config::{SoundConfig, Volume};
 use super::effects::SoundEffect;
 use super::error::SoundError;
 
@@ -17,16 +17,21 @@ use super::error::SoundError;
 /// Handles audio device initialization and playback with graceful degradation.
 /// If audio is unavailable, all play operations become no-ops.
 pub struct SoundManager {
-    /// Audio output stream (kept alive for playback)
-    _stream: Option<MixerDeviceSink>,
-    /// Mixer for creating sinks
-    mixer: Option<Mixer>,
+    output: Output,
     /// Current configuration
     config: SoundConfig,
     /// Pre-loaded sound data
     sounds: HashMap<SoundEffect, Arc<[u8]>>,
-    /// Whether audio system initialized successfully
-    initialized: bool,
+}
+
+/// Audio output state: either no device, or a live stream with its mixer.
+enum Output {
+    Silent,
+    Ready {
+        /// Keeps the device open for the lifetime of the mixer
+        _stream: MixerDeviceSink,
+        mixer: Mixer,
+    },
 }
 
 impl SoundManager {
@@ -36,62 +41,46 @@ impl SoundManager {
     pub fn new(config: SoundConfig) -> Self {
         let sounds = Self::load_embedded_sounds();
         Self {
-            _stream: None,
-            mixer: None,
+            output: Output::Silent,
             config,
             sounds,
-            initialized: false,
         }
     }
 
     /// Try to initialize the audio device
     ///
     /// Call this early (e.g., at app startup) to detect audio availability.
-    /// If this fails, the manager will operate in silent mode.
+    /// If this fails, the manager stays silent; the caller decides how to report it.
     ///
     /// # Errors
     ///
     /// Returns [`SoundError::StreamError`] if no default audio output can be opened.
-    #[expect(
-        clippy::used_underscore_binding,
-        reason = "`_stream` only keeps the output device alive and is never read"
-    )]
     pub fn try_init(&mut self) -> Result<(), SoundError> {
-        if self.initialized {
+        if matches!(self.output, Output::Ready { .. }) {
             return Ok(());
         }
 
-        match DeviceSinkBuilder::open_default_sink() {
-            Ok(stream) => {
-                let mixer = stream.mixer().clone();
-                self._stream = Some(stream);
-                self.mixer = Some(mixer);
-                self.initialized = true;
-                tracing::info!("Audio system initialized successfully");
-                Ok(())
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Audio initialization failed: {}. Running in silent mode.",
-                    e
-                );
-                self.initialized = false;
-                Err(SoundError::StreamError(e.to_string()))
-            }
-        }
+        let stream = DeviceSinkBuilder::open_default_sink()
+            .map_err(|e| SoundError::StreamError(e.to_string()))?;
+        let mixer = stream.mixer().clone();
+        self.output = Output::Ready {
+            _stream: stream,
+            mixer,
+        };
+        tracing::info!("Audio output opened");
+        Ok(())
     }
 
     /// Play a sound effect
     ///
     /// Does nothing if sound is disabled, audio unavailable, or effect not found.
     pub fn play(&self, effect: SoundEffect) {
-        if !self.config.enabled || !self.initialized {
-            return;
-        }
-
-        let Some(mixer) = &self.mixer else {
+        let Output::Ready { mixer, .. } = &self.output else {
             return;
         };
+        if !self.config.enabled() {
+            return;
+        }
 
         let Some(data) = self.sounds.get(&effect) else {
             tracing::warn!("Sound effect {:?} not found", effect);
@@ -105,7 +94,7 @@ impl SoundManager {
         match Decoder::new(cursor) {
             Ok(source) => {
                 let sink = Player::connect_new(mixer);
-                sink.set_volume(self.config.volume);
+                sink.set_volume(self.config.volume().get());
                 sink.append(source);
                 sink.detach(); // Play to completion without blocking
             }
@@ -115,32 +104,21 @@ impl SoundManager {
         }
     }
 
-    /// Play a sound effect only if enabled
-    ///
-    /// Convenience method that checks enabled state before playing.
-    #[inline]
-    pub fn play_if_enabled(&self, effect: SoundEffect) {
-        self.play(effect);
-    }
-
-    /// Set master volume (clamped to 0.0-1.0)
-    pub fn set_volume(&mut self, volume: f32) {
-        self.config.volume = if volume.is_finite() {
-            volume.clamp(0.0, 1.0)
-        } else {
-            SoundConfig::DEFAULT_VOLUME
-        };
+    /// Set master volume
+    pub fn set_volume(&mut self, volume: Volume) {
+        self.config.set_volume(volume);
     }
 
     /// Set enabled state
     pub fn set_enabled(&mut self, enabled: bool) {
-        self.config.enabled = enabled;
+        self.config.set_enabled(enabled);
     }
 
     /// Toggle sound on/off, returns new state
     pub fn toggle(&mut self) -> bool {
-        self.config.enabled = !self.config.enabled;
-        self.config.enabled
+        let enabled = !self.config.enabled();
+        self.config.set_enabled(enabled);
+        enabled
     }
 
     /// Get current configuration
@@ -150,7 +128,7 @@ impl SoundManager {
 
     /// Check if audio is available
     pub fn is_available(&self) -> bool {
-        self.initialized
+        matches!(self.output, Output::Ready { .. })
     }
 
     /// Load embedded sounds into memory
@@ -189,24 +167,24 @@ mod tests {
         let mut manager = SoundManager::new(SoundConfig::default());
 
         // Default is enabled
-        assert!(manager.config().enabled);
+        assert!(manager.config().enabled());
 
         // Toggle off
         let new_state = manager.toggle();
         assert!(!new_state);
-        assert!(!manager.config().enabled);
+        assert!(!manager.config().enabled());
 
         // Toggle on
         let new_state = manager.toggle();
         assert!(new_state);
-        assert!(manager.config().enabled);
+        assert!(manager.config().enabled());
     }
 
     #[test]
     fn test_sound_manager_no_init_silent() {
         let manager = SoundManager::new(SoundConfig::default());
 
-        // Not initialized, play should be no-op (no panic)
+        // Silent output: play is a no-op (no panic)
         manager.play(SoundEffect::ScenarioComplete);
 
         // is_available should return false
@@ -218,16 +196,16 @@ mod tests {
         let mut manager = SoundManager::new(SoundConfig::default());
 
         // Normal volume
-        manager.set_volume(0.5);
-        assert!((manager.config().volume - 0.5).abs() < f32::EPSILON);
+        manager.set_volume(Volume::new(0.5));
+        assert!((manager.config().volume().get() - 0.5).abs() < f32::EPSILON);
 
         // Clamp above max
-        manager.set_volume(1.5);
-        assert!((manager.config().volume - 1.0).abs() < f32::EPSILON);
+        manager.set_volume(Volume::new(1.5));
+        assert!((manager.config().volume().get() - 1.0).abs() < f32::EPSILON);
 
         // Clamp below min
-        manager.set_volume(-0.5);
-        assert!((manager.config().volume - 0.0).abs() < f32::EPSILON);
+        manager.set_volume(Volume::new(-0.5));
+        assert!((manager.config().volume().get() - 0.0).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -235,18 +213,20 @@ mod tests {
         let mut manager = SoundManager::new(SoundConfig::default());
 
         manager.set_enabled(false);
-        assert!(!manager.config().enabled);
+        assert!(!manager.config().enabled());
 
         manager.set_enabled(true);
-        assert!(manager.config().enabled);
+        assert!(manager.config().enabled());
     }
 
     #[test]
     fn test_sound_manager_default() {
         let manager = SoundManager::default();
-        assert!((manager.config().volume - SoundConfig::DEFAULT_VOLUME).abs() < f32::EPSILON);
-        assert!(manager.config().enabled);
-        assert!(!manager.is_available()); // Not initialized
+        assert!(
+            (manager.config().volume().get() - SoundConfig::DEFAULT_VOLUME).abs() < f32::EPSILON
+        );
+        assert!(manager.config().enabled());
+        assert!(!manager.is_available()); // Silent output
     }
 
     #[test]
@@ -279,30 +259,28 @@ mod tests {
     }
 
     #[test]
-    fn test_sound_manager_play_if_enabled() {
-        let manager = SoundManager::new(SoundConfig::default());
-
-        // Should be no-op when not initialized (no panic)
-        manager.play_if_enabled(SoundEffect::LevelUp);
-    }
-
-    #[test]
     fn test_sound_manager_set_volume_nan_infinity() {
         let mut manager = SoundManager::new(SoundConfig::default());
 
         // NaN should fall back to default
-        manager.set_volume(f32::NAN);
-        assert!((manager.config().volume - SoundConfig::DEFAULT_VOLUME).abs() < f32::EPSILON);
+        manager.set_volume(Volume::new(f32::NAN));
+        assert!(
+            (manager.config().volume().get() - SoundConfig::DEFAULT_VOLUME).abs() < f32::EPSILON
+        );
 
         // Positive infinity should fall back to default
-        manager.set_volume(0.5); // Reset to known value
-        manager.set_volume(f32::INFINITY);
-        assert!((manager.config().volume - SoundConfig::DEFAULT_VOLUME).abs() < f32::EPSILON);
+        manager.set_volume(Volume::new(0.5)); // Reset to known value
+        manager.set_volume(Volume::new(f32::INFINITY));
+        assert!(
+            (manager.config().volume().get() - SoundConfig::DEFAULT_VOLUME).abs() < f32::EPSILON
+        );
 
         // Negative infinity should fall back to default
-        manager.set_volume(0.5); // Reset to known value
-        manager.set_volume(f32::NEG_INFINITY);
-        assert!((manager.config().volume - SoundConfig::DEFAULT_VOLUME).abs() < f32::EPSILON);
+        manager.set_volume(Volume::new(0.5)); // Reset to known value
+        manager.set_volume(Volume::new(f32::NEG_INFINITY));
+        assert!(
+            (manager.config().volume().get() - SoundConfig::DEFAULT_VOLUME).abs() < f32::EPSILON
+        );
     }
 
     #[test]

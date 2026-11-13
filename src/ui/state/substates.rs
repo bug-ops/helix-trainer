@@ -13,7 +13,9 @@ use crate::gamification::{
 use crate::ids::NormalizedCommand;
 use crate::input::keymap::KeymapOverlay;
 use crate::learning::{PerformanceTracker, Scheduler};
-use crate::sound::{SoundConfig, SoundManager};
+use crate::sound::SoundManager;
+#[cfg(test)]
+use crate::sound::{SoundConfig, Volume};
 use crate::time::{Clock, MonotonicClock, SystemMonotonicClock};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -254,7 +256,9 @@ impl ProgressState {
         // Initialize sound manager from profile config
         let mut sound_manager = SoundManager::new(profile.sound_config.clone());
         // Try to initialize audio (graceful failure)
-        let _ = sound_manager.try_init();
+        if let Err(e) = sound_manager.try_init() {
+            tracing::warn!("Audio initialization failed: {e}. Running in silent mode.");
+        }
 
         performance_tracker.set_clock(clock.clone());
 
@@ -301,13 +305,9 @@ impl ProgressState {
     /// apply its saved sound settings to the sound manager.
     pub fn mark_profile_loaded(&mut self) {
         self.persistence = ProfilePersistence::Writable;
-        let config = SoundConfig::new(
-            self.profile.sound_config.volume,
-            self.profile.sound_config.enabled,
-        );
-        self.sound_manager.set_volume(config.volume);
-        self.sound_manager.set_enabled(config.enabled);
-        self.profile.sound_config = config;
+        let config = &self.profile.sound_config;
+        self.sound_manager.set_volume(config.volume());
+        self.sound_manager.set_enabled(config.enabled());
     }
 
     /// Declare `profile` a throwaway fallback after a failed load: saving is
@@ -323,7 +323,7 @@ impl ProgressState {
     pub fn toggle_sound(&mut self) -> bool {
         let enabled = self.sound_manager.toggle();
         if self.persistence.is_writable() {
-            self.profile.sound_config.enabled = enabled;
+            self.profile.sound_config.set_enabled(enabled);
             self.mark_unsaved();
         }
         enabled
@@ -639,31 +639,26 @@ mod tests {
     fn test_mark_profile_loaded_applies_saved_sound_config_clamped() {
         let mut progress = writable_progress();
         progress.begin_profile_load();
-        progress.profile.sound_config = SoundConfig {
-            volume: 12.0,
-            enabled: false,
-        };
+        progress.profile.sound_config =
+            serde_json::from_str(r#"{"volume": 12.0, "enabled": false}"#).unwrap();
 
         progress.mark_profile_loaded();
 
         assert!(progress.persistence().is_writable());
-        assert!(!progress.sound_manager.config().enabled);
-        assert!((progress.sound_manager.config().volume - 1.0).abs() < f32::EPSILON);
-        assert!((progress.profile.sound_config.volume - 1.0).abs() < f32::EPSILON);
+        assert!(!progress.sound_manager.config().enabled());
+        assert!((progress.sound_manager.config().volume().get() - 1.0).abs() < f32::EPSILON);
+        assert!((progress.profile.sound_config.volume().get() - 1.0).abs() < f32::EPSILON);
     }
 
     #[test]
     fn test_mark_profile_loaded_rejects_non_finite_volume() {
         let mut progress = writable_progress();
-        progress.profile.sound_config = SoundConfig {
-            volume: f32::NAN,
-            enabled: true,
-        };
+        progress.profile.sound_config = SoundConfig::new(Volume::new(f32::NAN), true);
 
         progress.mark_profile_loaded();
 
         assert!(
-            (progress.sound_manager.config().volume - SoundConfig::DEFAULT_VOLUME).abs()
+            (progress.sound_manager.config().volume().get() - SoundConfig::DEFAULT_VOLUME).abs()
                 < f32::EPSILON
         );
     }
@@ -674,12 +669,12 @@ mod tests {
     fn test_toggle_sound_mirrors_into_profile_and_marks_dirty() {
         let mut progress = writable_progress();
         progress.mark_saved();
-        assert!(progress.profile.sound_config.enabled);
+        assert!(progress.profile.sound_config.enabled());
 
         let enabled = progress.toggle_sound();
 
         assert!(!enabled);
-        assert!(!progress.profile.sound_config.enabled);
+        assert!(!progress.profile.sound_config.enabled());
         assert!(progress.should_save());
     }
 
@@ -690,7 +685,7 @@ mod tests {
 
         progress.toggle_sound();
 
-        assert!(progress.profile.sound_config.enabled);
+        assert!(progress.profile.sound_config.enabled());
     }
 
     #[test]

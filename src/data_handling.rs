@@ -1071,14 +1071,14 @@ mod tests {
     fn test_profile_ready_applies_saved_sound_config() {
         let mut state = empty_test_app_state();
         let mut profile = UserProfile::new();
-        profile.sound_config.enabled = false;
-        profile.sound_config.volume = 12.0;
+        profile.sound_config =
+            serde_json::from_str(r#"{"volume": 12.0, "enabled": false}"#).unwrap();
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         let config = state.progress.sound_manager.config();
-        assert!(!config.enabled);
-        assert!((config.volume - 1.0).abs() < f32::EPSILON);
+        assert!(!config.enabled());
+        assert!((config.volume().get() - 1.0).abs() < f32::EPSILON);
     }
 
     /// Regression test for #466: a failed startup save is reported, not

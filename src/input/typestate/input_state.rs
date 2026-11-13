@@ -7,6 +7,7 @@ use std::num::NonZeroUsize;
 
 use crate::grammar::find::FindMotion;
 use crate::helix::normal_command::PromptKind;
+use crate::helix::register::Register;
 use crate::input::keymap::KeyContext;
 
 /// Runtime representation of input state
@@ -63,7 +64,7 @@ pub enum InputState {
     /// After '"{register}' - waiting for operator character (y/p/P/R/d/c)
     RegisterOpPending {
         /// Register chosen after `"`.
-        register: char,
+        register: Register,
     },
     /// After ':' - accumulating a command-line buffer
     CommandLinePending {
@@ -195,7 +196,10 @@ mod key_context_tests {
             Some(KeyContext::Base)
         );
         assert_eq!(
-            InputState::RegisterOpPending { register: 'a' }.key_context(),
+            InputState::RegisterOpPending {
+                register: Register::from('a')
+            }
+            .key_context(),
             Some(KeyContext::Base)
         );
     }

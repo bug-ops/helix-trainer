@@ -1,5 +1,6 @@
 //! Tests for menu navigation and selection
 
+use crate::learning::AttemptOutcome;
 use crate::testing::cid;
 use std::assert_matches;
 
@@ -140,13 +141,13 @@ fn test_quit_awards_paused_arcade_session_parked_behind_detour_screen() {
 
     update(&mut state, Message::ShowProfile).unwrap();
     assert_matches!(state.screen, TypedScreen::Profile(_));
-    let initial_xp = state.progress.profile.total_xp;
+    let initial_xp = state.progress.profile.total_xp();
 
     update(&mut state, Message::QuitApp).unwrap();
 
     assert!(!state.ui.running);
-    assert!(state.progress.profile.total_xp > initial_xp);
-    assert_eq!(state.progress.profile.minigame_high_score, 7777);
+    assert!(state.progress.profile.total_xp() > initial_xp);
+    assert_eq!(state.progress.profile.minigame_high_score(), 7777);
 }
 
 /// Hopping between detour screens must keep handing the paused run along, so Back still
@@ -387,17 +388,17 @@ fn test_starting_review_ends_the_paused_arcade_run_and_awards_it() {
     state.progress.performance_tracker.record_attempt(
         &cid("x"),
         Duration::from_secs(5),
-        false,
+        AttemptOutcome::Failed,
         Duration::from_secs(1),
     );
-    let initial_xp = state.progress.profile.total_xp;
+    let initial_xp = state.progress.profile.total_xp();
 
     update(&mut state, Message::StartReviewSession).unwrap();
 
     assert_matches!(state.screen, TypedScreen::Review(_));
     assert!(state.minigame_session().is_none(), "the run must be gone");
-    assert!(state.progress.profile.total_xp > initial_xp);
-    assert_eq!(state.progress.profile.minigame_high_score, 4242);
+    assert!(state.progress.profile.total_xp() > initial_xp);
+    assert_eq!(state.progress.profile.minigame_high_score(), 4242);
 }
 
 /// Without due reviews the paused run is left alone.

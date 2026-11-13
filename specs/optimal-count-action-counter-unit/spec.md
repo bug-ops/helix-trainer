@@ -20,7 +20,7 @@ related:
 # Feature: `optimal_count` and the Action Counter Use the Same Unit
 
 > [!info] Metadata
-> **Issues**: #488; extended 2026-11-11 with #512 (section 7)
+> **Issues**: #488; extended 2026-11-11 with #512 (section 7); extended 2026-11-13 with #655 (section 8) and #651 (FR-008 amendment)
 > **Status**: Proposed
 > **Depth**: Lightweight bug-fix spec.
 
@@ -94,7 +94,7 @@ THEN  optimal_count equals the number of solution commands
 |----|------------|----------|
 | FR-006 | A scenario MAY declare a completion rule, a closed enum `CompletionRule` with the variants `TargetState` (the default when the key is absent: today's behavior, unchanged for every existing scenario) and `AfterTaughtCommands`, set in the scenario TOML as `completion = "after_taught_commands"` under `[scenarios.metadata]`; an unknown value is a scenario load error | must |
 | FR-007 | WHERE a scenario uses `AfterTaughtCommands` THE SYSTEM SHALL complete it only when the editor state equals the target AND the action that produced that state is itself one of the scenario's `commands_taught`, compared after normalization (a count prefix is stripped, so `2u` matches `u`; argument characters follow the command normalization of the action counter) AND the target did not already hold before that last command (`CompletionRule::is_satisfied` checks both), so a no-op taught command on an already-matching state does not complete the scenario | must |
-| FR-008 | THE RULE SHALL be one predicate, taking the target comparison result, the rule and the just-executed command, used by BOTH training completion (`GameSession::finish_action`/`check_completion`) and arcade completion (`ActiveMiniScenario::is_completed`, which calls the shared predicate `Scenario::is_completed_by`; `ScenarioState` is unchanged); the two paths SHALL NOT diverge | must |
+| FR-008 | THE RULE SHALL be one predicate, taking the target comparison result, the rule and the just-executed command, used by BOTH training completion (`GameSession::finish_action`/`check_completion`) and arcade completion (`ActiveMiniScenario::is_completed`); the two paths SHALL NOT diverge. Amended 2026-11-13 (#651, which removes `Scenario::is_completed_by`): the shared predicate is `CompletionRule::is_satisfied`, called once from the shared `LiveScenario` that both session kinds use, taking the target comparison result, the scenario's taught commands (derived once at construction into typed command ids, not re-parsed per call) and the last action as a typed command | must |
 | FR-009 | `undo_redo_001` SHALL use `completion = "after_taught_commands"` so its documented solution finishes with `actions == optimal_count` (FR-002), and its entry in `ACTION_COUNT_EXEMPT_SCENARIO_IDS` SHALL be removed | must |
 | FR-010 | THE SCENARIO VALIDATION SUITE SHALL fail for a scenario with `AfterTaughtCommands` and an empty `commands_taught`, or whose documented solution does not complete exactly at its last command under the rule | must |
 
@@ -139,7 +139,51 @@ THEN  the count prefix is normalized and the rule is evaluated on u/U as for the
 > [!note] Alternatives rejected
 > Comparing the undo-tree state cannot separate `x d` from `x d u U` (same tree head content), and "every taught command executed" alone accepts `u U x d` at action 4, which equals `optimal_count`.
 
-## 8. See Also
+## 8. Typed Scorer Counts and Load-Time Invariants (#655)
+
+> [!info] Added 2026-11-13 (spec-first update for the typed-position batch)
+> FR numbers continue after FR-010. Today `Scorer::calculate_score` takes four positional numbers, re-checks two zeros that `NonZeroUsize` already excludes and reports them as `ScoreOverflow`; FR-001 and FR-010 are enforced only by test suites over the bundled data, so a scenario loaded from the file system (the planned custom-pack path) could violate them.
+
+### 8.1 Requirements
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-011 | `ScenarioLoader::validate_scenario`, shared by every loading path (embedded, `load`, `load_directory`), SHALL reject a scenario with a typed load error that names the scenario id and both values when `scoring.optimal_count != solution.commands.len()` (FR-001), and a scenario using `AfterTaughtCommands` with an empty `commands_taught` (FR-010). The test-suite checks of FR-003 and FR-010 stay as additional guards | must |
+| FR-012 | THE scorer SHALL take the scoring configuration and the actual action count as non-zero types, with no zero checks in the scoring function; scoring is infallible (`Scorer::score` returns a score, not a `Result`), and the `ScoreOverflow` error and the checked scoring helpers (`checked_score_calculation`, `calculate_total_score`) no longer exist. A scenario cannot complete with zero actions, so a zero actual count is not a scoring input; the caller that may hold zero handles it explicitly; arithmetic is saturating | must |
+| FR-013 | THE action cap SHALL be one named constant `MAX_USER_ACTIONS` in `src/limits.rs` (value 1,000,000, unchanged), and the `TooManyActions` error message SHALL be built from that value, not repeat the number. The cap applies to training and arcade sessions alike: WHEN an action would exceed it THE SYSTEM SHALL return `TooManyActions` and leave the session state unchanged (arcade previously had no cap; stated in the PR text) | must |
+
+### 8.2 Acceptance Criteria
+
+```
+GIVEN a scenario TOML whose scoring.optimal_count is 3 and whose solution has 2 commands
+WHEN  it is loaded through load_directory
+THEN  loading fails with an error naming the id, 3 and 2
+```
+```
+GIVEN an after_taught_commands scenario with commands_taught = []
+WHEN  it is loaded
+THEN  loading fails naming the scenario id
+```
+```
+GIVEN any ScoringConfig and a non-zero actual count
+WHEN  the score is calculated
+THEN  a score is returned; the scoring function has no error path and no ScoreOverflow variant exists
+```
+
+### 8.3 Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| Action number MAX_USER_ACTIONS + 1 in arcade | `TooManyActions { max }`, no state change |
+| Bundled scenarios | Pass FR-011 unchanged (FR-001 already holds; the suite proves it) |
+
+### 8.4 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-005 | Loader tests for both rejections through the embedded and file-system paths; the scorer signature has no bare `usize` count parameters; `rg "1_000_000\|1000000" src/` | Pass; 1 match (the constant) |
+
+## 9. See Also
 
 - [[constitution]] - project principles
 - [[training-progress-indicator/spec]] - companion status-bar fix

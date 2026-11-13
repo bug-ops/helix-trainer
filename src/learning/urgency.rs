@@ -49,12 +49,12 @@ pub enum Urgency {
 ///
 /// ```
 /// use helix_trainer::ids::CommandId;
-/// use helix_trainer::learning::{PerformanceTracker, Urgency, command_urgency};
+/// use helix_trainer::learning::{AttemptOutcome, PerformanceTracker, Urgency, command_urgency};
 /// use std::time::Duration;
 ///
 /// let mut tracker = PerformanceTracker::new();
 /// let x = CommandId::from_card_id("x").unwrap();
-/// tracker.record_attempt(&x, Duration::from_secs(1), false, Duration::from_secs(1));
+/// tracker.record_attempt(&x, Duration::from_secs(1), AttemptOutcome::Failed, Duration::from_secs(1));
 ///
 /// let now = tracker.clock().now();
 /// match command_urgency(tracker.performance(&x), now) {
@@ -81,6 +81,7 @@ pub fn command_urgency(perf: Option<&CommandPerformance>, now: DateTime<Utc>) ->
 
 #[cfg(test)]
 mod tests {
+    use crate::learning::AttemptOutcome;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -133,13 +134,13 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         let perf = tracker.performance(&cid("x")).unwrap();
@@ -169,7 +170,7 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(9),
-            false,
+            AttemptOutcome::Failed,
             Duration::from_secs(1),
         );
         clock.advance_days(10);

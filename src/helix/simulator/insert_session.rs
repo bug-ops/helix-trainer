@@ -13,6 +13,7 @@ use crate::grammar::commands::{
     CMD_APPEND, CMD_APPEND_LINE_END, CMD_CHANGE, CMD_CHANGE_SELECTION_NOYANK, CMD_INSERT,
     CMD_INSERT_LINE_START, CMD_OPEN_ABOVE, CMD_OPEN_BELOW, CMD_SELECT_REGISTER,
 };
+use crate::helix::register::Register;
 use helix_core::{Assoc, ChangeSet, Operation, Range, Rope, Selection};
 use std::num::NonZeroUsize;
 
@@ -24,6 +25,7 @@ use std::num::NonZeroUsize;
 /// # Examples
 ///
 /// ```
+/// use helix_trainer::helix::Register;
 /// use helix_trainer::helix::simulator::InsertEntryCommand;
 ///
 /// assert_eq!(
@@ -36,7 +38,7 @@ use std::num::NonZeroUsize;
 /// );
 /// assert_eq!(
 ///     InsertEntryCommand::parse("\"ac"),
-///     Some(InsertEntryCommand::Change { register: Some('a') })
+///     Some(InsertEntryCommand::Change { register: Register::from('a') })
 /// );
 /// assert_eq!(InsertEntryCommand::parse("d"), None);
 /// ```
@@ -60,11 +62,10 @@ pub enum InsertEntryCommand {
         /// How many lines to open per range.
         count: NonZeroUsize,
     },
-    /// `c` or `"<reg>c`: delete the selection into `register` (the unnamed
-    /// register for `None`) and insert.
+    /// `c` or `"<reg>c`: delete the selection into `register` and insert.
     Change {
-        /// Register the deleted text goes to.
-        register: Option<char>,
+        /// Register the deleted text goes to; plain `c` uses the unnamed one.
+        register: Register,
     },
     /// `Alt-c`: delete the selection without touching any register and insert.
     ChangeNoYank,
@@ -91,13 +92,15 @@ impl InsertEntryCommand {
             CMD_APPEND_LINE_END => Some(Self::AppendLineEnd),
             CMD_OPEN_BELOW => Some(Self::OpenBelow { count: Self::ONCE }),
             CMD_OPEN_ABOVE => Some(Self::OpenAbove { count: Self::ONCE }),
-            CMD_CHANGE => Some(Self::Change { register: None }),
+            CMD_CHANGE => Some(Self::Change {
+                register: Register::Unnamed,
+            }),
             CMD_CHANGE_SELECTION_NOYANK => Some(Self::ChangeNoYank),
             _ => {
                 let mut chars = cmd.chars();
                 match (chars.next(), chars.next(), chars.next(), chars.next()) {
                     (Some('"'), Some(register), Some('c'), None) => Some(Self::Change {
-                        register: Some(register),
+                        register: Register::from(register),
                     }),
                     _ => None,
                 }
@@ -114,10 +117,10 @@ impl InsertEntryCommand {
             Self::AppendLineEnd => CMD_APPEND_LINE_END.to_string(),
             Self::OpenBelow { count } => counted(count, CMD_OPEN_BELOW),
             Self::OpenAbove { count } => counted(count, CMD_OPEN_ABOVE),
-            Self::Change { register: None } => CMD_CHANGE.to_string(),
             Self::Change {
-                register: Some(register),
-            } => format!("{CMD_SELECT_REGISTER}{register}{CMD_CHANGE}"),
+                register: Register::Unnamed,
+            } => CMD_CHANGE.to_string(),
+            Self::Change { register } => format!("{CMD_SELECT_REGISTER}{register}{CMD_CHANGE}"),
             Self::ChangeNoYank => CMD_CHANGE_SELECTION_NOYANK.to_string(),
         }
     }

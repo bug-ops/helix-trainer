@@ -8,6 +8,7 @@
 //! 5. Boundary tests - 0 reviews, 1 review, many reviews
 
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
+use helix_trainer::learning::AttemptOutcome;
 use helix_trainer::learning::{PerformanceTracker, ReviewOutcome, ReviewSession};
 use helix_trainer::ui::state::{AppState, Message, TypedScreen};
 
@@ -56,7 +57,7 @@ fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
             tracker.record_attempt(
                 &cid(&command),
                 Duration::from_secs(5),
-                false,
+                AttemptOutcome::Failed,
                 Duration::from_secs(1),
             );
         }
@@ -139,7 +140,7 @@ fn test_complete_all_reviews_successfully() {
     let mut state = create_test_app_state_with_reviews(3);
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     // Start session
@@ -163,7 +164,7 @@ fn test_complete_all_reviews_successfully() {
     // Verify XP was awarded
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
     assert!(final_xp > initial_xp, "XP should be awarded");
 }
@@ -232,7 +233,7 @@ fn test_complete_review_command_success() {
     assert_eq!(session_after.completed().len(), 1);
     let result = &session_after.completed()[0];
     assert_eq!(result.command, command);
-    assert!(result.success);
+    assert!(result.outcome.is_recalled());
 
     // Should have advanced to next command
     assert_eq!(session_after.completed().len(), 1);
@@ -262,7 +263,7 @@ fn test_complete_review_command_failure() {
     assert_eq!(session_after.completed().len(), 1);
     let result = &session_after.completed()[0];
     assert_eq!(result.command, command);
-    assert!(!result.success);
+    assert!(!result.outcome.is_recalled());
 
     // Should still advance to next command
     assert_eq!(session_after.completed().len(), 1);
@@ -392,7 +393,7 @@ fn test_xp_calculation_base_only() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -406,7 +407,7 @@ fn test_xp_calculation_base_only() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     let awarded_xp = final_xp - initial_xp;
@@ -423,7 +424,7 @@ fn test_xp_calculation_success_rate_bonus_100_percent() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -441,7 +442,7 @@ fn test_xp_calculation_success_rate_bonus_100_percent() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     let awarded_xp = final_xp - initial_xp;
@@ -458,7 +459,7 @@ fn test_xp_calculation_success_rate_bonus_0_percent() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -476,7 +477,7 @@ fn test_xp_calculation_success_rate_bonus_0_percent() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     let awarded_xp = final_xp - initial_xp;
@@ -493,7 +494,7 @@ fn test_xp_calculation_success_rate_bonus_mixed() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -530,7 +531,7 @@ fn test_xp_calculation_success_rate_bonus_mixed() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     let awarded_xp = final_xp - initial_xp;
@@ -547,7 +548,7 @@ fn test_xp_calculation_always_positive() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -561,7 +562,7 @@ fn test_xp_calculation_always_positive() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     let awarded_xp = final_xp - initial_xp;
@@ -580,7 +581,7 @@ fn test_complete_flow_all_successful() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     // Start review session
@@ -608,7 +609,7 @@ fn test_complete_flow_all_successful() {
     // XP should be awarded
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
     assert_eq!(final_xp - initial_xp, 70); // 5*10 + 20 bonus
 }
@@ -619,7 +620,7 @@ fn test_complete_flow_all_failed() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -641,7 +642,7 @@ fn test_complete_flow_all_failed() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
     assert_eq!(final_xp - initial_xp, 30); // 3*10 + 0 bonus
 }
@@ -652,7 +653,7 @@ fn test_complete_flow_abandoned_after_partial() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -682,7 +683,7 @@ fn test_complete_flow_abandoned_after_partial() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     // XP should not be awarded for abandoned session
@@ -794,7 +795,7 @@ fn test_review_results_accumulate() {
     {
         let session = review_session(&state).unwrap();
         assert_eq!(session.completed().len(), 1);
-        assert!(session.completed()[0].success);
+        assert!(session.completed()[0].outcome.is_recalled());
     }
 
     update(
@@ -807,7 +808,7 @@ fn test_review_results_accumulate() {
     {
         let session = review_session(&state).unwrap();
         assert_eq!(session.completed().len(), 2);
-        assert!(!session.completed()[1].success);
+        assert!(!session.completed()[1].outcome.is_recalled());
     }
 
     update(

@@ -1,0 +1,102 @@
+# Long-Word Movement
+# Scenarios for W, B and E: motions over whitespace-delimited words, where
+# punctuation does not end a word (unlike w, b and e).
+
+[[scenarios]]
+id = "long_word_forward_001"
+name = "Skip punctuation-joined words"
+description = "Use 'W' to move over a whole whitespace-delimited word"
+
+hints = [
+    "'w' stops at every punctuation mark, so 'foo.bar(baz)' takes several presses",
+    "'W' treats everything up to the next whitespace as one word",
+]
+
+[scenarios.setup]
+file_content = """run foo.bar(baz) now"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """run foo.bar(baz) now"""
+selection = [0, 4, 0, 17]
+
+[scenarios.solution]
+commands = ["W", "W"]
+description = "Press 'W' twice: the first skips 'run', the second selects 'foo.bar(baz)' in one step"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "beginner"
+tags = ["word", "long-word", "navigation"]
+commands_taught = ["W"]
+
+[[scenarios]]
+id = "long_word_backward_001"
+name = "Jump back over a long word"
+description = "Use 'B' to move back to the start of a whitespace-delimited word"
+
+hints = [
+    "'b' stops inside 'foo.bar(baz)' at every punctuation mark",
+    "'B' moves back to the start of the previous whitespace-delimited word",
+]
+
+[scenarios.setup]
+file_content = """run foo.bar(baz) now"""
+cursor_position = [0, 17]
+
+[scenarios.target]
+file_content = """run foo.bar(baz) now"""
+selection = [0, 4, 0, 17]
+
+[scenarios.solution]
+commands = ["B"]
+description = "Press 'B' once to select back to the start of 'foo.bar(baz)'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["word", "long-word", "navigation"]
+commands_taught = ["B"]
+
+[[scenarios]]
+id = "long_word_end_001"
+name = "Jump to the end of a long word"
+description = "Use 'E' to move to the end of a whitespace-delimited word"
+
+hints = [
+    "'e' would stop at the first punctuation mark inside 'foo.bar(baz)'",
+    "'E' moves to the end of the whole whitespace-delimited word",
+]
+
+[scenarios.setup]
+file_content = """run foo.bar(baz) now"""
+cursor_position = [0, 3]
+
+[scenarios.target]
+file_content = """run foo.bar(baz) now"""
+selection = [0, 3, 0, 16]
+
+[scenarios.solution]
+commands = ["E"]
+description = "Press 'E' once to select up to the end of 'foo.bar(baz)'"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["word", "long-word", "navigation"]
+commands_taught = ["E"]

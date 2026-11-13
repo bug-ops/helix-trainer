@@ -9,6 +9,7 @@ use crate::constants::{
     DIFFICULTY_MULTIPLIER_INTERMEDIATE, MAX_COMBO_BONUS, MAX_EFFICIENCY_BONUS,
     MAX_TIME_BONUS_MULTIPLIER, OPTIMAL_EFFICIENCY_BONUS,
 };
+use crate::learning::AttemptOutcome;
 use crate::numeric::{Rounding, scale_u64};
 
 /// Detailed score breakdown for UI display
@@ -71,11 +72,11 @@ impl PerformanceTier {
     ///
     /// # Arguments
     ///
-    /// * `success` - Whether scenario was completed
+    /// * `outcome` - Whether scenario was completed
     /// * `efficiency` - Action efficiency (optimal / actual, 0.0 to 1.0)
     /// * `time_ratio` - Time used as fraction of limit (0.0 to 1.0)
-    pub fn from_metrics(success: bool, efficiency: f64, time_ratio: f64) -> Self {
-        if !success {
+    pub fn from_metrics(outcome: AttemptOutcome, efficiency: f64, time_ratio: f64) -> Self {
+        if !outcome.is_succeeded() {
             return Self::Failed;
         }
 
@@ -153,7 +154,7 @@ impl ScoreCalculator {
         difficulty: Difficulty,
         streak_multiplier: f64,
     ) -> ScoreBreakdown {
-        let tier = PerformanceTier::from_metrics(true, efficiency, time_ratio);
+        let tier = PerformanceTier::from_metrics(AttemptOutcome::Succeeded, efficiency, time_ratio);
         self.update_combo(tier);
 
         // Time bonus: faster = more points (up to MAX_TIME_BONUS_MULTIPLIER)
@@ -244,35 +245,37 @@ mod tests {
     use super::*;
 
     mod performance_tier_tests {
+
         use super::*;
+        use crate::learning::AttemptOutcome;
 
         #[test]
         fn test_perfect_tier() {
-            let tier = PerformanceTier::from_metrics(true, 1.0, 0.4);
+            let tier = PerformanceTier::from_metrics(AttemptOutcome::Succeeded, 1.0, 0.4);
             assert_eq!(tier, PerformanceTier::Perfect);
         }
 
         #[test]
         fn test_excellent_tier_efficient() {
-            let tier = PerformanceTier::from_metrics(true, 0.95, 0.6);
+            let tier = PerformanceTier::from_metrics(AttemptOutcome::Succeeded, 0.95, 0.6);
             assert_eq!(tier, PerformanceTier::Excellent);
         }
 
         #[test]
         fn test_excellent_tier_fast() {
-            let tier = PerformanceTier::from_metrics(true, 0.5, 0.25);
+            let tier = PerformanceTier::from_metrics(AttemptOutcome::Succeeded, 0.5, 0.25);
             assert_eq!(tier, PerformanceTier::Excellent);
         }
 
         #[test]
         fn test_good_tier() {
-            let tier = PerformanceTier::from_metrics(true, 0.7, 0.7);
+            let tier = PerformanceTier::from_metrics(AttemptOutcome::Succeeded, 0.7, 0.7);
             assert_eq!(tier, PerformanceTier::Good);
         }
 
         #[test]
         fn test_failed_tier() {
-            let tier = PerformanceTier::from_metrics(false, 0.0, 1.0);
+            let tier = PerformanceTier::from_metrics(AttemptOutcome::Failed, 0.0, 1.0);
             assert_eq!(tier, PerformanceTier::Failed);
         }
 

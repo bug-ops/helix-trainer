@@ -1,15 +1,15 @@
 # Repeat Command Scenarios
-# Scenarios demonstrating the '.' (repeat) command for replaying last action
+# '.' replays the last Insert session only (hx `repeat_last_insert`)
 
 [[scenarios]]
 id = "repeat_delete_char_001"
-name = "Repeat character deletion"
-description = "Delete a character, then repeat the deletion with the '.' command"
+name = "Repeat a change"
+description = "Change a character with 'c', then repeat the change with the '.' command"
 
 hints = [
-    "The '.' command repeats the last editing action",
-    "First delete one character with 'd'",
-    "Then press '.' to repeat the deletion",
+    "The '.' command repeats the last insert: the command that entered Insert mode, the typed text and Escape",
+    "Press 'c' to delete the character and type '_' in its place, then Escape",
+    "Move right with 'l', then press '.' to change the character under the cursor the same way",
 ]
 
 [scenarios.setup]
@@ -17,33 +17,32 @@ file_content = """let xyz = 1;"""
 cursor_position = [0, 4]
 
 [scenarios.target]
-file_content = """let z = 1;"""
-cursor_position = [0, 4]
+file_content = """let _y_ = 1;"""
+cursor_position = [0, 7]
 
 [scenarios.solution]
-commands = ["d", "."]
-description = "Press 'd' to delete 'x', then '.' to repeat and delete 'y'"
+commands = ["c", "_", "Escape", "l", "."]
+description = "Press 'c', type '_' and Escape to replace 'x', move right with 'l', then '.' to repeat the change on 'z'"
 
 [scenarios.scoring]
-optimal_count = 2
+optimal_count = 5
 max_points = 100
-tolerance = 0
+tolerance = 1
 
 [scenarios.metadata]
 category = "advanced"
 difficulty = "intermediate"
-tags = ["repeat", "delete"]
+tags = ["repeat", "change"]
 commands_taught = ["."]
 
 [[scenarios]]
 id = "repeat_delete_line_001"
-name = "Repeat line deletion"
-description = "Delete a line with 'xd', then repeat to delete another line"
+name = "Delete lines one by one"
+description = "Delete two lines, each with 'x' then 'd'"
 
 hints = [
     "Use 'x' to select the current line, then 'd' to delete it",
-    "The '.' command will repeat the entire 'xd' operation",
-    "Two line deletes with just three keystrokes after the first!",
+    "The '.' command repeats only the last insert, so delete the second line with 'x' and 'd' again",
 ]
 
 [scenarios.setup]
@@ -59,19 +58,19 @@ let d = 4;"""
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["x", "d", "."]
-description = "Press 'x' to select line, 'd' to delete, then '.' to repeat xd"
+commands = ["x", "d", "x", "d"]
+description = "Press 'x' to select the line and 'd' to delete it, twice"
 
 [scenarios.scoring]
-optimal_count = 3
+optimal_count = 4
 max_points = 100
 tolerance = 1
 
 [scenarios.metadata]
 category = "advanced"
 difficulty = "intermediate"
-tags = ["repeat", "delete", "line", "selection"]
-commands_taught = [".", "x", "d"]
+tags = ["delete", "line", "selection"]
+commands_taught = ["x", "d"]
 
 [[scenarios]]
 id = "repeat_insert_001"
@@ -109,12 +108,12 @@ commands_taught = ["."]
 
 [[scenarios]]
 id = "repeat_indent_001"
-name = "Repeat indentation"
-description = "Indent a line, then repeat to indent additional lines"
+name = "Indent lines one by one"
+description = "Indent a line, then move down and indent the next one"
 
 hints = [
     "The '>' command indents the current line",
-    "After indenting, the '.' command will repeat the indentation",
+    "The '.' command repeats only the last insert, so press '>' again on the next line",
     "Navigate between lines with 'j' (down)",
 ]
 
@@ -133,8 +132,8 @@ file_content = """fn main() {
 cursor_position = [2, 8]
 
 [scenarios.solution]
-commands = [">", "j", "."]
-description = "Indent line 2 with '>', move down with 'j', repeat indentation with '.'"
+commands = [">", "j", ">"]
+description = "Indent line 2 with '>', move down with 'j', indent line 3 with '>'"
 
 [scenarios.scoring]
 optimal_count = 3
@@ -144,19 +143,19 @@ tolerance = 2
 [scenarios.metadata]
 category = "advanced"
 difficulty = "intermediate"
-tags = ["repeat", "indent"]
-commands_taught = ["."]
+tags = ["indent"]
+commands_taught = [">"]
 
 [[scenarios]]
 id = "repeat_replace_001"
-name = "Repeat character replacement"
-description = "Replace a character, then repeat the replacement elsewhere"
+name = "Replace characters one by one"
+description = "Replace a character, then replace another one elsewhere"
 
 hints = [
     "The 'r' command replaces a single character",
     "Format: 'r' followed by the new character (e.g., 'r_')",
     "Use 'l' to move right to the next '-'",
-    "Press '.' to repeat the replacement",
+    "The '.' command repeats only the last insert, so type 'r_' again",
 ]
 
 [scenarios.setup]
@@ -168,15 +167,16 @@ file_content = """foo_bar_baz"""
 cursor_position = [0, 7]
 
 [scenarios.solution]
-commands = ["r_", "l", "l", "l", "l", "."]
-description = "Replace '-' with '_' using 'r_', move to next '-' with 'llll', repeat with '.'"
+commands = ["r_", "l", "l", "l", "l", "r_"]
+description = "Replace '-' with '_' using 'r_', move to the next '-' with 'llll', replace it with 'r_'"
 
 [scenarios.scoring]
 optimal_count = 6
 max_points = 100
 tolerance = 3
+
 [scenarios.metadata]
 category = "advanced"
 difficulty = "intermediate"
-tags = ["repeat", "replace"]
-commands_taught = ["."]
+tags = ["replace"]
+commands_taught = ["r"]

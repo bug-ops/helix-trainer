@@ -21,7 +21,7 @@ mod manager;
 // Config is always needed (stored in profile)
 mod config;
 
-pub use config::SoundConfig;
+pub use config::{SoundConfig, Volume};
 
 #[cfg(feature = "audio")]
 pub use effects::SoundEffect;
@@ -33,7 +33,7 @@ pub use manager::SoundManager;
 // No-op stubs when audio is disabled
 #[cfg(not(feature = "audio"))]
 mod stub {
-    use super::SoundConfig;
+    use super::{SoundConfig, Volume};
 
     /// Sound effect types (no-op when audio disabled)
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -97,28 +97,29 @@ mod stub {
 
         /// Stores the enabled flag so settings round-trip.
         pub fn set_enabled(&mut self, enabled: bool) {
-            self.config.enabled = enabled;
+            self.config.set_enabled(enabled);
         }
 
         /// Returns the stored enabled flag.
         pub fn is_enabled(&self) -> bool {
-            self.config.enabled
+            self.config.enabled()
         }
 
         /// Flips the enabled flag and returns the new value.
         pub fn toggle(&mut self) -> bool {
-            self.config.enabled = !self.config.enabled;
-            self.config.enabled
+            let enabled = !self.config.enabled();
+            self.config.set_enabled(enabled);
+            enabled
         }
 
-        /// Stores the volume clamped to `0.0..=1.0`.
-        pub fn set_volume(&mut self, volume: f32) {
-            self.config.volume = volume.clamp(0.0, 1.0);
+        /// Stores the volume.
+        pub fn set_volume(&mut self, volume: Volume) {
+            self.config.set_volume(volume);
         }
 
         /// Returns the stored volume.
-        pub fn volume(&self) -> f32 {
-            self.config.volume
+        pub fn volume(&self) -> Volume {
+            self.config.volume()
         }
 
         /// Returns the stored configuration.

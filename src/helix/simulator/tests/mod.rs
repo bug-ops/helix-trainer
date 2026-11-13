@@ -30,6 +30,7 @@ mod multi_cursor_tests;
 mod newline_indent_rule_tests;
 mod newline_indent_tests;
 mod paste_tests;
+mod register_tests;
 mod repeat_execution_tests;
 mod repeat_recording_tests;
 mod select_mode_extend_tests;
@@ -39,17 +40,20 @@ mod selection_tests;
 mod smart_tab_tests;
 mod viewport_tests;
 
-use crate::helix::Language;
 use crate::helix::simulator::{AnyModeSimulator, EditorSnapshot};
+use crate::helix::{CursorRange, Language, Pos};
 
 /// Builds a Normal-mode simulator with the cursor at `(row, col)`.
 pub(crate) fn sim_at_cursor(content: &str, row: usize, col: usize) -> AnyModeSimulator {
-    AnyModeSimulator::from_snapshot(&EditorSnapshot::from_row_col(content.to_string(), row, col))
+    AnyModeSimulator::from_snapshot(&EditorSnapshot::from_row_col(
+        content.to_string(),
+        Pos::new(row, col),
+    ))
 }
 
 /// Builds a Normal-mode simulator whose primary selection runs from
 /// `[start_row, start_col]` (anchor) to `[end_row, end_col]` (head).
-pub(crate) fn sim_with_selection(content: &str, sel: [usize; 4]) -> AnyModeSimulator {
+pub(crate) fn sim_with_selection(content: &str, sel: CursorRange) -> AnyModeSimulator {
     AnyModeSimulator::from_snapshot(&EditorSnapshot::from_row_col_selection(
         content.to_string(),
         sel,

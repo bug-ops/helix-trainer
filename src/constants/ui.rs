@@ -19,6 +19,8 @@ pub(crate) const KEY_HISTORY_DISPLAY_SIZE: usize = 5;
 pub(crate) const BIG_TEXT_CHAR_WIDTH_CELLS: usize = 8;
 /// Minimum width for key history popup
 pub(crate) const KEY_HISTORY_MIN_WIDTH: u16 = 30;
+/// Cells a popup border consumes along one axis (both edges)
+pub(crate) const POPUP_BORDER_CELLS: u16 = 2;
 /// Height of big text display (in lines)
 pub(crate) const BIG_TEXT_HEIGHT_LINES: u16 = 8;
 

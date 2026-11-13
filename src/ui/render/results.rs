@@ -351,11 +351,11 @@ fn render_progression_panel(
 
     let profile = &state.progress.profile;
     let level_progress = profile.level_progress();
-    let level = profile.level;
-    let total_xp = profile.total_xp;
-    let scenarios = profile.scenarios_completed;
-    let perfect = profile.perfect_scenarios;
-    let streak = profile.current_streak;
+    let level = profile.level();
+    let total_xp = profile.total_xp();
+    let scenarios = profile.scenarios_completed();
+    let perfect = profile.perfect_scenarios();
+    let streak = profile.current_streak();
 
     // Level with XP progress
     lines.push(Line::from(vec![

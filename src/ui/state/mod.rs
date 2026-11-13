@@ -22,7 +22,7 @@ use crate::async_state::SaveRequest;
 use crate::config::Scenario;
 use crate::error::UserError;
 use crate::gamification::{ProfileStorage, UserProfile};
-use crate::ids::ScenarioId;
+use crate::ids::{NormalizedCommand, ScenarioId};
 use crate::learning::PerformanceTracker;
 use crate::sound::SoundEffect;
 use crate::time::{Clock, MonotonicClock};
@@ -103,6 +103,23 @@ pub struct QuestProgressChange {
     pub old_progress: u32,
     /// Progress after the run.
     pub new_progress: u32,
+}
+
+/// One thing that happened in a run that quests track.
+///
+/// Each case carries exactly the data its progress needs, so an event that
+/// would do nothing cannot be built.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QuestEvent {
+    /// A Normal-mode command was executed.
+    CommandExecuted(NormalizedCommand),
+    /// A scenario was completed, in training or arcade.
+    ScenarioCompleted {
+        /// The completed scenario.
+        id: ScenarioId,
+        /// How long the run took; feeds time-invested quests.
+        duration: Duration,
+    },
 }
 
 /// Screens that can be entered without carrying any session or result data
@@ -261,16 +278,7 @@ pub enum Message {
     ScrollAchievements(i32),
 
     /// Update quest progress based on gameplay
-    UpdateQuestProgress {
-        /// Command executed, when the progress update follows one.
-        command: Option<String>,
-        /// Whether the run completed its scenario.
-        scenario_completed: bool,
-        /// Scenario the update refers to.
-        scenario_id: Option<ScenarioId>,
-        /// Time the run took.
-        duration: Duration,
-    },
+    UpdateQuestProgress(QuestEvent),
 
     /// Navigate to category filters screen
     ShowCategoryFilters,
@@ -905,19 +913,8 @@ pub(crate) fn dispatch(state: &mut AppState, msg: Message) -> Result<(), UserErr
         }
 
         // Quest messages
-        Message::UpdateQuestProgress {
-            command,
-            scenario_completed,
-            scenario_id,
-            duration,
-        } => {
-            handlers::handle_update_quest_progress(
-                state,
-                command.as_deref(),
-                scenario_completed,
-                scenario_id,
-                duration,
-            );
+        Message::UpdateQuestProgress(event) => {
+            handlers::handle_update_quest_progress(state, event);
             Ok(())
         }
 

@@ -214,6 +214,7 @@ impl<'a> ScenarioPrioritizer<'a> {
 mod tests {
     use super::*;
     use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState};
+    use crate::learning::AttemptOutcome;
     use crate::testing::{cid, sid};
     use crate::time::{Clock, FakeClock};
     use chrono::Duration;
@@ -272,7 +273,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("dd"),
                 StdDuration::from_secs(1),
-                true,
+                AttemptOutcome::Succeeded,
                 StdDuration::from_secs(1),
             );
         }
@@ -300,7 +301,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("dd"),
                 StdDuration::from_secs(10),
-                false,
+                AttemptOutcome::Failed,
                 StdDuration::from_secs(1),
             );
         }
@@ -308,7 +309,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("dd"),
                 StdDuration::from_secs(1),
-                true,
+                AttemptOutcome::Succeeded,
                 StdDuration::from_secs(1),
             );
         }
@@ -336,7 +337,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("h"),
                 StdDuration::from_secs(1),
-                true,
+                AttemptOutcome::Succeeded,
                 StdDuration::from_secs(1),
             );
         }
@@ -459,7 +460,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("h"),
                 StdDuration::from_secs(1),
-                true,
+                AttemptOutcome::Succeeded,
                 StdDuration::from_secs(1),
             );
         }
@@ -469,7 +470,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("dd"),
                 StdDuration::from_secs(10),
-                false,
+                AttemptOutcome::Failed,
                 StdDuration::from_secs(1),
             );
         }
@@ -512,7 +513,7 @@ mod tests {
         tracker.record_attempt(
             &cid(cmd),
             StdDuration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             StdDuration::from_secs(1),
         );
         let interval = i64::from(tracker.performance(&cid(cmd)).unwrap().scheduled_days());
@@ -566,7 +567,7 @@ mod tests {
         tracker.record_attempt(
             &cid("dd"),
             StdDuration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             StdDuration::from_secs(1),
         );
         let interval = i64::from(tracker.performance(&cid("dd")).unwrap().scheduled_days());

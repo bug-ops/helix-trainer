@@ -2,7 +2,6 @@
 //!
 //! Processes messages from background data loaders and updates app state.
 
-use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,10 +12,10 @@ use helix_trainer::{
         AchievementEngine, LockStatus, QuarantineOutcome, QuestGenerator, QuestRegistrySlot,
         StreakChange, StreakManager, UserProfile,
     },
-    input::keymap::keymap_fingerprint_mismatch_message,
     learning::PerformanceTracker,
     security::error_chain,
-    ui::{AppState, Notification, NotificationType, state::Quarantine, text},
+    time::Moment,
+    ui::{AppState, Notification, NotificationType, ProfileBackup, state::Quarantine},
 };
 
 /// How long a data-loss-risk warning notification stays visible.
@@ -28,35 +27,26 @@ const WARNING_NOTIFICATION_DURATION: Duration = Duration::from_secs(8);
 
 /// Short popup text for a failed profile load; the persistent banner (see
 /// `ui::render`) carries the backup location.
-fn profile_load_failure_message(backup: &QuarantineOutcome) -> String {
+fn profile_backup(backup: &QuarantineOutcome) -> ProfileBackup {
     match backup {
-        QuarantineOutcome::BackedUp(_) => {
-            "Progress could not be loaded. Saving is disabled this session; a backup was kept."
-        }
-        QuarantineOutcome::Failed(_) => {
-            "Progress could not be loaded and no backup was made. Saving is disabled this session."
-        }
+        QuarantineOutcome::BackedUp(_) => ProfileBackup::Kept,
+        QuarantineOutcome::Failed(_) => ProfileBackup::Missing,
     }
-    .to_string()
 }
 
 /// Warning shown when a profile save fails; the next save retries.
 ///
 /// Carries no error detail: paths and OS messages go to the log, not the screen.
 fn save_failed_notification() -> Notification {
-    Notification::with_duration(
-        NotificationType::Info {
-            message: "Failed to save progress. Will retry automatically.".to_string(),
-        },
-        WARNING_NOTIFICATION_DURATION,
-    )
+    Notification::with_duration(NotificationType::SaveFailed, WARNING_NOTIFICATION_DURATION)
 }
 
 /// Check if daily quests should be refreshed
 ///
-/// Returns true if the current date differs from the last quest refresh date.
-pub fn should_refresh_quests(profile: &UserProfile, now: DateTime<Utc>) -> bool {
-    now.date_naive() != profile.last_quest_refresh.date_naive()
+/// Returns true if the player's current day is strictly after the day of the last quest
+/// refresh; a refresh stamped on a later day (a clock or zone moved backward) is still today.
+pub fn should_refresh_quests(profile: &UserProfile, now: &Moment) -> bool {
+    now.day() > now.day_of(profile.last_quest_refresh())
 }
 
 /// Regenerate the daily quests when a new day began or none exist.
@@ -69,9 +59,9 @@ fn refresh_daily_quests_if_due(state: &mut AppState) {
     if !state.progress.persistence().is_writable() {
         return;
     }
-    let now = state.progress.now();
-    if !should_refresh_quests(&state.progress.profile, now)
-        && !state.progress.profile.daily_quests.is_empty()
+    let now = state.progress.moment();
+    if !should_refresh_quests(&state.progress.profile, &now)
+        && !state.progress.profile.daily_quests().is_empty()
     {
         return;
     }
@@ -81,21 +71,16 @@ fn refresh_daily_quests_if_due(state: &mut AppState) {
     };
 
     tracing::info!("Refreshing daily quests for new day");
-    state.progress.profile.reset_daily_quests(now);
-    let generation =
-        QuestGenerator::generate_quests(&state.progress.profile, &registry, now.date_naive());
-    state.progress.profile.daily_quests = generation.quests;
+    state.progress.profile.reset_daily_quests(now.instant());
+    let generation = QuestGenerator::generate_quests(&state.progress.profile, &registry, now.day());
+    state.progress.profile.set_daily_quests(generation.quests);
     if generation.unfilled_slots > 0 {
         tracing::warn!(
             unfilled = generation.unfilled_slots,
             "Quest templates missing; daily quests incomplete"
         );
         state.ui.notifications.push(Notification::with_duration(
-            NotificationType::Info {
-                message:
-                    "Daily quests could not be fully generated: quest templates are unavailable."
-                        .to_string(),
-            },
+            NotificationType::QuestTemplatesMissing,
             WARNING_NOTIFICATION_DURATION,
         ));
     }
@@ -107,7 +92,9 @@ fn refresh_daily_quests_if_due(state: &mut AppState) {
 /// unreadable challenge day to today so the attempt limit is never refilled.
 fn install_profile(state: &mut AppState, mut profile: UserProfile) {
     let today = state.progress.today();
-    profile.challenge_progress.settle_unreadable_day(today);
+    profile
+        .challenge_progress_mut()
+        .settle_unreadable_day(today);
     state.progress.profile = profile;
 }
 
@@ -128,12 +115,7 @@ fn warn_if_other_instance_running(state: &mut AppState) {
             "Another instance of helix-trainer appears to be running"
         );
         state.ui.notifications.push(Notification::with_duration(
-            NotificationType::Info {
-                message: format!(
-                    "Another instance (pid {pid}) appears to be running. \
-                     Progress may be overwritten if both instances save."
-                ),
-            },
+            NotificationType::OtherInstanceRunning { pid },
             WARNING_NOTIFICATION_DURATION,
         ));
     }
@@ -153,23 +135,24 @@ fn warn_if_other_instance_running(state: &mut AppState) {
 /// treating stock as a real mapping catches that uniformly, the same way
 /// switching between two different custom mappings would be caught.
 ///
-/// Always converges `profile.keymap_fingerprint` to the current
+/// Always converges `profile.keymap_fingerprint()` to the current
 /// fingerprint afterward, so this only fires once per mapping change, not
 /// on every subsequent launch with the same (still-mismatched-from-some-
 /// older-history) mapping.
 fn warn_keymap_fingerprint_mismatch(state: &mut AppState) {
     let current = state.config.keymap.fingerprint();
-    if let Some(stored) = state.progress.profile.keymap_fingerprint
+    if let Some(stored) = state.progress.profile.keymap_fingerprint()
         && stored.contradicts(current)
     {
         state.ui.notifications.push(Notification::with_duration(
-            NotificationType::Info {
-                message: keymap_fingerprint_mismatch_message(),
-            },
+            NotificationType::KeymapFingerprintMismatch,
             WARNING_NOTIFICATION_DURATION,
         ));
     }
-    state.progress.profile.keymap_fingerprint = Some(current.into());
+    state
+        .progress
+        .profile
+        .set_keymap_fingerprint(Some(current.into()));
 }
 
 /// Handle messages from background data loaders
@@ -198,10 +181,11 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
             // independently, which could straddle a midnight boundary; this also fixes
             // a latent race where the streak and quest-refresh checks could disagree
             // about what day it is.
-            let now = state.progress.now();
+            let now = state.progress.moment();
 
             // Update streak and refresh quests if needed
             let mut updated_profile = profile;
+            updated_profile.clamp_future_days(&now);
             let streak_change = StreakManager::update_streak(&mut updated_profile, now);
             tracing::debug!("Streak status: {:?}", streak_change);
             match streak_change {
@@ -226,7 +210,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
             }
 
             state.progress.performance_tracker = PerformanceTracker::from_stats_with_clock(
-                updated_profile.performance_data.clone(),
+                updated_profile.performance_data().clone(),
                 state.progress.clock(),
             );
             install_profile(state, updated_profile);
@@ -249,10 +233,9 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
                     state
                         .ui
                         .notifications
-                        .push(Notification::new(NotificationType::Achievement {
-                            name: text::achievement_name(achievement_id),
-                            description: text::achievement_description(achievement_id),
-                        }));
+                        .push(Notification::new(NotificationType::Achievement(
+                            achievement_id,
+                        )));
                 }
                 if let Err(e) = state.progress.save_immediate() {
                     tracing::error!(
@@ -279,9 +262,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
                 "Profile load failed, saving disabled"
             );
             state.ui.notifications.push(Notification::with_duration(
-                NotificationType::Info {
-                    message: profile_load_failure_message(&backup),
-                },
+                NotificationType::ProfileLoadFailed(profile_backup(&backup)),
                 WARNING_NOTIFICATION_DURATION,
             ));
             state
@@ -322,12 +303,13 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use helix_trainer::async_state::{LoaderError, SaveFailure};
     use helix_trainer::config::json_store::QuarantineError;
     use helix_trainer::config::json_store::{Document, StorageError};
     use helix_trainer::config::keymap::fingerprint::{KeymapFingerprint, StoredKeymapFingerprint};
     use helix_trainer::error::UserError;
-    use helix_trainer::gamification::PreviousCopy;
+    use helix_trainer::gamification::{PreviousCopy, Quest, QuestDifficulty, QuestType};
     use helix_trainer::ids::{QuestId, ScenarioId};
     use helix_trainer::{
         config::{
@@ -342,6 +324,12 @@ mod tests {
     // Binary crate tests cannot access the library's #[cfg(test)]-gated
     // `ProfileStorage::for_test()`, so we mirror it locally here: a unique file
     // under a process-lifetime temp dir, never the real user profile path.
+    fn profile_with_fingerprint(fingerprint: KeymapFingerprint) -> UserProfile {
+        let mut profile = UserProfile::new();
+        profile.set_keymap_fingerprint(Some(StoredKeymapFingerprint::Current(fingerprint)));
+        profile
+    }
+
     fn test_profile_storage() -> ProfileStorage {
         use std::sync::OnceLock;
         use std::sync::atomic::{AtomicU64, Ordering};
@@ -401,6 +389,35 @@ mod tests {
         }
     }
 
+    /// #660: quests refresh at the player's local midnight (UTC+9: not at 09:00 local).
+    #[test]
+    fn quests_refresh_at_local_midnight_east_of_utc() {
+        use helix_trainer::time::{Clock, FakeClock};
+
+        let clock = FakeClock::at_offset("2026-01-14T23:00:00Z", 9); // 08:00 local the 15th
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.set_last_quest_refresh(clock.now());
+
+        clock.advance(chrono::Duration::minutes(90)); // 09:30 local, the next UTC date
+        assert!(!should_refresh_quests(&profile, &clock.moment()));
+
+        clock.advance(chrono::Duration::hours(15)); // 00:30 local the 16th
+        assert!(should_refresh_quests(&profile, &clock.moment()));
+    }
+
+    /// FR-007: east, west, east on one real day refreshes at most once.
+    #[test]
+    fn quests_do_not_refresh_again_when_the_zone_moves_west() {
+        use helix_trainer::time::{Clock, FakeClock};
+
+        let clock = FakeClock::at_offset("2026-01-15T20:00:00Z", 9); // the 16th, local
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.set_last_quest_refresh(clock.now());
+        clock.set_utc_offset_hours(-8); // the 15th, local
+
+        assert!(!should_refresh_quests(&profile, &clock.moment()));
+    }
+
     #[test]
     fn test_handle_scenarios_ready() {
         let mut state = empty_test_app_state();
@@ -440,14 +457,32 @@ mod tests {
     fn test_handle_profile_ready() {
         let mut state = empty_test_app_state();
         let mut profile = UserProfile::new();
-        profile.total_xp = 500;
-        profile.level = 3;
+        profile.set_total_xp(500);
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         let loaded_profile = &state.progress.profile;
-        assert_eq!(loaded_profile.total_xp, 500);
-        assert_eq!(loaded_profile.level, 3);
+        assert_eq!(loaded_profile.total_xp(), 500);
+        assert_eq!(loaded_profile.level(), 3);
+    }
+
+    /// FR-003: a stored day far ahead (a clock that ran ahead, then was corrected) is
+    /// clamped on load, so the streak keeps counting instead of freezing.
+    #[test]
+    fn test_handle_profile_ready_clamps_days_far_ahead() {
+        let mut state = empty_test_app_state();
+        let mut profile = UserProfile::new();
+        profile.set_current_streak(4);
+        profile.set_last_activity(Utc::now() + chrono::Duration::days(30));
+        profile.set_last_quest_refresh(Utc::now() + chrono::Duration::days(30));
+
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        let now = state.progress.moment();
+        let loaded = &state.progress.profile;
+        assert_eq!(loaded.current_streak(), 4);
+        assert!(now.day_of(loaded.last_activity()) <= now.day());
+        assert!(now.day_of(loaded.last_quest_refresh()) <= now.day());
     }
 
     fn app_state_with_keymap_toml(toml: &str) -> AppState {
@@ -489,20 +524,19 @@ mod tests {
     fn test_handle_profile_ready_replaces_a_legacy_fingerprint_without_notifying() {
         let mut state = app_state_with_keymap();
         let mut profile = UserProfile::new();
-        profile.keymap_fingerprint = Some(StoredKeymapFingerprint::Legacy(12345));
+        profile.set_keymap_fingerprint(Some(StoredKeymapFingerprint::Legacy(12345)));
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            !state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            !state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "a legacy fingerprint must not raise the mismatch notification"
         );
         assert_eq!(
-            state.progress.profile.keymap_fingerprint,
+            state.progress.profile.keymap_fingerprint(),
             Some(StoredKeymapFingerprint::Current(
                 state.config.keymap.fingerprint()
             ))
@@ -516,23 +550,21 @@ mod tests {
         let mut state = app_state_with_keymap();
         let current_fingerprint = state.config.keymap.fingerprint();
         let mut profile = UserProfile::new();
-        profile.keymap_fingerprint = Some(StoredKeymapFingerprint::Current(different_from(
+        profile.set_keymap_fingerprint(Some(StoredKeymapFingerprint::Current(different_from(
             current_fingerprint,
-        )));
+        ))));
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(&n.notification_type, NotificationType::Info { message }
-                    if message == &helix_trainer::input::keymap::keymap_fingerprint_mismatch_message())),
+            state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "expected a keymap fingerprint mismatch notification"
         );
         assert_eq!(
-            state.progress.profile.keymap_fingerprint,
+            state.progress.profile.keymap_fingerprint(),
             Some(StoredKeymapFingerprint::Current(current_fingerprint)),
             "fingerprint must converge to the current keymap after notifying"
         );
@@ -547,20 +579,19 @@ mod tests {
         let mut state = app_state_with_keymap();
         let current_fingerprint = state.config.keymap.fingerprint();
         let mut profile = UserProfile::new();
-        profile.keymap_fingerprint = Some(StoredKeymapFingerprint::Current(current_fingerprint));
+        profile.set_keymap_fingerprint(Some(StoredKeymapFingerprint::Current(current_fingerprint)));
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            !state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            !state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "an unchanged custom keymap must not renotify on every launch"
         );
         assert_eq!(
-            state.progress.profile.keymap_fingerprint,
+            state.progress.profile.keymap_fingerprint(),
             Some(StoredKeymapFingerprint::Current(current_fingerprint))
         );
     }
@@ -572,20 +603,19 @@ mod tests {
     fn test_handle_profile_ready_no_notification_on_first_keymap_activation() {
         let mut state = app_state_with_keymap();
         let mut profile = UserProfile::new();
-        profile.keymap_fingerprint = None;
+        profile.set_keymap_fingerprint(None);
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            !state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            !state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "first-time keymap activation must not notify a mismatch"
         );
         assert_eq!(
-            state.progress.profile.keymap_fingerprint,
+            state.progress.profile.keymap_fingerprint(),
             Some(StoredKeymapFingerprint::Current(
                 state.config.keymap.fingerprint()
             ))
@@ -601,20 +631,19 @@ mod tests {
         let mut state = empty_test_app_state();
         assert!(state.config.keymap.is_empty());
         let mut profile = UserProfile::new();
-        profile.keymap_fingerprint = None;
+        profile.set_keymap_fingerprint(None);
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            !state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            !state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "first-ever activation (even of the stock keymap) must not notify a mismatch"
         );
         assert_eq!(
-            state.progress.profile.keymap_fingerprint,
+            state.progress.profile.keymap_fingerprint(),
             Some(StoredKeymapFingerprint::Current(
                 state.config.keymap.fingerprint()
             ))
@@ -637,22 +666,18 @@ mod tests {
 
         handle_data_message(
             &mut state,
-            DataLoadMessage::ProfileReady(UserProfile {
-                keymap_fingerprint: Some(StoredKeymapFingerprint::Current(custom_fingerprint)),
-                ..UserProfile::new()
-            }),
+            DataLoadMessage::ProfileReady(profile_with_fingerprint(custom_fingerprint)),
         );
 
         assert!(
-            state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "disabling a custom keymap must notify that history now spans a different mapping"
         );
         assert_eq!(
-            state.progress.profile.keymap_fingerprint,
+            state.progress.profile.keymap_fingerprint(),
             Some(StoredKeymapFingerprint::Current(stock_fingerprint))
         );
     }
@@ -675,21 +700,17 @@ mod tests {
         let stock_fingerprint = disabled_state.config.keymap.fingerprint();
         handle_data_message(
             &mut disabled_state,
-            DataLoadMessage::ProfileReady(UserProfile {
-                keymap_fingerprint: Some(StoredKeymapFingerprint::Current(custom_fingerprint)),
-                ..UserProfile::new()
-            }),
+            DataLoadMessage::ProfileReady(profile_with_fingerprint(custom_fingerprint)),
         );
         assert!(
-            disabled_state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            disabled_state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "disabling a custom keymap must notify that history now spans a different mapping"
         );
         assert_eq!(
-            disabled_state.progress.profile.keymap_fingerprint,
+            disabled_state.progress.profile.keymap_fingerprint(),
             Some(StoredKeymapFingerprint::Current(stock_fingerprint))
         );
 
@@ -705,15 +726,14 @@ mod tests {
         );
 
         assert!(
-            state
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            state.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "re-enabling after a stock-keymap gap must notify, not silently match a stale fingerprint"
         );
         assert_eq!(
-            state.progress.profile.keymap_fingerprint,
+            state.progress.profile.keymap_fingerprint(),
             Some(StoredKeymapFingerprint::Current(custom_fingerprint))
         );
     }
@@ -739,10 +759,7 @@ mod tests {
         let mut disabled_state = empty_test_app_state();
         handle_data_message(
             &mut disabled_state,
-            DataLoadMessage::ProfileReady(UserProfile {
-                keymap_fingerprint: Some(StoredKeymapFingerprint::Current(fingerprint_a)),
-                ..UserProfile::new()
-            }),
+            DataLoadMessage::ProfileReady(profile_with_fingerprint(fingerprint_a)),
         );
         let carried_over_profile = disabled_state.progress.profile;
 
@@ -753,15 +770,14 @@ mod tests {
         );
 
         assert!(
-            state_b
-                .ui
-                .notifications
-                .visible()
-                .any(|n| matches!(n.notification_type, NotificationType::Info { .. })),
+            state_b.ui.notifications.visible().any(|n| matches!(
+                n.notification_type,
+                NotificationType::KeymapFingerprintMismatch
+            )),
             "switching to a different custom keymap after a stock gap must still notify"
         );
         assert_eq!(
-            state_b.progress.profile.keymap_fingerprint,
+            state_b.progress.profile.keymap_fingerprint(),
             Some(StoredKeymapFingerprint::Current(fingerprint_b))
         );
     }
@@ -791,16 +807,22 @@ mod tests {
         );
 
         let mut profile = UserProfile::new_at(clock.now());
-        profile.current_streak = 6;
-        profile
-            .completed_quests_today
-            .insert(QuestId::parse("quest_0").unwrap());
+        profile.set_current_streak(6);
+        profile.push_daily_quest(Quest::new(
+            QuestId::parse("quest_0").unwrap(),
+            QuestType::ScenarioCompletion {
+                target: 1,
+                current: 1,
+            },
+            QuestDifficulty::Easy,
+        ));
+        assert!(profile.complete_quest(&QuestId::parse("quest_0").unwrap()));
         clock.advance_days(1);
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         // Streak should have incremented from 6 to 7, crossing the Streak7Days threshold
-        assert_eq!(state.progress.profile.current_streak, 7);
+        assert_eq!(state.progress.profile.current_streak(), 7);
         assert!(
             state
                 .progress
@@ -809,7 +831,7 @@ mod tests {
         );
         assert!(state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
-            NotificationType::Achievement { ref name, .. } if name == "7-Day Warrior"
+            NotificationType::Achievement(AchievementId::Streak7Days)
         )));
     }
 
@@ -850,7 +872,7 @@ mod tests {
         assert!(
             state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
-                NotificationType::Info { message } if message.contains(&other_pid.to_string())
+                NotificationType::OtherInstanceRunning { pid } if *pid == other_pid
             )),
             "expected a notification warning about the other running instance"
         );
@@ -864,15 +886,15 @@ mod tests {
     fn test_handle_profile_ready_notifies_on_streak_freeze_used() {
         let mut state = empty_test_app_state();
         let mut profile = UserProfile::new();
-        profile.current_streak = 5;
-        profile.streak_freeze_available = true;
+        profile.set_current_streak(5);
+        profile.set_streak_freeze_available(true);
         // Missed more than one day, so `update_streak` takes the "missed day(s)" branch.
-        profile.last_activity = Utc::now() - chrono::Duration::days(2);
+        profile.set_last_activity(Utc::now() - chrono::Duration::days(2));
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert!(!state.progress.profile.streak_freeze_available);
-        assert_eq!(state.progress.profile.current_streak, 5);
+        assert!(!state.progress.profile.streak_freeze_available());
+        assert_eq!(state.progress.profile.current_streak(), 5);
         assert!(
             state
                 .ui
@@ -887,15 +909,15 @@ mod tests {
     fn test_handle_profile_ready_notifies_on_streak_broken() {
         let mut state = empty_test_app_state();
         let mut profile = UserProfile::new();
-        profile.current_streak = 5;
-        profile.streak_freeze_available = false;
+        profile.set_current_streak(5);
+        profile.set_streak_freeze_available(false);
         // Missed more than one day with no freeze available, so `update_streak` breaks
         // the streak instead of protecting it.
-        profile.last_activity = Utc::now() - chrono::Duration::days(2);
+        profile.set_last_activity(Utc::now() - chrono::Duration::days(2));
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert_eq!(state.progress.profile.current_streak, 0);
+        assert_eq!(state.progress.profile.current_streak(), 0);
         assert!(
             state.ui.notifications.visible().any(|n| n.notification_type
                 == NotificationType::StreakBroken {
@@ -915,16 +937,17 @@ mod tests {
     fn test_handle_profile_ready_notifies_on_streak_broken_beyond_freeze_cap() {
         let mut state = empty_test_app_state();
         let mut profile = UserProfile::new();
-        profile.current_streak = 5;
-        profile.streak_freeze_available = true;
+        profile.set_current_streak(5);
+        profile.set_streak_freeze_available(true);
         // Gap exceeds the freeze coverage cap, so the freeze can't protect it.
-        profile.last_activity = Utc::now() - chrono::Duration::days(STREAK_FREEZE_MAX_GAP_DAYS + 1);
+        profile
+            .set_last_activity(Utc::now() - chrono::Duration::days(STREAK_FREEZE_MAX_GAP_DAYS + 1));
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert_eq!(state.progress.profile.current_streak, 0);
+        assert_eq!(state.progress.profile.current_streak(), 0);
         assert!(
-            state.progress.profile.streak_freeze_available,
+            state.progress.profile.streak_freeze_available(),
             "freeze must remain held since it couldn't cover this gap"
         );
         assert!(
@@ -942,11 +965,11 @@ mod tests {
         let mut state = empty_test_app_state();
         let mut profile = UserProfile::new();
         // current_streak is already 0 - nothing to lose, so breaking it should stay silent.
-        profile.last_activity = Utc::now() - chrono::Duration::days(2);
+        profile.set_last_activity(Utc::now() - chrono::Duration::days(2));
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert_eq!(state.progress.profile.current_streak, 0);
+        assert_eq!(state.progress.profile.current_streak(), 0);
         assert!(
             !state
                 .ui
@@ -964,15 +987,15 @@ mod tests {
     fn test_handle_profile_ready_no_freeze_used_for_never_started_streak() {
         let mut state = empty_test_app_state();
         let mut profile = UserProfile::new();
-        profile.streak_freeze_available = true;
+        profile.set_streak_freeze_available(true);
         // current_streak is already 0 - nothing to protect.
-        profile.last_activity = Utc::now() - chrono::Duration::days(2);
+        profile.set_last_activity(Utc::now() - chrono::Duration::days(2));
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
-        assert_eq!(state.progress.profile.current_streak, 0);
+        assert_eq!(state.progress.profile.current_streak(), 0);
         assert!(
-            state.progress.profile.streak_freeze_available,
+            state.progress.profile.streak_freeze_available(),
             "freeze must not be consumed when there was no streak to protect"
         );
         assert!(
@@ -989,7 +1012,7 @@ mod tests {
     fn test_handle_profile_error_uses_fallback() {
         let mut state = empty_test_app_state();
         let mut fallback = UserProfile::new();
-        fallback.total_xp = 100; // Mark fallback with some XP
+        fallback.set_total_xp(100); // Mark fallback with some XP
 
         handle_data_message(
             &mut state,
@@ -1002,7 +1025,7 @@ mod tests {
         );
 
         let loaded_profile = &state.progress.profile;
-        assert_eq!(loaded_profile.total_xp, 100); // Fallback was used
+        assert_eq!(loaded_profile.total_xp(), 100); // Fallback was used
     }
 
     /// Regression test for #440: after a failed load the unparsable file is
@@ -1040,10 +1063,11 @@ mod tests {
         };
         assert_eq!(std::fs::read_to_string(backup_path).unwrap(), "{broken");
         assert!(
-            state.ui.notifications.visible().any(|n| matches!(
-                &n.notification_type,
-                NotificationType::Info { message } if message.contains("Saving is disabled")
-            )),
+            state
+                .ui
+                .notifications
+                .visible()
+                .any(|n| matches!(&n.notification_type, NotificationType::ProfileLoadFailed(_))),
             "a failed profile load must be announced"
         );
     }
@@ -1071,14 +1095,15 @@ mod tests {
     fn test_profile_ready_applies_saved_sound_config() {
         let mut state = empty_test_app_state();
         let mut profile = UserProfile::new();
-        profile.sound_config.enabled = false;
-        profile.sound_config.volume = 12.0;
+        profile.set_sound_config(
+            serde_json::from_str(r#"{"volume": 12.0, "enabled": false}"#).unwrap(),
+        );
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         let config = state.progress.sound_manager.config();
-        assert!(!config.enabled);
-        assert!((config.volume - 1.0).abs() < f32::EPSILON);
+        assert!(!config.enabled());
+        assert!((config.volume().get() - 1.0).abs() < f32::EPSILON);
     }
 
     /// Regression test for #466: a failed startup save is reported, not
@@ -1097,17 +1122,18 @@ mod tests {
         );
         let mut profile = UserProfile::new();
         // A long streak guarantees a startup achievement unlock (and so a save).
-        profile.current_streak = 400;
-        profile.longest_streak = 400;
-        profile.last_activity = state.progress.now();
+        profile.set_current_streak(400);
+        profile.set_longest_streak(400);
+        profile.set_last_activity(state.progress.now());
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
         assert!(
-            state.ui.notifications.visible().any(|n| matches!(
-                &n.notification_type,
-                NotificationType::Info { message } if message.contains("Failed to save progress")
-            )),
+            state
+                .ui
+                .notifications
+                .visible()
+                .any(|n| matches!(&n.notification_type, NotificationType::SaveFailed)),
             "the failed startup save must be surfaced"
         );
     }
@@ -1127,9 +1153,9 @@ mod tests {
         let (tx, mut rx) = tokio::sync::mpsc::channel(4);
         state.set_save_channel(tx);
         let mut profile = UserProfile::new();
-        profile.current_streak = 400;
-        profile.longest_streak = 400;
-        profile.last_activity = state.progress.now();
+        profile.set_current_streak(400);
+        profile.set_longest_streak(400);
+        profile.set_last_activity(state.progress.now());
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
 
@@ -1182,7 +1208,7 @@ mod tests {
         assert!(
             state.ui.notifications.visible().any(|n| matches!(
                 &n.notification_type,
-                NotificationType::Info { message } if message.contains(&other_pid.to_string())
+                NotificationType::OtherInstanceRunning { pid } if *pid == other_pid
             )),
             "expected a notification warning about the other running instance"
         );
@@ -1203,8 +1229,10 @@ mod tests {
 
         let unreadable = || {
             let mut profile = UserProfile::new();
-            profile.challenge_progress.last_challenge_date = ChallengeDay::Unreadable;
-            profile.challenge_progress.attempts_used_today = 3;
+            profile
+                .challenge_progress_mut()
+                .set_last_challenge_date(ChallengeDay::Unreadable);
+            profile.challenge_progress_mut().set_attempts_used_today(3);
             profile
         };
 
@@ -1223,8 +1251,8 @@ mod tests {
 
         for state in [ready, fallback] {
             let today = state.progress.today();
-            let progress = &state.progress.profile.challenge_progress;
-            assert_eq!(progress.last_challenge_date, ChallengeDay::On(today));
+            let progress = &state.progress.profile.challenge_progress();
+            assert_eq!(progress.last_challenge_date(), ChallengeDay::On(today));
             assert!(!progress.can_attempt(today));
         }
     }
@@ -1257,10 +1285,11 @@ mod tests {
             "a failed save must re-dirty the profile so the next save retries"
         );
         assert!(
-            state.ui.notifications.visible().any(|n| matches!(
-                &n.notification_type,
-                NotificationType::Info { message } if message.contains("Failed to save progress")
-            )),
+            state
+                .ui
+                .notifications
+                .visible()
+                .any(|n| matches!(&n.notification_type, NotificationType::SaveFailed)),
             "a failed save must surface a user-facing notification"
         );
     }
@@ -1274,10 +1303,7 @@ mod tests {
             .ui
             .notifications
             .visible()
-            .filter(|n| {
-                matches!(&n.notification_type, NotificationType::Info { message }
-                if message.contains("Daily quests could not be fully generated"))
-            })
+            .filter(|n| matches!(n.notification_type, NotificationType::QuestTemplatesMissing))
             .count()
     }
 
@@ -1301,7 +1327,7 @@ mod tests {
             DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
         );
         assert_eq!(
-            state.progress.profile.daily_quests,
+            state.progress.profile.daily_quests(),
             [] as [helix_trainer::gamification::Quest; 0]
         );
 
@@ -1310,7 +1336,7 @@ mod tests {
             DataLoadMessage::ProfileReady(UserProfile::new()),
         );
 
-        assert_eq!(state.progress.profile.daily_quests.len(), 3);
+        assert_eq!(state.progress.profile.daily_quests().len(), 3);
         assert_eq!(quest_warning_count(&state), 0);
     }
 
@@ -1324,7 +1350,7 @@ mod tests {
         );
         assert_matches!(state.progress.quest_registry, QuestRegistrySlot::Pending);
         assert_eq!(
-            state.progress.profile.daily_quests,
+            state.progress.profile.daily_quests(),
             [] as [helix_trainer::gamification::Quest; 0]
         );
         assert_eq!(quest_warning_count(&state), 0);
@@ -1334,7 +1360,7 @@ mod tests {
             DataLoadMessage::QuestRegistryReady(embedded_quest_registry()),
         );
 
-        assert_eq!(state.progress.profile.daily_quests.len(), 3);
+        assert_eq!(state.progress.profile.daily_quests().len(), 3);
         assert_eq!(quest_warning_count(&state), 0);
     }
 
@@ -1360,7 +1386,7 @@ mod tests {
             QuestRegistrySlot::Unavailable
         );
         assert_eq!(
-            state.progress.profile.daily_quests,
+            state.progress.profile.daily_quests(),
             [] as [helix_trainer::gamification::Quest; 0]
         );
         assert_eq!(quest_warning_count(&state), 1);
@@ -1383,7 +1409,7 @@ mod tests {
         );
 
         assert_eq!(
-            state.progress.profile.daily_quests,
+            state.progress.profile.daily_quests(),
             [] as [helix_trainer::gamification::Quest; 0]
         );
         assert_eq!(quest_warning_count(&state), 1);
@@ -1403,7 +1429,7 @@ mod tests {
         );
 
         assert_eq!(
-            state.progress.profile.daily_quests,
+            state.progress.profile.daily_quests(),
             [] as [helix_trainer::gamification::Quest; 0]
         );
         assert_eq!(quest_warning_count(&state), 1);
@@ -1428,7 +1454,7 @@ mod tests {
         );
 
         assert_eq!(
-            state.progress.profile.daily_quests,
+            state.progress.profile.daily_quests(),
             [] as [helix_trainer::gamification::Quest; 0]
         );
     }

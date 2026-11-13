@@ -2,16 +2,17 @@
 //!
 //! Handles command execution and hint display
 
-use std::time::Duration;
-
 use super::SessionInput;
 use super::key_history;
+use super::quests::quest_command;
 use crate::error::UserError;
 use crate::grammar::commands::CMD_ESCAPE;
+use crate::helix::InsertInput;
+use crate::ids::NormalizedCommand;
 use crate::input::resolve::{Resolution, resolve_keys};
-use crate::security::error_chain;
 use crate::ui::state::{
-    AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, TypedScreen, dispatch,
+    AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, QuestEvent, TypedScreen,
+    dispatch,
 };
 
 /// Handle `ShowHint` message
@@ -85,29 +86,13 @@ pub(crate) fn handle_execute_command(
         }
     };
 
-    // `ensure_scorable` ran while the session was still active, so finishing cannot fail
-    // for a scenario that reached here; should it, the placeholder screen stays and the
-    // error surfaces.
-    let task_data = match task_data.finish_action(state.progress.monotonic_now()) {
-        Ok(task_data) => task_data,
-        Err(e) => {
-            tracing::error!(error = %error_chain(&e), "Failed to build the scenario feedback");
-            return Err(UserError::from(e));
-        }
-    };
-    let completed = task_data.session.completed().is_some();
-    state.screen = TypedScreen::Task(task_data);
+    state.screen = TypedScreen::Task(task_data.finish_action(state.progress.monotonic_now()));
 
     // Update quest progress for executed command (after releasing session borrow)
     if let Some(executed) = executed {
         dispatch(
             state,
-            Message::UpdateQuestProgress {
-                command: Some(executed.command),
-                scenario_completed: completed,
-                scenario_id: None,
-                duration: Duration::from_secs(0),
-            },
+            Message::UpdateQuestProgress(QuestEvent::CommandExecuted(executed.command)),
         )?;
     }
 
@@ -116,7 +101,7 @@ pub(crate) fn handle_execute_command(
 
 /// A normal-mode command that was executed, for quest tracking.
 struct ExecutedCommand {
-    command: String,
+    command: NormalizedCommand,
 }
 
 /// Run one resolved key against the Task screen's session.
@@ -138,12 +123,11 @@ fn execute_on_task(
 
     let mode = task_data.session.playable().mode_kind();
     match resolve_keys(task_data.input_state_mut(), mode, keys) {
-        Resolution::Insert(cmd) => {
-            let is_escape = cmd == CMD_ESCAPE;
-            apply_to_session(task_data, SessionInput::Text(&cmd))?;
+        Resolution::Insert(input) => {
+            apply_to_session(task_data, SessionInput::Insert(&input))?;
 
             // Store last command for display (only for Escape), once it was accepted
-            if is_escape {
+            if input == InsertInput::Escape {
                 task_data.last_command = Some(CMD_ESCAPE.to_string());
             }
             Ok(None)
@@ -153,23 +137,12 @@ fn execute_on_task(
             apply_to_session(task_data, SessionInput::Command(&command))?;
 
             // Store last command for display only once the simulator accepted it
-            let command = command.to_string();
-            task_data.last_command = Some(command.clone());
+            task_data.last_command = Some(command.to_string());
 
-            Ok(Some(ExecutedCommand { command }))
+            Ok(quest_command(&command).map(|command| ExecutedCommand { command }))
         }
         Resolution::Pending | Resolution::Discarded => Ok(None),
     }
-}
-
-/// Check that a finished scenario with `action_count` actions can be scored.
-fn ensure_scorable(
-    scoring: &crate::config::ScoringConfig,
-    action_count: usize,
-) -> Result<(), UserError> {
-    crate::game::Scorer::score_with_config(scoring, action_count)
-        .map(drop)
-        .map_err(UserError::from)
 }
 
 /// Apply `input` to the Task screen's active session.
@@ -181,7 +154,7 @@ fn apply_to_session(
 ) -> Result<(), UserError> {
     apply_with(task_data, |session| {
         match input {
-            SessionInput::Text(text) => session.apply_action(text.to_owned()),
+            SessionInput::Insert(input) => session.apply_insert(input),
             SessionInput::Command(command) => session.apply_command(command),
         }
         .map_err(UserError::from)
@@ -195,15 +168,7 @@ fn apply_with(
     let Some(session) = task_data.session.active_mut() else {
         return Ok(());
     };
-    apply(session)?;
-
-    // Everything that can fail when finishing a scenario (the score, hence the feedback) is
-    // checked while the session is still in place, so the transition to Completed cannot fail
-    // halfway and strand the player.
-    if session.check_completion() {
-        ensure_scorable(&session.scenario().scoring, session.action_count())?;
-    }
-    Ok(())
+    apply(session)
 }
 
 #[cfg(test)]
@@ -232,27 +197,14 @@ mod tests {
             unreachable!()
         };
 
-        let result = apply_to_session(&mut task_data, SessionInput::Text("not_a_command"));
+        let result = apply_with(&mut task_data, |session| {
+            session
+                .apply_action("not_a_command")
+                .map_err(UserError::from)
+        });
 
         assert!(result.is_err());
         assert_eq!(task_data.session.playable().action_count(), 0);
-    }
-
-    /// Regression test for #525: a scenario that cannot be scored is rejected while the
-    /// session is still active, instead of after it was consumed by the Completed transition.
-    #[test]
-    fn test_ensure_scorable_rejects_unscorable_completion() {
-        use crate::config::ScoringConfig;
-        use std::num::NonZeroUsize;
-
-        let scoring = ScoringConfig {
-            optimal_count: NonZeroUsize::new(1 << 40).unwrap(),
-            max_points: u32::MAX,
-            tolerance: 0,
-        };
-
-        assert!(ensure_scorable(&scoring, (1 << 40) + 1).is_err());
-        assert!(ensure_scorable(&scoring, 1).is_ok());
     }
 
     #[test]

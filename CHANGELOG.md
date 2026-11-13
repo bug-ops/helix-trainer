@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `?` backward search, `K`/`Alt-K` regex prompts, real Select mode, per-language indent unit, Insert-mode Tab and indent/dedent (#526)
 - Start fresh action (Ctrl-N) on the corrupt-profile banner; identical corrupt backups are no longer duplicated (#526)
 - Opt-in `completion = "after_taught_commands"` scenario rule so undo and redo goals can be expressed (#526)
+- Scenarios for the long-word motions `W`, `B`, `E`, `G` with a count and `Alt-.`, plus a guard test that fails when a registered Helix command is taught by no scenario (#642, #678)
+- Scenarios for the selection manipulation commands `;`, `Alt-;`, `Alt-,`, `Alt--`, `Alt-_`, `&`, `K` and `Alt-K` (#643, #678)
+- Scenarios for select mode `v`, backward search `?`, `Alt-*`, no-yank edits, `Ctrl-c` comment toggle and Insert-mode `Ctrl-w`, `Ctrl-k` and `Alt-Backspace` (#644, #645, #678)
+- Specs for local-day boundaries, profile invariants and typed registers, and amendments for sound volume, macro length, quest events and scoring counts (#678)
 
 ### Changed
 
@@ -96,6 +100,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Profile, popup, achievement and notification text comes from `locales/en.toml` (#598, #618)
 - `writing_code_fence_001` gains a `Delete` in its solution because typed backticks auto-pair like Helix; `optimal_count` is 13 (#597, #618)
 - Specs record the Helix 25.07.1 Insert-mode and Ctrl-c behavior, the cursor spec and the module layering (#618)
+- **Breaking**: document positions use `helix::Pos` and a typed `SelectionBounds`; tuple and four-`usize` position APIs are removed from `PlayableScenario`, `EditorDisplay` and `EditorSnapshot` (#648, #678)
+- **Breaking**: training and arcade sessions share one `LiveScenario`; `CommandExecutor` is removed, the action limit now applies to arcade, and `ActiveMiniScenario::scenario()` and `actions()` change shape (#649, #678)
+- **Breaking**: executed actions are typed `RecordedAction` with card ids derived once; `CompletionRule::is_satisfied` takes `&[CommandId]`, `Scenario::is_completed_by` is removed, and Insert-mode text can no longer complete an `after_taught_commands` scenario (#651, #678)
+- **Breaking**: quest progress runs on a typed `QuestEvent`; arcade scenario completions count toward time-invested quests and Insert-mode text no longer counts as command practice (#650, #678)
+- **Breaking**: quest completion is stored once as `QuestStatus` and the tracker returns newly completed quests; `profile.json` no longer writes `completed_quests_today` or `Quest.completed` (#652, #678)
+- **Breaking**: `UserProfile` and `ChallengeProgress` fields are private and `level` is derived from `total_xp`; loading repairs broken streak, completion and challenge bounds instead of trusting them, and a profile written by this version is read as corrupt by older builds (#647, #652, #678)
+- **Breaking**: daily quests, streaks, the daily challenge and scenario history roll over at the player's local midnight (`PlayerDay`) instead of UTC, with forward-only days clamped at today+2; on the upgrade day a player west of UTC who used today's challenge attempts in the evening stays locked through the following local day, once (#660, #678)
+- **Breaking**: attempt results are `AttemptOutcome`, level-ups are `MasteryChange`, scenario filters are `Criterion`/`PrerequisiteFilter` and tags are `ScenarioTag` (#657, #678)
+- **Breaking**: `Scorer::score` takes `NonZeroUsize` and cannot fail, the action cap is `MAX_USER_ACTIONS`, and the scenario loader rejects an optimal count that differs from the solution length (#655, #678)
+- **Breaking**: errors and notifications are typed and localized (`UserError::kind()`, `SimulatorErrorKind`, `NotificationType::Error` and others); `NotificationType::Info` is removed (#656, #678)
+- **Breaking**: registers are a closed typed `Register` set and `%`, `#` and `.` are read-only as in Helix (#658, #678)
+- **Breaking**: `.` replays only the last Insert session like Helix and the repeat scenarios are reworked (#662, #678)
+- **Breaking**: sound volume is a `Volume` newtype clamped in one place and `play_if_enabled` is removed (#659, #678)
+- **Breaking**: `SecurityError` and `SoundError` keep typed I/O, UTF-8, TOML and device causes (#654, #678)
+- Removed uncalled public API and never-constructed error variants left after #564 (#653, #678)
 
 ### Fixed
 
@@ -145,6 +164,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Daily quest generation no longer picks the same template twice in one day (#573, #591)
 - `LearningError::FsrsError` keeps the `fsrs` error as its source (#559, #591)
 - The Markdown link scenario has no redundant `;` step and its optimal count is 9 (#582, #591)
+- Macro recordings are no longer silently truncated at 100 commands (#635, #678)
+- `m s` wraps a single-character selection and `m i m`, `m a m` select the closest surrounding pair (#663, #665, #678)
+- Key history popup shows arrow-key labels such as `Left` and `Right` (#664, #678)
 
 ### Testing
 

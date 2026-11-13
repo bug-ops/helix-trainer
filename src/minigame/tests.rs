@@ -6,6 +6,7 @@ use super::*;
 use crate::config::{
     Difficulty, Scenario, ScenarioMetadata, ScoringConfig, Setup, Solution, TargetState,
 };
+use crate::learning::AttemptOutcome;
 use crate::testing::sid;
 use std::sync::Arc;
 
@@ -270,7 +271,8 @@ fn test_difficulty_controller_adjust_up() {
 
     // Record multiple quick successes at different efficiency levels
     for _ in 0..15 {
-        let point = PerformancePoint::new(true, 0.3, Difficulty::Beginner, 1.0);
+        let point =
+            PerformancePoint::new(AttemptOutcome::Succeeded, 0.3, Difficulty::Beginner, 1.0);
         controller.update_after_scenario(point);
     }
 
@@ -284,7 +286,8 @@ fn test_difficulty_controller_adjust_down() {
 
     // First increase level
     for _ in 0..20 {
-        let point = PerformancePoint::new(true, 0.3, Difficulty::Beginner, 1.0);
+        let point =
+            PerformancePoint::new(AttemptOutcome::Succeeded, 0.3, Difficulty::Beginner, 1.0);
         controller.update_after_scenario(point);
     }
 
@@ -292,7 +295,7 @@ fn test_difficulty_controller_adjust_down() {
 
     // Now record failures
     for _ in 0..15 {
-        let point = PerformancePoint::new(false, 1.0, Difficulty::Beginner, 0.2);
+        let point = PerformancePoint::new(AttemptOutcome::Failed, 1.0, Difficulty::Beginner, 0.2);
         controller.update_after_scenario(point);
     }
 
@@ -363,7 +366,7 @@ fn arcade_completion_step(commands: &[&str]) -> Option<usize> {
         session.tick_countdown();
     }
     assert_eq!(
-        session.current_scenario().unwrap().scenario.id.as_str(),
+        session.current_scenario().unwrap().scenario().id.as_str(),
         "undo_redo_001"
     );
     for (i, cmd) in commands.iter().enumerate() {

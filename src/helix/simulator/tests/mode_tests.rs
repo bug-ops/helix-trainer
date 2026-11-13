@@ -31,14 +31,14 @@ fn test_append_mode() {
     let mut sim = AnyModeSimulator::new("hello".to_string());
 
     // Cursor at start (position 0)
-    assert_eq!(sim.display().cursor_position().1, 0);
+    assert_eq!(sim.display().cursor_position().col(), 0);
 
     // Press 'a' should move cursor one position right and enter insert mode
     sim.execute_command(CMD_APPEND).unwrap();
 
     let state = sim.display();
     assert_eq!(sim.mode(), Mode::Insert);
-    assert_eq!(state.cursor_position().1, 1); // Moved one right
+    assert_eq!(state.cursor_position().col(), 1); // Moved one right
 }
 
 #[test]
@@ -48,14 +48,14 @@ fn test_insert_at_line_start() {
     // Move cursor to middle of line
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.display();
-    assert!(state.cursor_position().1 > 0);
+    assert!(state.cursor_position().col() > 0);
 
     // Press 'I' should move to the first non-blank character and enter insert mode
     sim.execute_command(CMD_INSERT_LINE_START).unwrap();
 
     let state = sim.display();
     assert_eq!(sim.mode(), Mode::Insert);
-    assert_eq!(state.cursor_position().1, 2);
+    assert_eq!(state.cursor_position().col(), 2);
 }
 
 #[test]
@@ -63,15 +63,15 @@ fn test_append_at_line_end() {
     let mut sim = AnyModeSimulator::new("hello world\nline2".to_string());
 
     // Cursor at start
-    assert_eq!(sim.display().cursor_position().1, 0);
+    assert_eq!(sim.display().cursor_position().col(), 0);
 
     // Press 'A' should move to end of line and enter insert mode
     sim.execute_command(CMD_APPEND_LINE_END).unwrap();
 
     let state = sim.display();
     assert_eq!(sim.mode(), Mode::Insert);
-    assert_eq!(state.cursor_position().1, 11); // After "hello world"
-    assert_eq!(state.cursor_position().0, 0); // Still on first line
+    assert_eq!(state.cursor_position().col(), 11); // After "hello world"
+    assert_eq!(state.cursor_position().row(), 0); // Still on first line
 }
 
 // ============================================================================
@@ -91,7 +91,7 @@ fn test_insert_text_in_insert_mode() {
 
     let state = sim.display();
     assert_eq!(state.content(), "!hello");
-    assert_eq!(state.cursor_position().1, 1);
+    assert_eq!(state.cursor_position().col(), 1);
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn test_append_at_line_end_and_insert() {
     sim.execute_command(CMD_APPEND_LINE_END).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 
-    let cursor_pos = sim.display().cursor_position().1;
+    let cursor_pos = sim.display().cursor_position().col();
     assert_eq!(cursor_pos, 5); // After 'hello'
 
     // Insert '!'
@@ -110,7 +110,7 @@ fn test_append_at_line_end_and_insert() {
 
     let state = sim.display();
     assert_eq!(state.content(), "hello!");
-    assert_eq!(state.cursor_position().1, 6);
+    assert_eq!(state.cursor_position().col(), 6);
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn test_insert_multiple_chars() {
 
     let state = sim.display();
     assert_eq!(state.content(), "abc");
-    assert_eq!(state.cursor_position().1, 3);
+    assert_eq!(state.cursor_position().col(), 3);
 }
 
 // ============================================================================
@@ -152,21 +152,21 @@ fn test_backspace_in_insert_mode() {
 
     let state = sim.display();
     assert_eq!(state.content(), "hello!!");
-    assert_eq!(state.cursor_position().1, 7);
+    assert_eq!(state.cursor_position().col(), 7);
 
     // Backspace once
     sim.execute_command(CMD_BACKSPACE).unwrap();
 
     let state = sim.display();
     assert_eq!(state.content(), "hello!");
-    assert_eq!(state.cursor_position().1, 6);
+    assert_eq!(state.cursor_position().col(), 6);
 
     // Backspace again
     sim.execute_command(CMD_BACKSPACE).unwrap();
 
     let state = sim.display();
     assert_eq!(state.content(), "hello");
-    assert_eq!(state.cursor_position().1, 5);
+    assert_eq!(state.cursor_position().col(), 5);
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn test_backspace_at_start() {
 
     let state = sim.display();
     assert_eq!(state.content(), "test");
-    assert_eq!(state.cursor_position().1, 0);
+    assert_eq!(state.cursor_position().col(), 0);
 }
 
 // ============================================================================
@@ -199,20 +199,48 @@ fn test_arrow_keys_in_insert_mode() {
 
     // Test Right arrow
     sim.execute_command(CMD_ARROW_RIGHT).unwrap();
-    assert_eq!(sim.display().cursor_position().1, 1);
+    assert_eq!(sim.display().cursor_position().col(), 1);
 
     // Test Left arrow
     sim.execute_command(CMD_ARROW_LEFT).unwrap();
-    assert_eq!(sim.display().cursor_position().1, 0);
+    assert_eq!(sim.display().cursor_position().col(), 0);
 
     // Test Down arrow
     sim.execute_command(CMD_ARROW_DOWN).unwrap();
-    assert_eq!(sim.display().cursor_position().0, 1);
+    assert_eq!(sim.display().cursor_position().row(), 1);
 
     // Test Up arrow
     sim.execute_command(CMD_ARROW_UP).unwrap();
-    assert_eq!(sim.display().cursor_position().0, 0);
+    assert_eq!(sim.display().cursor_position().row(), 0);
 
     // Should still be in Insert mode
+    assert_eq!(sim.mode(), Mode::Insert);
+}
+
+#[test]
+fn test_typed_insert_input_matches_the_string_path() {
+    use crate::helix::InsertInput;
+
+    let keys = ["hi", CMD_ARROW_LEFT, "x", CMD_BACKSPACE, CMD_ESCAPE];
+    let mut by_string = AnyModeSimulator::new("ab".to_string());
+    let mut typed = AnyModeSimulator::new("ab".to_string());
+    by_string.execute_command(CMD_INSERT).unwrap();
+    typed.execute_command(CMD_INSERT).unwrap();
+
+    for key in keys {
+        by_string.execute_command(key).unwrap();
+        typed.execute_insert(&InsertInput::parse(key)).unwrap();
+        assert_eq!(typed.to_snapshot(), by_string.to_snapshot(), "{key}");
+        assert_eq!(typed.mode(), by_string.mode(), "{key}");
+    }
+    assert_eq!(typed.mode(), Mode::Normal);
+}
+
+#[test]
+fn test_typed_insert_input_in_normal_mode_runs_the_named_command() {
+    use crate::helix::InsertInput;
+
+    let mut sim = AnyModeSimulator::new("ab".to_string());
+    sim.execute_insert(&InsertInput::parse(CMD_INSERT)).unwrap();
     assert_eq!(sim.mode(), Mode::Insert);
 }

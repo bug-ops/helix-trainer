@@ -31,5 +31,5 @@ pub use quests::{
 pub use scenarios::{
     BoundError, Bounded, CompletionRule, CursorField, CursorRange, CursorSpec, DEFAULT_LANGUAGE,
     Difficulty, LastAction, Pos, Scenario, ScenarioCategory, ScenarioLoader, ScenarioMetadata,
-    ScenariosFile, ScoringConfig, Setup, Solution, TargetState,
+    ScenarioTag, ScenariosFile, ScoringConfig, Setup, Solution, TargetState,
 };

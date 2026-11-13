@@ -52,8 +52,6 @@
 //! - TODO(#620): unifying `.`-repeat's recorder with this one - see "Relationship
 //!   to `.`-repeat" above; not attempted here.
 
-use crate::limits::MAX_MACRO_LENGTH;
-
 /// Maximum macro-replay recursion depth
 ///
 /// Kept as a counter separate from `.`-repeat's `MAX_REPEAT_DEPTH`
@@ -113,16 +111,14 @@ impl MacroRecorder {
     /// Record a successfully-executed command, if currently recording and
     /// not itself part of a replay.
     ///
-    /// Silently stops accepting further commands once `MAX_MACRO_LENGTH` is
-    /// reached, keeping what was already captured rather than failing or
-    /// panicking.
+    /// Recording is not length-capped: it is bounded by the session action
+    /// limit, and truncating would drop the closing Escape of an Insert
+    /// excursion.
     pub(crate) fn record(&mut self, cmd: &str) {
         if self.is_replaying {
             return;
         }
-        if let Some(commands) = self.recording.as_mut()
-            && commands.len() < MAX_MACRO_LENGTH
-        {
+        if let Some(commands) = self.recording.as_mut() {
             commands.push(cmd.to_string());
         }
     }
@@ -197,14 +193,15 @@ mod tests {
     }
 
     #[test]
-    fn record_stops_accepting_past_max_length_without_panicking() {
+    fn record_keeps_every_command() {
+        const COMMANDS: usize = 250;
         let mut recorder = MacroRecorder::new();
         recorder.toggle();
-        for _ in 0..MAX_MACRO_LENGTH + 50 {
+        for _ in 0..COMMANDS {
             recorder.record("h");
         }
         recorder.toggle();
-        assert_eq!(recorder.stored().len(), MAX_MACRO_LENGTH);
+        assert_eq!(recorder.stored().len(), COMMANDS);
     }
 
     #[test]

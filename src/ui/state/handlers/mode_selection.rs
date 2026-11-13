@@ -10,7 +10,6 @@ use crate::ui::state::{
     HandlerContext, HandlerOutcome, MenuData, MiniGameData, MiniGameModeSelection,
     ModeSelectionData, TopMode, TypedScreen,
 };
-use rust_i18n::t;
 use std::sync::Arc;
 
 /// Handle mode selection up navigation
@@ -110,9 +109,7 @@ pub(in crate::ui::state) fn handle_select_arcade_mode(
 
 fn notify_no_scenarios(ui: &mut crate::ui::state::UIState) {
     ui.notifications
-        .push(Notification::new(NotificationType::Info {
-            message: t!("minigame.no_scenarios_available").to_string(),
-        }));
+        .push(Notification::new(NotificationType::NoScenariosAvailable));
 }
 
 /// Handle launching a specific mini-game mode
@@ -125,12 +122,10 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
     use crate::config::Scenario;
 
     let today = ctx.progress.today();
-    if mode.is_challenge() && !ctx.progress.profile.challenge_progress.can_attempt(today) {
-        ctx.ui
-            .notifications
-            .push(Notification::new(NotificationType::Info {
-                message: t!("minigame.challenge_no_attempts_left").to_string(),
-            }));
+    if mode.is_challenge() && !ctx.progress.profile.challenge_progress().can_attempt(today) {
+        ctx.ui.notifications.push(Notification::new(
+            NotificationType::ChallengeAttemptsExhausted,
+        ));
         return HandlerOutcome::Stay;
     }
 
@@ -151,7 +146,10 @@ pub(in crate::ui::state) fn handle_launch_minigame_mode(
     // Only consume an attempt once the launch is actually going to succeed -
     // an empty scenario pool above must not burn one of today's 3 attempts.
     if mode.is_challenge() {
-        ctx.progress.profile.challenge_progress.start_attempt(today);
+        ctx.progress
+            .profile
+            .challenge_progress_mut()
+            .start_attempt(today);
         // Save immediately (not debounced): a crash/quit within the debounce
         // window would otherwise refund the attempt just consumed in memory.
         ctx.ui.effects.push(Effect::SaveProfile);
@@ -442,7 +440,7 @@ mod tests {
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
         let mode = crate::minigame::MiniGameMode::Challenge(
-            crate::minigame::ChallengeConfig::for_date(chrono::Utc::now().date_naive()),
+            crate::minigame::ChallengeConfig::for_date(crate::testing::today()),
         );
         let outcome = handle_launch_minigame_mode(&mut ctx, mode);
 
@@ -476,14 +474,17 @@ mod tests {
         let outcome = handle_launch_minigame_mode(&mut ctx, mode);
         assert!(outcome.is_stay());
         assert_eq!(
-            ctx.progress.profile.challenge_progress.attempts_used_today,
+            ctx.progress
+                .profile
+                .challenge_progress()
+                .attempts_used_today(),
             CHALLENGE_MAX_ATTEMPTS
         );
         assert_eq!(
             ctx.progress
                 .profile
-                .challenge_progress
-                .total_challenges_attempted,
+                .challenge_progress()
+                .total_challenges_attempted(),
             u32::from(CHALLENGE_MAX_ATTEMPTS)
         );
 
@@ -501,7 +502,7 @@ mod tests {
                 .next()
                 .unwrap()
                 .notification_type,
-            crate::ui::notification::NotificationType::Info { .. }
+            crate::ui::notification::NotificationType::ChallengeAttemptsExhausted
         );
     }
 
@@ -521,7 +522,7 @@ mod tests {
         for _ in 0..CHALLENGE_MAX_ATTEMPTS {
             handle_launch_minigame_mode(&mut ctx, challenge_mode.clone());
         }
-        assert!(!ctx.progress.profile.challenge_progress.can_attempt(today));
+        assert!(!ctx.progress.profile.challenge_progress().can_attempt(today));
 
         let survival_mode =
             crate::minigame::MiniGameMode::Survival(crate::minigame::SurvivalConfig::default());
@@ -556,14 +557,17 @@ mod tests {
             "no save should be triggered when the launch never consumes an attempt"
         );
         assert_eq!(
-            ctx.progress.profile.challenge_progress.attempts_used_today,
+            ctx.progress
+                .profile
+                .challenge_progress()
+                .attempts_used_today(),
             0
         );
         assert_eq!(
             ctx.progress
                 .profile
-                .challenge_progress
-                .total_challenges_attempted,
+                .challenge_progress()
+                .total_challenges_attempted(),
             0
         );
     }
@@ -624,7 +628,10 @@ mod tests {
         let outcome = handle_launch_minigame_mode(&mut ctx, mode);
         assert!(outcome.is_transition());
         assert_eq!(
-            ctx.progress.profile.challenge_progress.attempts_used_today,
+            ctx.progress
+                .profile
+                .challenge_progress()
+                .attempts_used_today(),
             1
         );
     }

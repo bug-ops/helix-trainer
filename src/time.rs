@@ -5,10 +5,169 @@
 //! day-boundary and scheduling behavior deterministically. The controllable clocks,
 //! `FakeClock` and `FakeMonotonicClock`, exist in unit tests and behind the `test-util` feature.
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, FixedOffset, Local, NaiveDate, Offset, Utc};
+use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::time::Instant;
 #[cfg(any(test, feature = "test-util"))]
 use {chrono::Duration, std::sync::Mutex, std::time::Duration as StdDuration};
+
+/// A calendar day in the player's local time zone.
+///
+/// Every "daily" rule (quests, streaks, the daily challenge, scenario history) compares
+/// these, never UTC dates. Persisted instants stay UTC and become a `PlayerDay` through
+/// [`Clock::day_of`] at read time. Serializes as a `YYYY-MM-DD` string.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::time::PlayerDay;
+///
+/// let monday = PlayerDay::from_ymd(2026, 1, 12).unwrap();
+/// let tuesday = PlayerDay::from_ymd(2026, 1, 13).unwrap();
+/// assert!(tuesday > monday);
+/// assert_eq!(tuesday.days_since(monday), 1);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PlayerDay(NaiveDate);
+
+impl PlayerDay {
+    /// The player day of a calendar date.
+    #[must_use]
+    pub const fn from_date(date: NaiveDate) -> Self {
+        Self(date)
+    }
+
+    /// The player day of year, month and day, or `None` for an impossible date.
+    #[must_use]
+    pub fn from_ymd(year: i32, month: u32, day: u32) -> Option<Self> {
+        NaiveDate::from_ymd_opt(year, month, day).map(Self)
+    }
+
+    /// The calendar date.
+    #[must_use]
+    pub const fn date(self) -> NaiveDate {
+        self.0
+    }
+
+    /// The widest honest gap between a stored day and today: UTC+14 to UTC-12 is two days.
+    pub const MAX_AHEAD_DAYS: i64 = 2;
+
+    /// `self`, or `today` when `self` lies more than [`Self::MAX_AHEAD_DAYS`] ahead of it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::time::PlayerDay;
+    ///
+    /// let today = PlayerDay::from_ymd(2026, 1, 15).unwrap();
+    /// let kept = PlayerDay::from_ymd(2026, 1, 17).unwrap();
+    /// let clamped = PlayerDay::from_ymd(2026, 1, 18).unwrap();
+    /// assert_eq!(kept.clamp_ahead(today), kept);
+    /// assert_eq!(clamped.clamp_ahead(today), today);
+    /// ```
+    #[must_use]
+    pub fn clamp_ahead(self, today: Self) -> Self {
+        if self.days_since(today) > Self::MAX_AHEAD_DAYS {
+            today
+        } else {
+            self
+        }
+    }
+
+    /// Days from `earlier` to `self`; negative when `earlier` is later.
+    #[must_use]
+    pub fn days_since(self, earlier: Self) -> i64 {
+        self.0.signed_duration_since(earlier.0).num_days()
+    }
+}
+
+/// The time zone the player's days are counted in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Zone {
+    /// The operating system's local zone; undeterminable zones behave as UTC.
+    Local,
+    /// A fixed offset from UTC, for tests.
+    Fixed(FixedOffset),
+}
+
+impl Zone {
+    /// The player day of `instant` in this zone.
+    #[must_use]
+    pub fn day_of(self, instant: DateTime<Utc>) -> PlayerDay {
+        let offset = match self {
+            Self::Local => instant.with_timezone(&Local).offset().fix(),
+            Self::Fixed(offset) => offset,
+        };
+        // A persisted instant near the edge of the calendar can overflow the local date;
+        // such a value reads in UTC instead of panicking.
+        PlayerDay(
+            instant
+                .naive_utc()
+                .checked_add_offset(offset)
+                .map_or_else(|| instant.date_naive(), |local| local.date()),
+        )
+    }
+}
+
+/// An instant together with the zone the player's days are counted in.
+///
+/// Daily rules take a `Moment` so that "today" and the day of a stored instant are read in
+/// one zone; the zone is always named explicitly (`Moment::local` for the system zone).
+///
+/// # Examples
+///
+/// ```
+/// use chrono::Utc;
+/// use helix_trainer::time::Moment;
+///
+/// let moment = Moment::local(Utc::now());
+/// assert_eq!(moment.day(), moment.day_of(moment.instant()));
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Moment {
+    instant: DateTime<Utc>,
+    zone: Zone,
+}
+
+impl Moment {
+    /// `instant` seen in `zone`.
+    #[must_use]
+    pub const fn new(instant: DateTime<Utc>, zone: Zone) -> Self {
+        Self { instant, zone }
+    }
+
+    /// `instant` seen in the system's local zone.
+    #[must_use]
+    pub const fn local(instant: DateTime<Utc>) -> Self {
+        Self::new(instant, Zone::Local)
+    }
+
+    /// The UTC instant.
+    #[must_use]
+    pub const fn instant(&self) -> DateTime<Utc> {
+        self.instant
+    }
+
+    /// The player day of this moment.
+    #[must_use]
+    pub fn day(&self) -> PlayerDay {
+        self.zone.day_of(self.instant)
+    }
+
+    /// The player day of another instant, in this moment's zone.
+    #[must_use]
+    pub fn day_of(&self, instant: DateTime<Utc>) -> PlayerDay {
+        self.zone.day_of(instant)
+    }
+}
+
+impl fmt::Display for PlayerDay {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 /// Source of monotonic time for elapsed and timeout logic.
 ///
@@ -103,15 +262,28 @@ impl MonotonicClock for FakeMonotonicClock {
 /// Source of the current time for application logic.
 ///
 /// Implementors must guarantee `now()` is safe to call from any thread, since long-lived
-/// holders of `Arc<dyn Clock>` are shared across tokio tasks. Callers may assume `today()`
-/// is consistent with `now()` (same instant, just truncated to a date).
+/// holders of `Arc<dyn Clock>` are shared across tokio tasks. Callers may assume `player_day()`
+/// is consistent with `now()` (same instant, seen in the player's local time zone).
 pub trait Clock: Send + Sync {
     /// Returns the current UTC time.
     fn now(&self) -> DateTime<Utc>;
 
-    /// Returns the current UTC date, derived from [`Clock::now`].
-    fn today(&self) -> NaiveDate {
-        self.now().date_naive()
+    /// The zone the player's days are counted in.
+    fn zone(&self) -> Zone;
+
+    /// The player's local calendar day at `instant`, in the zone in effect now.
+    fn day_of(&self, instant: DateTime<Utc>) -> PlayerDay {
+        self.zone().day_of(instant)
+    }
+
+    /// The player's current local calendar day, derived from [`Clock::now`].
+    fn player_day(&self) -> PlayerDay {
+        self.day_of(self.now())
+    }
+
+    /// The current time as a [`Moment`] in the clock's zone.
+    fn moment(&self) -> Moment {
+        Moment::new(self.now(), self.zone())
     }
 }
 
@@ -131,6 +303,10 @@ pub struct SystemClock;
 impl Clock for SystemClock {
     fn now(&self) -> DateTime<Utc> {
         Utc::now()
+    }
+
+    fn zone(&self) -> Zone {
+        Zone::Local
     }
 }
 
@@ -154,6 +330,7 @@ impl Clock for SystemClock {
 #[derive(Debug)]
 pub struct FakeClock {
     now: Mutex<DateTime<Utc>>,
+    zone: Mutex<FixedOffset>,
 }
 
 #[cfg(any(test, feature = "test-util"))]
@@ -162,7 +339,33 @@ impl FakeClock {
     pub fn new(now: DateTime<Utc>) -> Self {
         Self {
             now: Mutex::new(now),
+            zone: Mutex::new(Utc.fix()),
         }
+    }
+
+    /// Creates a fake clock fixed at `rfc3339` whose player lives `hours` east of UTC
+    /// (negative for west).
+    ///
+    /// # Panics
+    ///
+    /// Panics for an invalid timestamp or an offset of a day or more.
+    pub fn at_offset(rfc3339: &str, hours: i32) -> Self {
+        let clock = Self::at(rfc3339);
+        clock.set_utc_offset_hours(hours);
+        clock
+    }
+
+    /// Moves the player to a zone `hours` east of UTC (negative for west).
+    ///
+    /// # Panics
+    ///
+    /// Panics for an offset of a day or more.
+    pub fn set_utc_offset_hours(&self, hours: i32) {
+        *self
+            .zone
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            FixedOffset::east_opt(hours * 3600).expect("offset within a day");
     }
 
     /// Creates a fake clock fixed at the given RFC 3339 timestamp.
@@ -209,6 +412,15 @@ impl Clock for FakeClock {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
+
+    fn zone(&self) -> Zone {
+        Zone::Fixed(
+            *self
+                .zone
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -227,14 +439,45 @@ mod tests {
     #[test]
     fn fake_clock_at_parses_rfc3339() {
         let clock = FakeClock::at("2026-01-15T12:00:00Z");
-        assert_eq!(clock.today(), NaiveDate::from_ymd_opt(2026, 1, 15).unwrap());
+        assert_eq!(
+            clock.player_day(),
+            PlayerDay::from_ymd(2026, 1, 15).unwrap()
+        );
     }
 
     #[test]
     fn fake_clock_advance_days_moves_today() {
         let clock = FakeClock::at("2026-01-15T12:00:00Z");
         clock.advance_days(1);
-        assert_eq!(clock.today(), NaiveDate::from_ymd_opt(2026, 1, 16).unwrap());
+        assert_eq!(
+            clock.player_day(),
+            PlayerDay::from_ymd(2026, 1, 16).unwrap()
+        );
+    }
+
+    #[test]
+    fn fake_clock_zone_decides_the_player_day() {
+        let west = FakeClock::at_offset("2026-01-16T00:30:00Z", -8);
+        let east = FakeClock::at_offset("2026-01-15T23:30:00Z", 9);
+
+        assert_eq!(west.player_day(), PlayerDay::from_ymd(2026, 1, 15).unwrap());
+        assert_eq!(east.player_day(), PlayerDay::from_ymd(2026, 1, 16).unwrap());
+    }
+
+    #[test]
+    fn a_dst_length_day_is_still_one_day() {
+        let day = |d| PlayerDay::from_ymd(2026, 3, d).unwrap();
+        assert_eq!(day(9).days_since(day(8)), 1);
+    }
+
+    #[test]
+    fn player_day_serializes_as_a_plain_date() {
+        let day = PlayerDay::from_ymd(2026, 1, 15).unwrap();
+        assert_eq!(serde_json::to_string(&day).unwrap(), "\"2026-01-15\"");
+        assert_eq!(
+            serde_json::from_str::<PlayerDay>("\"2026-01-15\"").unwrap(),
+            day
+        );
     }
 
     #[test]

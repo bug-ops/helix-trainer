@@ -6,12 +6,12 @@
 //! `c @ Escape` that exposes the selection a command leaves behind.
 
 use crate::grammar::commands::*;
-use crate::helix::Language;
 use crate::helix::registry::{ModeTransition, normal_registry};
 use crate::helix::simulator::{
     AnyModeSimulator, HelixSimulator, InsertEntryCommand, NormalMode,
     tests::{SCENARIO_14, ranges_of, run_keys},
 };
+use crate::helix::{Language, Register};
 use std::num::NonZeroUsize;
 
 /// Content after `keys` and the probe `c @ Escape`.
@@ -106,7 +106,9 @@ fn insert_session_records_exactly_one_history_entry() {
 #[test]
 fn change_with_typed_text_is_one_history_entry() {
     let mut sim = HelixSimulator::<NormalMode>::new(SCENARIO_14.to_string())
-        .begin_insert(InsertEntryCommand::Change { register: None })
+        .begin_insert(InsertEntryCommand::Change {
+            register: Register::Unnamed,
+        })
         .map_err(|failed| failed.1)
         .unwrap();
     sim.insert_text("@").unwrap();
@@ -263,12 +265,14 @@ fn insert_entry_commands_round_trip_through_parse() {
         InsertEntryCommand::OpenAbove { count: ONCE },
         InsertEntryCommand::OpenBelow { count: THRICE },
         InsertEntryCommand::OpenAbove { count: THRICE },
-        InsertEntryCommand::Change { register: None },
         InsertEntryCommand::Change {
-            register: Some('a'),
+            register: Register::Unnamed,
         },
         InsertEntryCommand::Change {
-            register: Some('_'),
+            register: Register::from('a'),
+        },
+        InsertEntryCommand::Change {
+            register: Register::from('_'),
         },
         InsertEntryCommand::ChangeNoYank,
     ];
@@ -319,7 +323,9 @@ fn registry_insert_entries_equal_what_parse_accepts() {
         InsertEntryCommand::AppendLineEnd,
         InsertEntryCommand::OpenBelow { count: ONCE },
         InsertEntryCommand::OpenAbove { count: ONCE },
-        InsertEntryCommand::Change { register: None },
+        InsertEntryCommand::Change {
+            register: Register::Unnamed,
+        },
         InsertEntryCommand::ChangeNoYank,
     ]
     .map(InsertEntryCommand::command)

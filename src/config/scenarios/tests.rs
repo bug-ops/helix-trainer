@@ -870,7 +870,10 @@ prerequisites = ["basic_001"]
 
     assert_eq!(metadata.category, Some(ScenarioCategory::Movement));
     assert_eq!(metadata.difficulty, Some(Difficulty::Intermediate));
-    assert_eq!(metadata.tags, vec!["test", "metadata"]);
+    assert_eq!(
+        metadata.tags,
+        vec![ScenarioTag::new("test"), ScenarioTag::new("metadata")]
+    );
     assert_eq!(
         metadata.commands_taught,
         vec![ncmd("h"), ncmd("j"), ncmd("k"), ncmd("l")]
@@ -1502,11 +1505,15 @@ tolerance = 0
 mod completion_rule {
     use super::*;
 
-    fn taught(commands: &[&str]) -> Vec<NormalizedCommand> {
-        commands.iter().map(|c| ncmd(c)).collect()
+    fn taught(commands: &[&str]) -> Vec<CommandId> {
+        commands.iter().map(|c| id(c).unwrap()).collect()
     }
 
-    fn last(command: &str, target_held_before: bool) -> LastAction<'_> {
+    fn id(raw: &str) -> Option<CommandId> {
+        CommandId::from_action(raw)
+    }
+
+    fn last(command: Option<&CommandId>, target_held_before: bool) -> LastAction<'_> {
         LastAction {
             command,
             target_held_before,
@@ -1555,7 +1562,10 @@ mod completion_rule {
             ),
         ];
         for (name, rule, reached, action, expected) in cases {
-            let action = action.map(|(command, held)| last(command, held));
+            let ids = action.map(|(command, held)| (id(command), held));
+            let action = ids
+                .as_ref()
+                .map(|(command, held)| last(command.as_ref(), *held));
             assert_eq!(
                 rule.is_satisfied(reached, &undo_redo, action),
                 expected,
@@ -1567,7 +1577,8 @@ mod completion_rule {
     #[test]
     fn test_u_does_not_match_taught_redo_only() {
         let rule = CompletionRule::AfterTaughtCommands;
-        assert!(!rule.is_satisfied(true, &taught(&["U"]), Some(last("u", false))));
+        let undo = id("u");
+        assert!(!rule.is_satisfied(true, &taught(&["U"]), Some(last(undo.as_ref(), false))));
     }
 }
 
@@ -1609,6 +1620,62 @@ max_points = 100
 tolerance = 0
 "#
     )
+}
+
+/// FR-011: the file-system path enforces the optimal count of the solution length.
+#[test]
+fn test_loader_rejects_an_optimal_count_that_differs_from_the_solution_length() {
+    let toml = scenario_toml_with_cursors("cursor_position = [0, 0]", "cursor_position = [0, 0]")
+        .replace("optimal_count = 1", "optimal_count = 3");
+
+    let err = load_toml(&toml).unwrap_err();
+
+    assert_matches!(
+        err,
+        crate::config::ConfigError::Scenario(ScenarioValidationError::OptimalCountMismatch {
+            optimal: 3,
+            commands: 1,
+            ..
+        })
+    );
+    let message = err.to_string();
+    assert!(
+        message.contains("cursor_spec_001") && message.contains('3') && message.contains('1'),
+        "{message}"
+    );
+}
+
+/// FR-011: a rule that completes on a taught command needs one.
+#[test]
+fn test_loader_rejects_after_taught_commands_without_taught_commands() {
+    let toml = scenario_toml_with_cursors("cursor_position = [0, 0]", "cursor_position = [0, 0]")
+        + "\n[scenarios.metadata]\ncompletion = \"after_taught_commands\"\n";
+
+    let err = load_toml(&toml).unwrap_err();
+
+    assert_matches!(
+        err,
+        crate::config::ConfigError::Scenario(ScenarioValidationError::NoTaughtCommands { .. })
+    );
+    assert!(err.to_string().contains("cursor_spec_001"));
+}
+
+/// FR-011: taught commands too long to become card ids leave nothing to complete on.
+#[test]
+fn test_loader_rejects_after_taught_commands_with_only_overlong_taught_commands() {
+    let toml = scenario_toml_with_cursors("cursor_position = [0, 0]", "cursor_position = [0, 0]")
+        + format!(
+            "\n[scenarios.metadata]\ncompletion = \"after_taught_commands\"\ncommands_taught = [\"{}\"]\n",
+            "x".repeat(200)
+        )
+        .as_str();
+
+    let err = load_toml(&toml).unwrap_err();
+
+    assert_matches!(
+        err,
+        crate::config::ConfigError::Scenario(ScenarioValidationError::NoTaughtCommands { .. })
+    );
 }
 
 #[test]

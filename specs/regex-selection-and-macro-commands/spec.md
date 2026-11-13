@@ -121,7 +121,7 @@ Use EARS notation. Prefix with FR-NNN.
 | FR-004 | WHEN a regex pattern exceeds a maximum length or a match count exceeds `MAX_REGEX_SELECTION_MATCHES` (10,000) THE SYSTEM SHALL truncate/reject rather than panic or hang | must |
 | FR-005 | WHEN the user presses `Q` while idle THE SYSTEM SHALL begin recording successfully-executed command strings into a single unnamed macro slot | must |
 | FR-006 | WHEN the user presses `Q` while recording THE SYSTEM SHALL stop recording and overwrite the stored macro with what was just captured (unconditionally, even if empty) | must |
-| FR-007 | WHEN the user presses `q` and a macro is stored THE SYSTEM SHALL replay every stored command through `execute_command_any_mode`, the same dispatch path used for live input, bounded by `MAX_MACRO_LENGTH` (100 commands recorded) and `MAX_MACRO_DEPTH` (10, replay recursion) | must |
+| FR-007 | WHEN the user presses `q` and a macro is stored THE SYSTEM SHALL replay every stored command through `execute_command_any_mode`, the same dispatch path used for live input, bounded only by `MAX_MACRO_DEPTH` (10, replay recursion); the recording length is not capped (section 12, FR-127) | must |
 | FR-008 | WHEN a command executes while a macro replay (`q`) is in progress THE SYSTEM SHALL NOT feed it back into the recording tap, even if recording is simultaneously active | must |
 | FR-009 | WHEN `s`/`S` scenario completions are recorded THE SYSTEM SHALL normalize the command id so scenario completions mint one FSRS card per skill (`select_regex`/`split_selection`) rather than one card per literal regex pattern typed | must |
 
@@ -180,7 +180,7 @@ transition that resets simulator state (see Edge Cases).
 ### Ask First
 - Introducing named macro registers (`"<reg>q`) — requires a `RegisterFile`
   data-model change (single `String` per register → `Vec<String>`)
-- Raising `MAX_MACRO_LENGTH`/`MAX_MACRO_DEPTH`/`MAX_REGEX_SELECTION_MATCHES`
+- Raising `MAX_MACRO_DEPTH`/`MAX_REGEX_SELECTION_MATCHES`
 
 ### Never
 - Let macro replay call back into itself unboundedly — always respect
@@ -344,7 +344,40 @@ WHEN  n is pressed  THEN the search goes forward (wrapping); N goes backward
 | SC-111 | Input-layer tests: `?` in Insert, in each prompt and as an argument is text; `F1` is the only hint key (Task screen; ignored in the arcade) | Pass |
 | SC-112 | Simulator tests for `?`, `K`, `Alt-K`, `&` assert buffer and selection against `hx` 25.07.1 | Pass |
 
-## 12. See Also
+## 12. Bug-Fix: A Macro Recording Is Never Truncated (#635)
+
+> [!info] Added 2026-11-13 (spec-first update for the typed-position batch)
+> FR numbers continue after FR-126. Same defect class as #622 (dot-repeat truncation, closed): the recorder silently dropped every command past `MAX_MACRO_LENGTH` (100), so a long recording lost its closing Escape and replay ended in Insert mode. hx has no macro length cap.
+
+### 12.1 Requirements
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-127 | THE macro recorder SHALL store every command recorded between the two `Q` presses; `MAX_MACRO_LENGTH` is removed and there is no recorder-specific length cap. Recording is bounded only by the session action limit (`MAX_USER_ACTIONS`, see [[optimal-count-action-counter-unit/spec#8. Typed Scorer Counts and Load-Time Invariants (#655)\|FR-013]]), because every recorded command is an executed user action | must |
+| FR-128 | THE recorder SHALL NOT drop any command silently. WHEN a command cannot be recorded for any reason THE SYSTEM SHALL surface an error and keep the already recorded commands unchanged; it SHALL NOT keep recording after dropping one | must |
+| FR-129 | THE existing invariant on a stored macro (a recording that ends in Insert mode is closed the same way as before this change) SHALL hold for any recording length | must |
+| FR-130 | `MAX_MACRO_DEPTH` (replay recursion, FR-007) is unchanged | must |
+
+### 12.2 Acceptance Criteria
+
+```
+GIVEN an empty buffer in Normal mode
+WHEN  the user presses Q, i, then 120 times x, then Escape, then Q, then q
+THEN  the stored macro holds all 122 commands (i, 120 x, Escape) and after replay the editor is in Normal mode
+```
+```
+GIVEN the same recording of exactly 100 and of 101 commands
+WHEN  the macro is replayed
+THEN  both replay completely and end in Normal mode
+```
+
+### 12.3 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-113 | Regression test with 120 commands (and the 100/101 boundary) at recorder level and through `execute_command_any_mode`; `rg MAX_MACRO_LENGTH src/` | Pass; 0 matches |
+
+## 13. See Also
 
 - [[constitution]] — project principles
 - [[../register-command-mode-support/spec]] — sibling feature; this spec

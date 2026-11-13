@@ -8,24 +8,20 @@
 //! ```
 //! use helix_trainer::game::Scorer;
 //! use helix_trainer::config::ScoringConfig;
+//! use std::num::NonZeroUsize;
 //!
-//! // Direct score calculation
-//! let score = Scorer::calculate_score(5, 5, 0, 100)?;
-//! assert_eq!(score, 100); // Perfect solution
-//!
-//! // Using scenario configuration
 //! let config = ScoringConfig {
-//!     optimal_count: std::num::NonZeroUsize::new(5).unwrap(),
+//!     optimal_count: NonZeroUsize::new(5).unwrap(),
 //!     max_points: 100,
 //!     tolerance: 2,
 //! };
-//! let score = Scorer::score_with_config(&config, 7)?;
-//! assert_eq!(score, 100); // Within tolerance
-//! # Ok::<(), helix_trainer::security::SecurityError>(())
+//! assert_eq!(Scorer::score(&config, NonZeroUsize::new(5).unwrap()), 100); // Perfect solution
+//! assert_eq!(Scorer::score(&config, NonZeroUsize::new(7).unwrap()), 100); // Within tolerance
+//! assert_eq!(Scorer::score(&config, NonZeroUsize::new(10).unwrap()), 50); // Beyond it
 //! ```
 
 use crate::config::ScoringConfig;
-use crate::security::{self, SecurityError};
+use std::num::NonZeroUsize;
 
 /// Calculates scores for training scenarios
 ///
@@ -40,99 +36,37 @@ use crate::security::{self, SecurityError};
 pub struct Scorer;
 
 impl Scorer {
-    /// Calculate score based on optimal vs actual action count
+    /// Calculate the score of a run from the scenario's scoring configuration
     ///
-    /// Awards full points if the actual action count is within tolerance
-    /// of the optimal count. Beyond tolerance, score is reduced proportionally
-    /// based on the ratio of optimal to actual actions.
-    ///
-    /// # Arguments
-    /// * `optimal_count` - Optimal number of actions to solve the scenario
-    /// * `actual_count` - Actual number of actions taken by user
-    /// * `tolerance` - Number of extra actions allowed without penalty
-    /// * `max_points` - Maximum possible points for perfect solution
-    ///
-    /// # Returns
-    /// Score from 0 to `max_points`
-    ///
-    /// # Errors
-    /// Returns `SecurityError::ScoreOverflow` if:
-    /// - `optimal_count` is 0
-    /// - `actual_count` is 0
-    /// - Score calculation would overflow
+    /// Awards full points if the actual action count is within tolerance of the
+    /// optimal count. Beyond tolerance, the score is reduced proportionally to
+    /// the ratio of optimal to actual actions. Both counts are non-zero by type
+    /// and the arithmetic is widened, so scoring cannot fail.
     ///
     /// # Examples
     /// ```
-    /// use helix_trainer::game::Scorer;
-    ///
-    /// // Perfect solution: 100 points
-    /// let score = Scorer::calculate_score(5, 5, 0, 100).unwrap();
-    /// assert_eq!(score, 100);
-    ///
-    /// // Within tolerance: still 100 points
-    /// let score = Scorer::calculate_score(5, 7, 2, 100).unwrap();
-    /// assert_eq!(score, 100);
-    ///
-    /// // Beyond tolerance: reduced score
-    /// let score = Scorer::calculate_score(5, 10, 0, 100).unwrap();
-    /// assert_eq!(score, 50);
-    /// ```
-    pub fn calculate_score(
-        optimal_count: usize,
-        actual_count: usize,
-        tolerance: usize,
-        max_points: u32,
-    ) -> Result<u32, SecurityError> {
-        // Validate inputs
-        if optimal_count == 0 {
-            return Err(SecurityError::ScoreOverflow);
-        }
-
-        if actual_count == 0 {
-            return Err(SecurityError::ScoreOverflow);
-        }
-
-        // If within tolerance, award full points
-        if actual_count <= optimal_count.saturating_add(tolerance) {
-            return Ok(max_points);
-        }
-
-        // Otherwise, calculate proportional score using safe arithmetic
-        security::arithmetic::checked_score_calculation(optimal_count, actual_count, max_points)
-    }
-
-    /// Calculate score using scenario's scoring configuration
-    ///
-    /// Extracts the scoring parameters from a `ScoringConfig` and applies
-    /// the standard scoring algorithm.
-    ///
-    /// # Errors
-    /// Returns `SecurityError` if scoring validation fails
-    ///
-    /// # Examples
-    /// ```
-    /// use helix_trainer::game::Scorer;
     /// use helix_trainer::config::ScoringConfig;
+    /// use helix_trainer::game::Scorer;
+    /// use std::num::NonZeroUsize;
     ///
     /// let config = ScoringConfig {
-    ///     optimal_count: std::num::NonZeroUsize::new(5).unwrap(),
+    ///     optimal_count: NonZeroUsize::new(5).unwrap(),
     ///     max_points: 100,
-    ///     tolerance: 2,
+    ///     tolerance: 0,
     /// };
-    ///
-    /// let score = Scorer::score_with_config(&config, 7).unwrap();
-    /// assert_eq!(score, 100); // Within tolerance
+    /// assert_eq!(Scorer::score(&config, NonZeroUsize::new(5).unwrap()), 100);
+    /// assert_eq!(Scorer::score(&config, NonZeroUsize::new(10).unwrap()), 50);
     /// ```
-    pub fn score_with_config(
-        config: &ScoringConfig,
-        actual_count: usize,
-    ) -> Result<u32, SecurityError> {
-        Self::calculate_score(
-            config.optimal_count.get(),
-            actual_count,
-            config.tolerance,
-            config.max_points,
-        )
+    #[must_use]
+    pub fn score(config: &ScoringConfig, actual: NonZeroUsize) -> u32 {
+        let optimal = config.optimal_count.get();
+        if actual.get() <= optimal.saturating_add(config.tolerance) {
+            return config.max_points;
+        }
+
+        // `actual > optimal` here, so the quotient is below `max_points` and fits in `u32`.
+        let scaled = u128::from(config.max_points) * optimal as u128 / actual.get() as u128;
+        u32::try_from(scaled).unwrap_or(config.max_points)
     }
 
     /// Get performance rating based on score percentage
@@ -170,31 +104,6 @@ impl Scorer {
             40..=59 => PerformanceRating::Fair,
             _ => PerformanceRating::Poor,
         }
-    }
-
-    /// Calculate total session score from multiple scenario scores
-    ///
-    /// Sums up scores from multiple completed scenarios with overflow protection.
-    ///
-    /// # Errors
-    /// Returns `SecurityError::ScoreOverflow` if sum would overflow u32
-    ///
-    /// # Examples
-    /// ```
-    /// use helix_trainer::game::Scorer;
-    ///
-    /// let scores = vec![100, 85, 90];
-    /// let total = Scorer::calculate_total_score(&scores).unwrap();
-    /// assert_eq!(total, 275);
-    /// ```
-    pub fn calculate_total_score(scores: &[u32]) -> Result<u32, SecurityError> {
-        let mut total: u32 = 0;
-
-        for &score in scores {
-            total = security::arithmetic::checked_score_add(total, score)?;
-        }
-
-        Ok(total)
     }
 }
 
@@ -273,46 +182,55 @@ mod tests {
     use super::*;
     use crate::config::ScoringConfig;
 
+    fn scored(optimal: usize, actual: usize, tolerance: usize, max_points: u32) -> u32 {
+        let config = ScoringConfig {
+            optimal_count: NonZeroUsize::new(optimal).unwrap(),
+            max_points,
+            tolerance,
+        };
+        Scorer::score(&config, NonZeroUsize::new(actual).unwrap())
+    }
+
     #[test]
     fn test_perfect_score() {
-        let score = Scorer::calculate_score(5, 5, 0, 100).unwrap();
+        let score = scored(5, 5, 0, 100);
         assert_eq!(score, 100);
     }
 
     #[test]
     fn test_within_tolerance() {
-        let score = Scorer::calculate_score(5, 7, 2, 100).unwrap();
+        let score = scored(5, 7, 2, 100);
         assert_eq!(score, 100);
     }
 
     #[test]
     fn test_beyond_tolerance() {
-        let score = Scorer::calculate_score(5, 10, 0, 100).unwrap();
+        let score = scored(5, 10, 0, 100);
         assert_eq!(score, 50);
-    }
-
-    #[test]
-    fn test_zero_optimal_count() {
-        let result = Scorer::calculate_score(0, 5, 0, 100);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_zero_actual_count() {
-        let result = Scorer::calculate_score(5, 0, 0, 100);
-        assert!(result.is_err());
     }
 
     #[test]
     fn test_score_with_config() {
         let config = ScoringConfig {
-            optimal_count: std::num::NonZeroUsize::new(5).unwrap(),
+            optimal_count: NonZeroUsize::new(5).unwrap(),
             max_points: 100,
             tolerance: 2,
         };
 
-        let score = Scorer::score_with_config(&config, 7).unwrap();
-        assert_eq!(score, 100);
+        assert_eq!(Scorer::score(&config, NonZeroUsize::new(7).unwrap()), 100);
+    }
+
+    #[test]
+    fn test_huge_counts_score_without_overflow() {
+        let config = ScoringConfig {
+            optimal_count: NonZeroUsize::new(1 << 40).unwrap(),
+            max_points: u32::MAX,
+            tolerance: 0,
+        };
+
+        let beyond = Scorer::score(&config, NonZeroUsize::new((1 << 40) + 1).unwrap());
+
+        assert!(beyond < u32::MAX && beyond > u32::MAX - 16);
     }
 
     #[test]
@@ -325,10 +243,10 @@ mod tests {
         assert_eq!(Scorer::rating(95, 100), PerformanceRating::Excellent);
         // Verify Excellent is reachable with realistic scenario data (optimal <= 7)
         // optimal=7, actual=8 → score = floor(7/8 * 100) = 87 → Excellent
-        let score = Scorer::calculate_score(7, 8, 0, 100).unwrap();
+        let score = scored(7, 8, 0, 100);
         assert_eq!(Scorer::rating(score, 100), PerformanceRating::Excellent);
         // optimal=4, actual=5 → score = floor(4/5 * 100) = 80 → Excellent
-        let score = Scorer::calculate_score(4, 5, 0, 100).unwrap();
+        let score = scored(4, 5, 0, 100);
         assert_eq!(Scorer::rating(score, 100), PerformanceRating::Excellent);
     }
 
@@ -350,13 +268,6 @@ mod tests {
     #[test]
     fn test_rating_zero_max_points() {
         assert_eq!(Scorer::rating(0, 0), PerformanceRating::Poor);
-    }
-
-    #[test]
-    fn test_calculate_total_score() {
-        let scores = vec![100, 85, 90];
-        let total = Scorer::calculate_total_score(&scores).unwrap();
-        assert_eq!(total, 275);
     }
 
     #[test]
@@ -386,31 +297,23 @@ mod tests {
     #[test]
     fn test_saturating_tolerance() {
         // Ensure tolerance addition doesn't overflow
-        let score = Scorer::calculate_score(5, 10, usize::MAX, 100).unwrap();
+        let score = scored(5, 10, usize::MAX, 100);
         assert_eq!(score, 100); // Within saturating tolerance
-    }
-
-    #[test]
-    fn test_total_score_overflow_prevention() {
-        // Test that overflow is properly prevented
-        let scores = vec![u32::MAX, u32::MAX];
-        let result = Scorer::calculate_total_score(&scores);
-        assert!(result.is_err());
     }
 
     #[test]
     fn test_actual_less_than_optimal() {
         // When actual < optimal, score should be capped at max_points
-        let score = Scorer::calculate_score(10, 5, 0, 100).unwrap();
+        let score = scored(10, 5, 0, 100);
         assert_eq!(score, 100);
     }
 
     #[test]
     fn test_score_with_different_max_points() {
-        let score = Scorer::calculate_score(5, 10, 0, 50).unwrap();
+        let score = scored(5, 10, 0, 50);
         assert_eq!(score, 25);
 
-        let score = Scorer::calculate_score(5, 10, 0, 200).unwrap();
+        let score = scored(5, 10, 0, 200);
         assert_eq!(score, 100);
     }
 }

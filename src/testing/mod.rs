@@ -52,20 +52,67 @@ pub fn point(row: usize, col: usize) -> CursorSpec {
     CursorSpec::Point(pos(row, col))
 }
 
-/// A single-selection [`CursorSpec`] from `anchor` to `head`, panicking on an out-of-range fixture.
-///
-/// # Panics
-///
-/// Panics if a coordinate exceeds the scenario position limit.
+/// A single-selection [`CursorSpec`] from `anchor` to `head`.
 #[must_use]
-pub fn selection(anchor: (usize, usize), head: (usize, usize)) -> CursorSpec {
-    CursorSpec::Range(
-        CursorRange::try_from([anchor.0, anchor.1, head.0, head.1]).expect("valid range fixture"),
-    )
+pub fn selection(anchor: Pos, head: Pos) -> CursorSpec {
+    CursorSpec::Range(CursorRange::new(anchor, head))
 }
 
 fn pos(row: usize, col: usize) -> Pos {
     Pos::try_from([row, col]).expect("valid position fixture")
+}
+
+/// The player's current day in the system's local zone.
+#[must_use]
+pub fn today() -> crate::time::PlayerDay {
+    crate::time::Moment::local(chrono::Utc::now()).day()
+}
+
+/// An easy quest with an explicit XP reward, for tests that assert exact XP.
+#[must_use]
+pub fn quest(
+    id: QuestId,
+    quest_type: crate::gamification::QuestType,
+    xp_reward: u32,
+) -> crate::gamification::Quest {
+    let mut quest =
+        crate::gamification::Quest::new(id, quest_type, crate::gamification::QuestDifficulty::Easy);
+    quest.xp_reward = xp_reward;
+    quest
+}
+
+/// A completed, rewarded quest, for tests that need a quest done today.
+#[must_use]
+pub fn rewarded_quest(id: &str) -> crate::gamification::Quest {
+    let mut quest = quest(
+        qid(id),
+        crate::gamification::QuestType::ScenarioCompletion {
+            target: 1,
+            current: 1,
+        },
+        25,
+    );
+    quest.mark_rewarded();
+    quest
+}
+
+/// Recorded actions for fixture strings: each is a Normal-mode command when it
+/// parses as one and typed Insert-mode input otherwise, all at time zero.
+#[must_use]
+pub fn user_actions(raw: &[&str]) -> Vec<crate::game::UserAction> {
+    use crate::game::{RecordedAction, UserAction};
+    use crate::helix::InsertInput;
+    use crate::helix::normal_command::NormalCommand;
+
+    raw.iter()
+        .map(|text| {
+            let action = NormalCommand::parse(text).map_or_else(
+                |_| RecordedAction::Insert(InsertInput::parse(text)),
+                RecordedAction::Command,
+            );
+            UserAction::new(action, std::time::Duration::ZERO)
+        })
+        .collect()
 }
 
 /// Parse a canonical Normal-mode command string, panicking on a bad fixture.

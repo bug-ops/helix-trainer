@@ -3,21 +3,23 @@
 use std::sync::Arc;
 
 use super::SessionInput;
+use super::apply_quest_event;
 use super::key_history;
+use super::quests::{QuestXpAward, quest_command};
 use crate::config::Scenario;
 use crate::error::UserError;
 use crate::game::services::ScenarioCompletionService;
 use crate::gamification::XPCalculator;
 use crate::helix::ModeKind;
 use crate::input::resolve::{Resolution, resolve_keys};
-use crate::learning::PerformanceTracker;
+use crate::learning::{AttemptOutcome, PerformanceTracker};
 use crate::minigame::MiniGameSession;
 use crate::sound::SoundEffect;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
 use crate::ui::state::{
     AppState, GameState, HandlerContext, HandlerOutcome, InputStateAccess, MiniGameData,
-    ModeSelectionData, TypedScreen,
+    ModeSelectionData, QuestEvent, TypedScreen,
 };
 
 /// Create and start a new mini-game session from available scenarios.
@@ -88,20 +90,22 @@ fn execute_minigame_command(
     state: &mut AppState,
     input: SessionInput<'_>,
 ) -> Result<(), UserError> {
-    // Snapshot quest completion status before updates
-    let was_completed = super::snapshot_quest_completion(state);
-
     let Some(session) = state.minigame_session_mut() else {
         return Ok(());
     };
 
     match input {
         SessionInput::Command(command) => session.apply_command(command)?,
-        SessionInput::Text(text) => session.handle_command(text)?,
+        SessionInput::Insert(input) => session.apply_insert(input)?,
     }
 
-    // Update quest progress for command used (shared function)
-    super::track_command_for_quests(state, &input.text());
+    // Only a typed Normal-mode command counts as command practice; Insert-mode text does not.
+    let mut quest_award = QuestXpAward::default();
+    if let SessionInput::Command(command) = input
+        && let Some(normalized) = quest_command(command)
+    {
+        quest_award.absorb(apply_quest_event(state, QuestEvent::CommandExecuted(normalized)).award);
+    }
 
     // Re-borrow session after state modification
     let Some(session) = state
@@ -129,14 +133,14 @@ fn execute_minigame_command(
         if let Some(scenario) = session.current_scenario() {
             if !scenario.actions().is_empty() {
                 let tracker = &mut state.progress.performance_tracker;
-                session.record_to_fsrs(tracker, true); // Success!
+                session.record_to_fsrs(tracker, AttemptOutcome::Succeeded);
             }
 
             // Update quest progress for scenario completion (shared function)
             let duration = scenario.elapsed();
-            let scenario_id = scenario.scenario.id.clone();
-            let scenario_difficulty = scenario.scenario.metadata.difficulty;
-            let optimal_count = scenario.scenario.scoring.optimal_count.get();
+            let scenario_id = scenario.scenario().id.clone();
+            let scenario_difficulty = scenario.scenario().metadata.difficulty;
+            let optimal_count = scenario.scenario().scoring.optimal_count.get();
             let actual_count = scenario.action_count().max(1);
             // Efficiency-only, matching Training's `is_perfect` definition. This is
             // deliberately looser than `PerformanceTier::Perfect` (efficiency AND
@@ -145,7 +149,16 @@ fn execute_minigame_command(
             // FirstPerfect/Perfect10.
             let is_perfect = actual_count <= optimal_count;
 
-            super::track_scenario_completion_for_quests(state, &scenario_id, duration);
+            quest_award.absorb(
+                apply_quest_event(
+                    state,
+                    QuestEvent::ScenarioCompleted {
+                        id: scenario_id,
+                        duration,
+                    },
+                )
+                .award,
+            );
 
             // Update mastery/perfect/completion counters the same way the training-mode
             // completion path (`record_scenario_completion`) does, so
@@ -204,14 +217,6 @@ fn execute_minigame_command(
         // Transition state will be handled by timer
     }
 
-    // Award XP for any quests newly completed by this keystroke, from the single
-    // `was_completed` snapshot taken at the top of this function. Called exactly once
-    // per keystroke regardless of whether the scenario also completed here - unlike
-    // scenario-completion XP, a CommandPractice/Exploration quest can complete on a
-    // keystroke that doesn't finish the scenario, and this is the only place that
-    // awards it (this function adds XP internally).
-    let quest_award = super::award_quest_completion_xp(state, &was_completed);
-
     // Each `add_xp` call only reports whether *that* call crossed a level boundary, so
     // OR the scenario-completion and quest-completion outcomes together (mirrors the
     // training-mode path in `record_scenario_completion`). Unlike that training-mode
@@ -219,7 +224,7 @@ fn execute_minigame_command(
     // persists at game over, so a mid-session level-up is not durable until then.
     let leveled_up = scenario_leveled_up || quest_award.leveled_up;
     if let Some(notification) =
-        ScenarioCompletionService::level_up_notification(leveled_up, state.progress.profile.level)
+        ScenarioCompletionService::level_up_notification(leveled_up, state.progress.profile.level())
     {
         state.ui.notifications.push(notification.into());
     }
@@ -266,9 +271,7 @@ pub(in crate::ui::state) fn handle_minigame_command(
     key_history::record_key(&mut state.ui, &mut minigame_data.key_history, typed);
 
     match resolve_keys(minigame_data.input_state_mut(), mode, keys) {
-        Resolution::Insert(command) => {
-            execute_minigame_command(state, SessionInput::Text(&command))
-        }
+        Resolution::Insert(input) => execute_minigame_command(state, SessionInput::Insert(&input)),
         Resolution::Execute { command, .. } => {
             execute_minigame_command(state, SessionInput::Command(&command))
         }
@@ -364,7 +367,7 @@ pub(in crate::ui::state) fn handle_minigame_game_over(state: &mut AppState) {
 
         // 1. Record final scenario to FSRS (if applicable)
         let tracker = &mut state.progress.performance_tracker;
-        session.record_to_fsrs(tracker, false); // Game over = failure on current scenario
+        session.record_to_fsrs(tracker, AttemptOutcome::Failed); // Game over = failure on current scenario
 
         // 2. Calculate XP earned
         let xp = XPCalculator::minigame_xp(stats.score, stats.level(), stats.best_streak());
@@ -372,29 +375,18 @@ pub(in crate::ui::state) fn handle_minigame_game_over(state: &mut AppState) {
         // 3. Update profile with XP and high scores
         let profile = &mut state.progress.profile;
         let leveled_up = profile.add_xp(xp);
-        let new_level = profile.level;
+        let new_level = profile.level();
 
         // Update high scores if beaten
-        let mut new_high_score = false;
-        if stats.score > profile.minigame_high_score {
-            profile.minigame_high_score = stats.score;
-            new_high_score = true;
-        }
-
-        if stats.best_streak() > profile.minigame_best_streak {
-            profile.minigame_best_streak = stats.best_streak();
-        }
+        let new_high_score = profile.record_minigame_result(stats.score, stats.best_streak());
 
         // Record Daily Challenge result (attempts/best-score tracking)
         if session.mode().is_challenge() {
             let scenarios_completed = u8::try_from(stats.scenarios_completed).unwrap_or(u8::MAX);
             profile
-                .challenge_progress
+                .challenge_progress_mut()
                 .record_result(stats.score, scenarios_completed);
         }
-
-        // Increment total games played counter
-        profile.minigame_games_played = profile.minigame_games_played.saturating_add(1);
 
         // Log results
         tracing::info!(
@@ -584,20 +576,21 @@ mod tests {
     /// scenario here is deliberately unreachable via commands) must still grant XP.
     #[test]
     fn test_execute_minigame_command_awards_quest_xp_without_completing_scenario() {
-        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+        use crate::gamification::QuestType;
 
         let mut state = create_test_state();
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("cmd_h_easy"),
-            quest_type: QuestType::CommandPractice {
-                command: ncmd("h"),
-                target: 1,
-                current: 0,
-            },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 50,
-            completed: false,
-        }];
+        state
+            .progress
+            .profile
+            .set_daily_quests(vec![crate::testing::quest(
+                qid("cmd_h_easy"),
+                QuestType::CommandPractice {
+                    command: ncmd("h"),
+                    target: 1,
+                    current: 0,
+                },
+                50,
+            )]);
 
         start_minigame(&mut state);
         if let Some(session) = state.minigame_session_mut() {
@@ -605,20 +598,26 @@ mod tests {
             session.tick_countdown();
             session.tick_countdown();
         }
-        let initial_xp = state.progress.profile.total_xp;
+        let initial_xp = state.progress.profile.total_xp();
 
-        execute_minigame_command(&mut state, SessionInput::Text("h")).unwrap();
+        execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("h")),
+        )
+        .unwrap();
 
         // The scenario itself must not have completed - only the quest should have.
         if let Some(session) = state.minigame_session() {
             assert!(!session.state().is_transition());
         }
         assert!(
-            state.progress.profile.daily_quests[0].completed,
+            state.progress.profile.daily_quests()[0]
+                .status()
+                .is_completed(),
             "CommandPractice quest should complete after using 'h' once"
         );
         assert_eq!(
-            state.progress.profile.total_xp - initial_xp,
+            state.progress.profile.total_xp() - initial_xp,
             50,
             "quest XP must be granted immediately, not lost until scenario completion"
         );
@@ -639,23 +638,23 @@ mod tests {
     /// `test_handle_complete_scenario_notifies_on_level_up_from_quest_xp_alone`.
     #[test]
     fn test_execute_minigame_command_notifies_on_level_up_from_quest_xp_alone() {
-        use crate::gamification::{Quest, QuestDifficulty, QuestType, XPCalculator};
+        use crate::gamification::{QuestType, XPCalculator};
 
         let mut state = create_test_state();
         let xp_for_level_2 = XPCalculator::xp_for_level(2);
-        state.progress.profile.total_xp = xp_for_level_2 - 1;
-        state.progress.profile.level = 1;
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("cmd_h_easy"),
-            quest_type: QuestType::CommandPractice {
-                command: ncmd("h"),
-                target: 1,
-                current: 0,
-            },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 1,
-            completed: false,
-        }];
+        state.progress.profile.set_total_xp(xp_for_level_2 - 1);
+        state
+            .progress
+            .profile
+            .set_daily_quests(vec![crate::testing::quest(
+                qid("cmd_h_easy"),
+                QuestType::CommandPractice {
+                    command: ncmd("h"),
+                    target: 1,
+                    current: 0,
+                },
+                1,
+            )]);
 
         start_minigame(&mut state);
         if let Some(session) = state.minigame_session_mut() {
@@ -664,17 +663,21 @@ mod tests {
             session.tick_countdown();
         }
 
-        execute_minigame_command(&mut state, SessionInput::Text("h")).unwrap();
+        execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("h")),
+        )
+        .unwrap();
 
         assert!(
-            state.progress.profile.level >= 2,
+            state.progress.profile.level() >= 2,
             "expected a level-up driven by quest XP"
         );
         assert!(
             state.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { new_level }
-                    if new_level == state.progress.profile.level
+                    if new_level == state.progress.profile.level()
             )),
             "expected a LevelUp notification reporting the post-award profile level"
         );
@@ -692,7 +695,11 @@ mod tests {
             session.tick_countdown();
         }
 
-        execute_minigame_command(&mut state, SessionInput::Text("h")).unwrap();
+        execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("h")),
+        )
+        .unwrap();
 
         assert!(
             !state.ui.notifications.visible().any(|n| matches!(
@@ -714,8 +721,7 @@ mod tests {
         let scenario = create_completable_scenario_with_difficulty("s1", Difficulty::Beginner);
         let mut state = create_single_scenario_state(scenario);
         let xp_for_level_2 = XPCalculator::xp_for_level(2);
-        state.progress.profile.total_xp = xp_for_level_2 - 1;
-        state.progress.profile.level = 1;
+        state.progress.profile.set_total_xp(xp_for_level_2 - 1);
         start_minigame(&mut state);
 
         if let Some(session) = state.minigame_session_mut() {
@@ -724,18 +730,24 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
         assert!(
-            state.progress.profile.level >= 2,
+            state.progress.profile.level() >= 2,
             "expected a level-up driven by scenario-completion XP"
         );
         assert!(
             state.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { new_level }
-                    if new_level == state.progress.profile.level
+                    if new_level == state.progress.profile.level()
             )),
             "expected a LevelUp notification reporting the post-award profile level"
         );
@@ -879,7 +891,7 @@ mod tests {
         }
 
         // Get initial XP
-        let initial_xp = state.progress.profile.total_xp;
+        let initial_xp = state.progress.profile.total_xp();
 
         // Manually set some stats for testing
         if let Some(session) = state.minigame_session_mut() {
@@ -897,7 +909,7 @@ mod tests {
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Check XP was awarded
-        let final_xp = state.progress.profile.total_xp;
+        let final_xp = state.progress.profile.total_xp();
         let expected_xp = XPCalculator::minigame_xp(5000, 3, 10);
         assert_eq!(final_xp - initial_xp, expected_xp);
     }
@@ -913,7 +925,7 @@ mod tests {
         start_minigame(&mut state);
 
         // Set initial high score
-        state.progress.profile.minigame_high_score = 1000;
+        state.progress.profile.set_minigame_high_score(1000);
 
         // Transition to playing and set higher score
         if let Some(session) = state.minigame_session_mut() {
@@ -928,7 +940,7 @@ mod tests {
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Check high score was updated
-        assert_eq!(state.progress.profile.minigame_high_score, 5000);
+        assert_eq!(state.progress.profile.minigame_high_score(), 5000);
     }
 
     #[test]
@@ -961,8 +973,8 @@ mod tests {
             state
                 .progress
                 .profile
-                .challenge_progress
-                .attempts_used_today,
+                .challenge_progress()
+                .attempts_used_today(),
             1
         );
 
@@ -978,17 +990,17 @@ mod tests {
 
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
-        let progress = &state.progress.profile.challenge_progress;
-        assert_eq!(progress.best_score_today, 5000);
-        assert_eq!(progress.best_scenarios_today, 7);
-        assert_eq!(progress.all_time_best_score, 5000);
-        assert_eq!(progress.all_time_best_scenarios, 7);
-        assert_eq!(progress.total_challenges_completed, 0); // 7 < CHALLENGE_SCENARIO_COUNT (10)
+        let progress = &state.progress.profile.challenge_progress();
+        assert_eq!(progress.best_score_today(), 5000);
+        assert_eq!(progress.best_scenarios_today(), 7);
+        assert_eq!(progress.all_time_best_score(), 5000);
+        assert_eq!(progress.all_time_best_scenarios(), 7);
+        assert_eq!(progress.total_challenges_completed(), 0); // 7 < CHALLENGE_SCENARIO_COUNT (10)
     }
 
     /// Regression test for #258: `handle_minigame_game_over`'s save must go through
     /// `ProgressState::save_immediate`, which syncs `performance_tracker` into
-    /// `profile.performance_data` before writing, instead of persisting a stale copy.
+    /// `profile.performance_data()` before writing, instead of persisting a stale copy.
     #[test]
     fn test_minigame_game_over_persists_synced_fsrs_data() {
         use crate::gamification::ProfileStorage;
@@ -1013,7 +1025,7 @@ mod tests {
         state.progress.performance_tracker.record_attempt(
             &cid("j"),
             Duration::from_millis(500),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_millis(500),
         );
 
@@ -1022,36 +1034,35 @@ mod tests {
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
-        assert!(!persisted.performance_data.is_empty());
-        assert!(persisted.performance_data.contains_key(&cid("j")));
+        assert!(!persisted.performance_data().is_empty());
+        assert!(persisted.performance_data().contains_key(&cid("j")));
     }
 
     #[test]
     fn test_minigame_updates_quest_progress() {
-        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+        use crate::gamification::QuestType;
 
         let mut state = create_test_state();
 
         // Initialize with sample quests
         {
             let profile = &mut state.progress.profile;
-            profile.daily_quests = vec![Quest {
-                id: qid("cmd_practice"),
-                quest_type: QuestType::CommandPractice {
+            profile.set_daily_quests(vec![crate::testing::quest(
+                qid("cmd_practice"),
+                QuestType::CommandPractice {
                     command: ncmd("j"),
                     target: 5,
                     current: 0,
                 },
-                difficulty: QuestDifficulty::Easy,
-                xp_reward: 100,
-                completed: false,
-            }];
+                100,
+            )]);
         }
 
         // Check initial quest progress
         let initial_cmd_progress = {
             let profile = &state.progress.profile;
-            if let QuestType::CommandPractice { current, .. } = &profile.daily_quests[0].quest_type
+            if let QuestType::CommandPractice { current, .. } =
+                &profile.daily_quests()[0].quest_type
             {
                 *current
             } else {
@@ -1062,12 +1073,18 @@ mod tests {
 
         // Directly test that track_command_for_quests works
         // This function is from the quests module, imported in the parent module
-        crate::ui::state::handlers::quests::track_command_for_quests(&mut state, "j");
+        drop(
+            crate::ui::state::handlers::quests::track_command_for_quests(
+                &mut state,
+                &crate::ids::NormalizedCommand::from_raw("j").unwrap(),
+            ),
+        );
 
         // Check that command quest was updated
         let cmd_progress_after = {
             let profile = &state.progress.profile;
-            if let QuestType::CommandPractice { current, .. } = &profile.daily_quests[0].quest_type
+            if let QuestType::CommandPractice { current, .. } =
+                &profile.daily_quests()[0].quest_type
             {
                 *current
             } else {
@@ -1089,6 +1106,53 @@ mod tests {
         // 1. The track_command_for_quests function correctly updates quest progress
         // 2. The tracking is integrated into minigame flow via execute_minigame_command
         // 3. Command usage is tracked for exploration quests
+    }
+
+    /// FR-033: text typed in Insert mode is not command practice; the command that
+    /// entered Insert mode still is.
+    #[test]
+    fn test_arcade_insert_text_is_not_command_practice() {
+        use crate::gamification::QuestType;
+
+        let mut state = create_test_state();
+        let practice = |id: &str, key: &str| {
+            crate::testing::quest(
+                qid(id),
+                QuestType::CommandPractice {
+                    command: ncmd(key),
+                    target: 5,
+                    current: 0,
+                },
+                100,
+            )
+        };
+        state
+            .progress
+            .profile
+            .set_daily_quests(vec![practice("q_i", "i"), practice("q_j", "j")]);
+        start_minigame(&mut state);
+        if let Some(session) = state.minigame_session_mut() {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        let enter_insert = crate::testing::normal("i");
+        execute_minigame_command(&mut state, SessionInput::Command(&enter_insert)).unwrap();
+        execute_minigame_command(
+            &mut state,
+            SessionInput::Insert(&crate::helix::InsertInput::parse("j")),
+        )
+        .unwrap();
+
+        let progress = |index: usize| match &state.progress.profile.daily_quests()[index].quest_type
+        {
+            QuestType::CommandPractice { current, .. } => *current,
+            other => panic!("unexpected quest {other:?}"),
+        };
+        assert_eq!(progress(0), 1, "the Insert entry command counts");
+        assert_eq!(progress(1), 0, "typed text does not count");
+        assert!(!state.progress.commands_used_today.contains("j"));
     }
 
     #[test]
@@ -1506,7 +1570,16 @@ mod tests {
             session.tick_countdown();
         }
 
-        let result = execute_minigame_command(&mut state, SessionInput::Text("not_a_command"));
+        execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("i")),
+        )
+        .unwrap();
+        // An assembled command line is never inserted as text.
+        let result = execute_minigame_command(
+            &mut state,
+            SessionInput::Insert(&crate::helix::InsertInput::parse(":goto 3")),
+        );
 
         assert!(result.is_err());
         assert!(state.minigame_session().is_some());
@@ -1525,7 +1598,7 @@ mod tests {
             session.tick_countdown();
         }
 
-        let initial_xp = state.progress.profile.total_xp;
+        let initial_xp = state.progress.profile.total_xp();
 
         // Manually complete scenario to test XP award
         if let Some(session) = state.minigame_session_mut() {
@@ -1536,7 +1609,7 @@ mod tests {
 
         // XP should be awarded for scenario completion
         // (tested via execute_minigame_command flow)
-        let final_xp = state.progress.profile.total_xp;
+        let final_xp = state.progress.profile.total_xp();
         assert!(final_xp >= initial_xp);
     }
 
@@ -1551,7 +1624,7 @@ mod tests {
         start_minigame(&mut state);
 
         // Set initial best streak
-        state.progress.profile.minigame_best_streak = 5;
+        state.progress.profile.set_minigame_best_streak(5);
 
         // Progress to playing and set higher streak
         if let Some(session) = state.minigame_session_mut() {
@@ -1568,7 +1641,7 @@ mod tests {
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Best streak should be updated
-        assert_eq!(state.progress.profile.minigame_best_streak, 15);
+        assert_eq!(state.progress.profile.minigame_best_streak(), 15);
     }
 
     #[test]
@@ -1582,7 +1655,7 @@ mod tests {
         start_minigame(&mut state);
 
         // Set high score
-        state.progress.profile.minigame_high_score = 10000;
+        state.progress.profile.set_minigame_high_score(10000);
 
         // Progress to playing with lower score
         if let Some(session) = state.minigame_session_mut() {
@@ -1597,7 +1670,7 @@ mod tests {
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // High score should not decrease
-        assert_eq!(state.progress.profile.minigame_high_score, 10000);
+        assert_eq!(state.progress.profile.minigame_high_score(), 10000);
     }
 
     #[test]
@@ -1620,7 +1693,7 @@ mod tests {
         start_minigame(&mut state);
 
         // Verify initial games_played is 0
-        assert_eq!(state.progress.profile.minigame_games_played, 0);
+        assert_eq!(state.progress.profile.minigame_games_played(), 0);
 
         // Transition to playing state
         if let Some(session) = state.minigame_session_mut() {
@@ -1634,7 +1707,7 @@ mod tests {
         crate::ui::state::apply_outcome(&mut state, outcome);
 
         // Games played should be incremented
-        assert_eq!(state.progress.profile.minigame_games_played, 1);
+        assert_eq!(state.progress.profile.minigame_games_played(), 1);
 
         // Session should be cleared
         assert!(state.minigame_session().is_none());
@@ -1664,11 +1737,17 @@ mod tests {
 
         // Complete the scenario ("x" selects the line, "d" deletes it) essentially
         // immediately, so time_ratio stays near 0.0.
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
-        assert_eq!(state.progress.profile.speed_run_count, 1);
-        assert_eq!(state.progress.profile.flash_run_count, 1);
+        assert_eq!(state.progress.profile.speed_run_count(), 1);
+        assert_eq!(state.progress.profile.flash_run_count(), 1);
         assert!(
             state
                 .progress
@@ -1684,11 +1763,11 @@ mod tests {
 
         assert!(state.ui.notifications.visible().any(|n| matches!(
             &n.notification_type,
-            NotificationType::Achievement { name, .. } if name == "Speed Demon"
+            NotificationType::Achievement(AchievementId::SpeedDemon)
         )));
         assert!(state.ui.notifications.visible().any(|n| matches!(
             &n.notification_type,
-            NotificationType::Achievement { name, .. } if name == "Flash"
+            NotificationType::Achievement(AchievementId::Flash)
         )));
     }
 
@@ -1716,8 +1795,14 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
         assert!(
             state
@@ -1765,11 +1850,17 @@ mod tests {
 
         clock.advance(std::time::Duration::from_millis(3_500));
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
-        assert_eq!(state.progress.profile.speed_run_count, 0);
-        assert_eq!(state.progress.profile.flash_run_count, 0);
+        assert_eq!(state.progress.profile.speed_run_count(), 0);
+        assert_eq!(state.progress.profile.flash_run_count(), 0);
         assert!(
             !state
                 .progress
@@ -1807,11 +1898,17 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
-        assert_eq!(state.progress.profile.scenarios_completed, 1);
-        assert_eq!(state.progress.profile.perfect_scenarios, 1);
+        assert_eq!(state.progress.profile.scenarios_completed(), 1);
+        assert_eq!(state.progress.profile.perfect_scenarios(), 1);
         assert!(
             state
                 .progress
@@ -1845,11 +1942,17 @@ mod tests {
             session.tick_countdown();
         }
 
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("x"));
-        let _ = execute_minigame_command(&mut state, SessionInput::Text("d"));
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("x")),
+        );
+        let _ = execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("d")),
+        );
 
-        assert_eq!(state.progress.profile.scenarios_completed, 1);
-        assert_eq!(state.progress.profile.perfect_scenarios, 0);
+        assert_eq!(state.progress.profile.scenarios_completed(), 1);
+        assert_eq!(state.progress.profile.perfect_scenarios(), 0);
         assert!(
             !state
                 .progress
@@ -1869,7 +1972,7 @@ mod tests {
         start_minigame(&mut state);
 
         // Verify initial games_played is 0
-        assert_eq!(state.progress.profile.minigame_games_played, 0);
+        assert_eq!(state.progress.profile.minigame_games_played(), 0);
 
         // Transition to playing state
         if let Some(session) = state.minigame_session_mut() {
@@ -1883,7 +1986,7 @@ mod tests {
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Games played should be incremented
-        assert_eq!(state.progress.profile.minigame_games_played, 1);
+        assert_eq!(state.progress.profile.minigame_games_played(), 1);
 
         // Simulate another game session
         start_minigame(&mut state);
@@ -1896,7 +1999,7 @@ mod tests {
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         // Should be 2 now
-        assert_eq!(state.progress.profile.minigame_games_played, 2);
+        assert_eq!(state.progress.profile.minigame_games_played(), 2);
     }
 
     /// Regression test for #309: `handle_minigame_game_over` computed `leveled_up` from
@@ -1914,8 +2017,7 @@ mod tests {
         // Close enough to the level 2 threshold that even a bare (score 0) game-over's
         // level bonus XP crosses it.
         let xp_for_level_2 = XPCalculator::xp_for_level(2);
-        state.progress.profile.total_xp = xp_for_level_2 - 1;
-        state.progress.profile.level = 1;
+        state.progress.profile.set_total_xp(xp_for_level_2 - 1);
 
         if let Some(session) = state.minigame_session_mut() {
             session.tick_countdown();
@@ -1928,14 +2030,14 @@ mod tests {
         crate::testing::run_queued_effects(&mut state.ui, &mut state.progress);
 
         assert!(
-            state.progress.profile.level >= 2,
+            state.progress.profile.level() >= 2,
             "expected a level-up driven by the end-of-game XP award"
         );
         assert!(
             state.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
                 crate::ui::notification::NotificationType::LevelUp { new_level }
-                    if new_level == state.progress.profile.level
+                    if new_level == state.progress.profile.level()
             )),
             "expected a LevelUp notification reporting the post-award profile level"
         );
@@ -1974,19 +2076,21 @@ mod tests {
                 .is_some_and(|s| s.state().is_game_over())
         );
 
-        let xp_after_first_game_over = state.progress.profile.total_xp;
-        let games_played_after_first_game_over = state.progress.profile.minigame_games_played;
+        let xp_after_first_game_over = state.progress.profile.total_xp();
+        let games_played_after_first_game_over = state.progress.profile.minigame_games_played();
 
         // Simulate Esc/`m`/Ctrl-q on the game-over screen.
         let outcome = handle_minigame_back_to_menu(&mut state);
         crate::ui::state::apply_outcome(&mut state, outcome);
 
         assert_eq!(
-            state.progress.profile.total_xp, xp_after_first_game_over,
+            state.progress.profile.total_xp(),
+            xp_after_first_game_over,
             "returning to menu from an already-processed game-over must not award XP again"
         );
         assert_eq!(
-            state.progress.profile.minigame_games_played, games_played_after_first_game_over,
+            state.progress.profile.minigame_games_played(),
+            games_played_after_first_game_over,
             "returning to menu from an already-processed game-over must not increment games_played again"
         );
         assert!(state.minigame_session().is_none());
@@ -2069,7 +2173,7 @@ mod tests {
         clock.advance(Duration::from_millis(500));
         assert!(state.minigame_session().unwrap().is_session_expired());
 
-        let initial_xp = state.progress.profile.total_xp;
+        let initial_xp = state.progress.profile.total_xp();
 
         handle_minigame_session_timeout(&mut state);
 
@@ -2078,9 +2182,9 @@ mod tests {
         // Same bookkeeping as an ordinary timeout game-over: XP awarded, high
         // score updated, games_played incremented.
         let expected_xp = XPCalculator::minigame_xp(5000, 1, 10);
-        assert_eq!(state.progress.profile.total_xp - initial_xp, expected_xp);
-        assert_eq!(state.progress.profile.minigame_high_score, 5000);
-        assert_eq!(state.progress.profile.minigame_games_played, 1);
+        assert_eq!(state.progress.profile.total_xp() - initial_xp, expected_xp);
+        assert_eq!(state.progress.profile.minigame_high_score(), 5000);
+        assert_eq!(state.progress.profile.minigame_games_played(), 1);
 
         // Jumps straight to GameOver without consuming a life.
         let session = state.minigame_session().unwrap();
@@ -2091,7 +2195,7 @@ mod tests {
         let persisted = ProfileStorage::with_path(temp_dir.path().join("profile.json"))
             .load()
             .unwrap();
-        assert_eq!(persisted.minigame_high_score, 5000);
+        assert_eq!(persisted.minigame_high_score(), 5000);
     }
 
     /// Regression test for #327: the `!session.state().is_game_over()` guard in
@@ -2142,19 +2246,21 @@ mod tests {
                 .is_some_and(|s| s.state().is_game_over())
         );
 
-        let xp_after_first_game_over = state.progress.profile.total_xp;
-        let games_played_after_first_game_over = state.progress.profile.minigame_games_played;
+        let xp_after_first_game_over = state.progress.profile.total_xp();
+        let games_played_after_first_game_over = state.progress.profile.minigame_games_played();
 
         // Simulate Esc/`m`/Ctrl-q on the game-over screen.
         let outcome = handle_minigame_back_to_menu(&mut state);
         crate::ui::state::apply_outcome(&mut state, outcome);
 
         assert_eq!(
-            state.progress.profile.total_xp, xp_after_first_game_over,
+            state.progress.profile.total_xp(),
+            xp_after_first_game_over,
             "returning to menu from an already-processed session timeout must not award XP again"
         );
         assert_eq!(
-            state.progress.profile.minigame_games_played, games_played_after_first_game_over,
+            state.progress.profile.minigame_games_played(),
+            games_played_after_first_game_over,
             "returning to menu from an already-processed session timeout must not increment games_played again"
         );
         assert!(state.minigame_session().is_none());

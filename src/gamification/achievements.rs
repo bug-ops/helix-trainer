@@ -128,7 +128,7 @@ impl AchievementEngine {
     /// use helix_trainer::learning::PerformanceTracker;
     ///
     /// let mut profile = UserProfile::new();
-    /// profile.perfect_scenarios = 1;
+    /// profile.set_perfect_scenarios(1);
     ///
     /// let tracker = PerformanceTracker::new();
     /// let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
@@ -172,7 +172,7 @@ impl AchievementEngine {
     /// use helix_trainer::learning::PerformanceTracker;
     ///
     /// let mut profile = UserProfile::new();
-    /// profile.perfect_scenarios = 1;
+    /// profile.set_perfect_scenarios(1);
     ///
     /// let tracker = PerformanceTracker::new();
     /// let unlocked = AchievementEngine::check_and_unlock(&mut profile, &tracker);
@@ -336,6 +336,7 @@ impl AchievementEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::learning::AttemptOutcome;
     use crate::testing::cid;
 
     #[test]
@@ -464,7 +465,7 @@ mod tests {
             tracker.record_attempt(
                 &cid(&cmd),
                 std::time::Duration::from_secs(1),
-                true,
+                AttemptOutcome::Succeeded,
                 std::time::Duration::from_secs(1),
             );
         }

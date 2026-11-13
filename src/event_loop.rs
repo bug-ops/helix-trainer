@@ -48,9 +48,7 @@ fn report_update_error(state: &mut AppState, error: &UserError) {
     state
         .ui
         .notifications
-        .push(Notification::new(NotificationType::Info {
-            message: error.to_string(),
-        }));
+        .push(Notification::new(NotificationType::Error(error.kind())));
 }
 
 /// Execute the effects an update requested; those that need the async runtime are returned.
@@ -390,7 +388,7 @@ mod tests {
         );
 
         let msg = data_rx.recv().await.expect("a result message");
-        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1);
+        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.level() == 1);
         assert!(std::fs::read_to_string(&path).unwrap().contains("profile"));
         let backups = backup_files(dir.path());
         assert_eq!(
@@ -431,7 +429,7 @@ mod tests {
         settle_update(&mut state, Ok(()), vec![Effect::RestoreProfile], &data_tx);
 
         let msg = data_rx.recv().await.expect("a result message");
-        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 500);
+        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp() == 500);
         assert_eq!(backup_files(dir.path()).len(), 1);
     }
 

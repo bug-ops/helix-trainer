@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use helix_trainer::learning::{PerformanceData, PerformanceTracker, Scheduler};
+use helix_trainer::learning::{AttemptOutcome, PerformanceData, PerformanceTracker, Scheduler};
 use helix_trainer::time::FakeClock;
 use serde::{Deserialize, Serialize};
 
@@ -49,12 +49,12 @@ impl Rating {
         }
     }
 
-    fn attempt(self) -> (Duration, bool) {
+    fn attempt(self) -> (Duration, AttemptOutcome) {
         match self {
-            Self::Again => (Duration::from_secs(1), false),
-            Self::Hard => (Duration::from_secs(4), true),
-            Self::Good => (Duration::from_secs(2), true),
-            Self::Easy => (Duration::from_secs(1), true),
+            Self::Again => (Duration::from_secs(1), AttemptOutcome::Failed),
+            Self::Hard => (Duration::from_secs(4), AttemptOutcome::Succeeded),
+            Self::Good => (Duration::from_secs(2), AttemptOutcome::Succeeded),
+            Self::Easy => (Duration::from_secs(1), AttemptOutcome::Succeeded),
         }
     }
 }
@@ -102,8 +102,8 @@ fn play(ratings: &[Rating], gaps_days: &[i64]) -> SequenceGolden {
             write!(label, "+{}d>", gaps_days[index - 1]).unwrap();
         }
         label.push(rating.tag());
-        let (duration, success) = rating.attempt();
-        tracker.record_attempt(&cid("x"), duration, success, OPTIMAL);
+        let (duration, outcome) = rating.attempt();
+        tracker.record_attempt(&cid("x"), duration, outcome, OPTIMAL);
         let card = tracker
             .performance(&cid("x"))
             .expect("card exists after attempt");

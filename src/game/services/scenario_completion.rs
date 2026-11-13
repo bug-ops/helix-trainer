@@ -10,9 +10,9 @@ use crate::gamification::{
 };
 use crate::ids::{CommandId, ScenarioId};
 use crate::learning::{
-    MasteryLevel, PerformanceTracker, ReferenceTime, ScenarioMastery, Scheduler,
+    AttemptOutcome, MasteryLevel, PerformanceTracker, ReferenceTime, ScenarioMastery, Scheduler,
 };
-use chrono::{DateTime, Utc};
+use crate::time::Moment;
 use std::time::Duration;
 
 /// Result of completing a scenario
@@ -96,11 +96,11 @@ impl ScenarioCompletionService {
         scenario_id: &ScenarioId,
         score: u32,
         base_xp: u64,
-        now: DateTime<Utc>,
+        now: Moment,
     ) -> XPScalingResult {
         // Capture multipliers BEFORE recording (what will be applied)
         let (_pre_mastery_level, pre_mastery_factor, pre_repeat_penalty) = profile
-            .scenario_history
+            .scenario_history()
             .get(scenario_id)
             .map_or((ScenarioMastery::Learning, 1.0, 1.0), |c| {
                 (c.mastery_level, c.mastery_factor(), c.repeat_penalty())
@@ -108,12 +108,12 @@ impl ScenarioCompletionService {
 
         let actual_xp =
             profile
-                .scenario_history
+                .scenario_history_mut()
                 .record_completion(scenario_id, score, base_xp, now);
 
         // Get post-recording mastery level (may have changed due to this completion)
         let post_mastery_level = profile
-            .scenario_history
+            .scenario_history()
             .get(scenario_id)
             .map_or(ScenarioMastery::Learning, |c| c.mastery_level);
 
@@ -131,10 +131,7 @@ impl ScenarioCompletionService {
 
     /// Update profile counters after scenario completion
     pub fn update_profile_counters(profile: &mut UserProfile, is_perfect: bool) {
-        profile.scenarios_completed = profile.scenarios_completed.saturating_add(1);
-        if is_perfect {
-            profile.perfect_scenarios = profile.perfect_scenarios.saturating_add(1);
-        }
+        profile.record_scenario_completed(is_perfect);
     }
 
     /// Record commands and return mastery level changes
@@ -145,11 +142,11 @@ impl ScenarioCompletionService {
         tracker: &mut PerformanceTracker,
         commands: &[CommandId],
         duration: Duration,
-        success: bool,
+        outcome: AttemptOutcome,
         reference: ReferenceTime,
     ) -> Vec<(CommandId, MasteryLevel)> {
         scheduler
-            .record_scenario_commands_with_mastery(tracker, commands, duration, success, reference)
+            .record_scenario_commands_with_mastery(tracker, commands, duration, outcome, reference)
     }
 
     /// Extract reviewable command ids from feedback
@@ -160,7 +157,11 @@ impl ScenarioCompletionService {
     /// one learning card per skill.
     #[must_use]
     pub fn extract_commands(feedback: &Feedback) -> Vec<CommandId> {
-        CommandId::from_actions(feedback.user_actions.iter().map(|a| a.command.as_str()))
+        feedback
+            .user_actions
+            .iter()
+            .filter_map(|action| action.command_id().cloned())
+            .collect()
     }
 
     /// Track exploration/speed achievement signals for a scenario completion:
@@ -189,9 +190,9 @@ impl ScenarioCompletionService {
     ///     Some(Difficulty::Beginner),
     /// );
     ///
-    /// assert!(profile.difficulties_completed.contains(&Difficulty::Beginner));
-    /// assert_eq!(profile.speed_run_count, 1);
-    /// assert_eq!(profile.flash_run_count, 1);
+    /// assert!(profile.difficulties_completed().contains(&Difficulty::Beginner));
+    /// assert_eq!(profile.speed_run_count(), 1);
+    /// assert_eq!(profile.flash_run_count(), 1);
     /// ```
     pub fn track_speed_and_difficulty(
         profile: &mut UserProfile,
@@ -199,14 +200,14 @@ impl ScenarioCompletionService {
         difficulty: Option<Difficulty>,
     ) {
         if let Some(difficulty) = difficulty {
-            profile.difficulties_completed.insert(difficulty);
+            profile.record_difficulty_completed(difficulty);
         }
         let time_ratio = speed_time_ratio(duration, difficulty);
         if time_ratio < SPEED_DEMON_TIME_RATIO {
-            profile.speed_run_count = profile.speed_run_count.saturating_add(1);
+            profile.record_speed_run();
         }
         if time_ratio < FLASH_TIME_RATIO {
-            profile.flash_run_count = profile.flash_run_count.saturating_add(1);
+            profile.record_flash_run();
         }
     }
 
@@ -227,7 +228,7 @@ impl ScenarioCompletionService {
     /// use std::assert_matches;
     ///
     /// let mut profile = UserProfile::new();
-    /// profile.perfect_scenarios = 1;
+    /// profile.set_perfect_scenarios(1);
     ///
     /// let tracker = PerformanceTracker::new();
     /// let events =
@@ -274,6 +275,7 @@ mod tests {
     use super::*;
     use crate::game::PerformanceRating;
     use crate::testing::{cid, sid};
+    use chrono::Utc;
 
     fn create_test_feedback(score: u32, max_points: u32) -> Feedback {
         Feedback {
@@ -344,28 +346,28 @@ mod tests {
     #[test]
     fn test_update_profile_counters() {
         let mut profile = UserProfile::new();
-        assert_eq!(profile.scenarios_completed, 0);
-        assert_eq!(profile.perfect_scenarios, 0);
+        assert_eq!(profile.scenarios_completed(), 0);
+        assert_eq!(profile.perfect_scenarios(), 0);
 
         ScenarioCompletionService::update_profile_counters(&mut profile, false);
-        assert_eq!(profile.scenarios_completed, 1);
-        assert_eq!(profile.perfect_scenarios, 0);
+        assert_eq!(profile.scenarios_completed(), 1);
+        assert_eq!(profile.perfect_scenarios(), 0);
 
         ScenarioCompletionService::update_profile_counters(&mut profile, true);
-        assert_eq!(profile.scenarios_completed, 2);
-        assert_eq!(profile.perfect_scenarios, 1);
+        assert_eq!(profile.scenarios_completed(), 2);
+        assert_eq!(profile.perfect_scenarios(), 1);
     }
 
     #[test]
     fn test_update_profile_counters_saturates() {
         let mut profile = UserProfile::new();
-        profile.scenarios_completed = u32::MAX;
-        profile.perfect_scenarios = u32::MAX;
+        profile.set_scenarios_completed(u32::MAX);
+        profile.set_perfect_scenarios(u32::MAX);
 
         ScenarioCompletionService::update_profile_counters(&mut profile, true);
 
-        assert_eq!(profile.scenarios_completed, u32::MAX);
-        assert_eq!(profile.perfect_scenarios, u32::MAX);
+        assert_eq!(profile.scenarios_completed(), u32::MAX);
+        assert_eq!(profile.perfect_scenarios(), u32::MAX);
     }
 
     #[test]
@@ -421,37 +423,17 @@ mod tests {
 
     #[test]
     fn test_extract_commands_single() {
-        use crate::game::UserAction;
-
         let mut feedback = create_test_feedback(100, 100);
-        feedback.user_actions = vec![UserAction {
-            command: "dd".to_string(),
-            timestamp: Duration::from_millis(100),
-        }];
+        feedback.user_actions = crate::testing::user_actions(&["d"]);
 
         let commands = ScenarioCompletionService::extract_commands(&feedback);
-        assert_eq!(commands, vec![cid("dd")]);
+        assert_eq!(commands, vec![cid("d")]);
     }
 
     #[test]
     fn test_extract_commands_multiple() {
-        use crate::game::UserAction;
-
         let mut feedback = create_test_feedback(100, 100);
-        feedback.user_actions = vec![
-            UserAction {
-                command: "d".to_string(),
-                timestamp: Duration::from_millis(100),
-            },
-            UserAction {
-                command: "w".to_string(),
-                timestamp: Duration::from_millis(200),
-            },
-            UserAction {
-                command: "j".to_string(),
-                timestamp: Duration::from_millis(300),
-            },
-        ];
+        feedback.user_actions = crate::testing::user_actions(&["d", "w", "j"]);
 
         let commands = ScenarioCompletionService::extract_commands(&feedback);
         assert_eq!(commands, vec![cid("d"), cid("w"), cid("j")]);
@@ -459,16 +441,10 @@ mod tests {
 
     #[test]
     fn test_extract_commands_skips_typed_text_and_arguments() {
-        use crate::game::UserAction;
-
         let mut feedback = create_test_feedback(100, 100);
-        feedback.user_actions = ["!", "Escape", " ", "3h", "f=", "T,", "r_", "/ sum", "ma("]
-            .iter()
-            .map(|c| UserAction {
-                command: (*c).to_string(),
-                timestamp: Duration::ZERO,
-            })
-            .collect();
+        feedback.user_actions = crate::testing::user_actions(&[
+            "!", "Escape", " ", "3h", "f=", "T,", "r_", "/ sum", "ma(",
+        ]);
 
         let commands = ScenarioCompletionService::extract_commands(&feedback);
         assert_eq!(commands, ["h", "f", "T", "r", "/", "ma("].map(cid).to_vec());
@@ -482,7 +458,7 @@ mod tests {
             &sid("test_scenario"),
             100,
             50,
-            Utc::now(),
+            crate::time::Moment::local(Utc::now()),
         );
 
         // First completion gets full XP (no penalty)
@@ -504,11 +480,14 @@ mod tests {
                 &sid("test_scenario"),
                 100,
                 50,
-                Utc::now(),
+                crate::time::Moment::local(Utc::now()),
             );
         }
 
-        let completion = profile.scenario_history.get(&sid("test_scenario")).unwrap();
+        let completion = profile
+            .scenario_history()
+            .get(&sid("test_scenario"))
+            .unwrap();
         assert_eq!(completion.attempts, 5);
     }
 }

@@ -22,17 +22,17 @@ fn test_select_line_then_delete() {
     // Move to line 1
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().0, 1);
+    assert_eq!(state.cursor_position().row(), 1);
 
     // Execute x (select line)
     sim.execute_command(CMD_SELECT_LINE).unwrap();
     let state = sim.display();
     // Selection should cover "Delete me\n" (line 1 with newline)
     let sel = state.selection().expect("Should have selection after x");
-    assert_eq!(sel.start_row, 1, "Selection start row");
-    assert_eq!(sel.start_col, 0, "Selection start col");
+    assert_eq!(sel.start().row(), 1, "Selection start row");
+    assert_eq!(sel.start().col(), 0, "Selection start col");
     // End should be at start of next line (row 2, col 0) or end of this line
-    assert!(sel.end_row >= 1, "Selection end row should be >= 1");
+    assert!(sel.end().row() >= 1, "Selection end row should be >= 1");
 
     // Execute d (delete selection)
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
@@ -53,8 +53,8 @@ fn test_select_line_scenario_exact() {
         state.selection(),
         state.content()
     );
-    assert_eq!(state.cursor_position().0, 1);
-    assert_eq!(state.cursor_position().1, 0);
+    assert_eq!(state.cursor_position().row(), 1);
+    assert_eq!(state.cursor_position().col(), 0);
 
     // Execute x (select line)
     sim.execute_command(CMD_SELECT_LINE).unwrap();
@@ -66,9 +66,10 @@ fn test_select_line_scenario_exact() {
     );
 
     let sel = state.selection().expect("Should have selection after x");
-    assert_eq!(sel.start_row, 1, "Selection should start at row 1");
+    assert_eq!(sel.start().row(), 1, "Selection should start at row 1");
     assert_eq!(
-        sel.end_row, 2,
+        sel.end().row(),
+        2,
         "Selection should end at row 2 (newline included)"
     );
 
@@ -111,37 +112,18 @@ fn test_select_all_then_delete() {
 // ============================================================================
 
 #[test]
-fn test_repeat_select_line_then_delete() {
-    // Scenario: User selects a line with 'x', deletes with 'd', then repeats with '.'
-    // Expected: The repeat should execute both x and d together
+fn test_dot_after_select_line_then_delete_is_noop() {
     let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3\nline 4\n".to_string());
 
-    // Move to line 2
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    let state = sim.display();
-    assert_eq!(state.cursor_position().0, 1);
-
-    // Select line with x
     sim.execute_command(CMD_SELECT_LINE).unwrap();
-
-    // Delete selection with d
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "line 1\nline 3\nline 4\n");
+    assert_eq!(sim.display().content(), "line 1\nline 3\nline 4\n");
 
-    // Now cursor should be on what was line 3 (now line 2)
-    assert_eq!(state.cursor_position().0, 1);
-
-    // Repeat with . - should execute x+d together
     sim.execute_command(".").unwrap();
-    let state = sim.display();
-    // Line 3 (now at row 1) should be deleted
-    assert_eq!(state.content(), "line 1\nline 4\n");
-
-    // Repeat again
     sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "line 1\n");
+
+    assert_eq!(sim.display().content(), "line 1\nline 3\nline 4\n");
 }
 
 #[test]
@@ -169,26 +151,6 @@ fn test_select_line_then_yank() {
     // Verify we're still on same content (yank doesn't delete)
     let state = sim.display();
     assert_eq!(state.content(), "line 1\nline 2\nline 3\n");
-}
-
-#[test]
-fn test_compound_action_overwritten_by_simple_command() {
-    // Test that a simple editing command after x+d overwrites the compound action
-    let mut sim = AnyModeSimulator::new("aaa\nbbb\nccc\n".to_string());
-
-    // Do x+d (compound action)
-    sim.execute_command(CMD_SELECT_LINE).unwrap();
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "bbb\nccc\n");
-
-    // Now do another x+d (still compound, same sequence)
-    sim.execute_command(CMD_SELECT_LINE).unwrap();
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "ccc\n");
-
-    // Repeat should do x+d again
 }
 
 // Expected buffers in the tests below were recorded from `hx` 25.07.1 on the

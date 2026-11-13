@@ -14,6 +14,7 @@ use std::num::NonZeroUsize;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::error::{SimulatorError, bound};
+use super::register::Register;
 use super::registry::{normal_registry, parse_counted_command};
 use super::simulator::InsertEntryCommand;
 use super::simulator::command_line::CommandLine;
@@ -23,6 +24,7 @@ use crate::grammar::commands::{
     CMD_SELECT_REGISTER, CMD_SPLIT_SELECTION, CMD_TOGGLE_MACRO_RECORDING,
 };
 use crate::grammar::find::FindMotion;
+use crate::ids::{CommandId, IdError, NormalizedCommand};
 
 /// A command of the Normal-mode registry, by its canonical key.
 ///
@@ -252,7 +254,7 @@ pub enum NormalCommand {
     },
     /// A command that enters Insert mode.
     InsertEntry(InsertEntryCommand),
-    /// `.`: repeat the last action.
+    /// `.`: repeat the last Insert session.
     Repeat,
     /// `Q` or `q`.
     Macro(MacroOp),
@@ -284,7 +286,7 @@ pub enum NormalCommand {
     /// `"<reg><op>`: a register-scoped operation.
     Register {
         /// The register.
-        register: char,
+        register: Register,
         /// The operation.
         op: RegisterOp,
     },
@@ -400,7 +402,7 @@ impl NormalCommand {
         {
             return RegisterOp::from_key(*op)
                 .map(|op| Self::Register {
-                    register: *register,
+                    register: Register::from(*register),
                     op,
                 })
                 .ok_or(SimulatorError::UnknownRegisterOp { op: *op });
@@ -466,6 +468,63 @@ impl NormalCommand {
         }
     }
 
+    /// The review-card id of this command, or `None` when it makes no card
+    /// (`Escape`).
+    ///
+    /// Counts, find arguments and prompt patterns are not part of the id.
+    /// Every arm finishes through [`CommandId::from_action`], so the id
+    /// grammar and its length cap stay in `ids`; the arms only pick the key
+    /// that action sees.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::helix::normal_command::NormalCommand;
+    ///
+    /// let id = |cmd: &str| NormalCommand::parse(cmd).unwrap().command_id();
+    /// assert_eq!(id("3fa").map(|id| id.into_string()), Some("f".to_string()));
+    /// assert_eq!(id("/ foo").map(|id| id.into_string()), Some("/".to_string()));
+    /// assert_eq!(id("Escape"), None);
+    /// ```
+    #[must_use]
+    pub fn command_id(&self) -> Option<CommandId> {
+        match self {
+            Self::Registered { command, .. } => CommandId::from_action(command.key()),
+            Self::InsertEntry(entry) => CommandId::from_action(&entry.uncounted().command()),
+            Self::Repeat => CommandId::from_action(CMD_REPEAT),
+            Self::Macro(op) => CommandId::from_action(op.key()),
+            Self::Find { motion, .. } => CommandId::from_action(&motion.key().to_string()),
+            Self::GotoLine { .. } => CommandId::from_action(CMD_GOTO_LINE),
+            Self::Replace(_) => CommandId::from_action("r"),
+            // Their ids keep the argument, so the canonical spelling is the key.
+            Self::Surround(_) | Self::TextObject { .. } | Self::Register { .. } => {
+                CommandId::from_action(&self.to_string())
+            }
+            Self::Prompt { kind, .. } => CommandId::from_action(&format!("{} ", kind.command_id())),
+            Self::CommandLine(CommandLine::Goto(_)) => CommandId::from_action(":goto"),
+            Self::Escape => None,
+        }
+    }
+
+    /// The quest-matching form of this command: its canonical spelling, normalized.
+    ///
+    /// # Errors
+    ///
+    /// [`IdError`] when the spelling normalizes to nothing or is too long.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::helix::normal_command::NormalCommand;
+    ///
+    /// let command = NormalCommand::parse("\"ay")?;
+    /// assert_eq!(command.normalized()?.as_str(), "\"y");
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn normalized(&self) -> Result<NormalizedCommand, IdError> {
+        NormalizedCommand::from_raw(&self.to_string())
+    }
+
     /// The keys that type this command, for `.` to replay; empty for a
     /// command `.` does not replay (counted commands, prompts, command lines).
     #[must_use]
@@ -497,7 +556,7 @@ impl NormalCommand {
                 vec![plain('m'), plain(scope.key()), plain(*object)]
             }
             Self::Register { register, op } => {
-                vec![plain('"'), plain(*register), plain(op.key())]
+                vec![plain('"'), plain(register.name()), plain(op.key())]
             }
             Self::Registered { count: Some(_), .. }
             | Self::Find { count: Some(_), .. }
@@ -519,10 +578,12 @@ fn insert_entry_keys(entry: InsertEntryCommand) -> Vec<KeyEvent> {
         InsertEntryCommand::AppendLineEnd => vec![plain('A')],
         InsertEntryCommand::OpenBelow { count } if count == NonZeroUsize::MIN => vec![plain('o')],
         InsertEntryCommand::OpenAbove { count } if count == NonZeroUsize::MIN => vec![plain('O')],
-        InsertEntryCommand::Change { register: None } => vec![plain('c')],
         InsertEntryCommand::Change {
-            register: Some(register),
-        } => vec![plain('"'), plain(register), plain('c')],
+            register: Register::Unnamed,
+        } => vec![plain('c')],
+        InsertEntryCommand::Change { register } => {
+            vec![plain('"'), plain(register.name()), plain('c')]
+        }
         InsertEntryCommand::OpenBelow { .. }
         | InsertEntryCommand::OpenAbove { .. }
         | InsertEntryCommand::ChangeNoYank => Vec::new(),
@@ -739,8 +800,10 @@ mod tests {
                 },
                 object,
             }),
-            (argument(), register_op)
-                .prop_map(|(register, op)| NormalCommand::Register { register, op }),
+            (argument(), register_op).prop_map(|(register, op)| NormalCommand::Register {
+                register: Register::from(register),
+                op
+            }),
             (kind, "[a-z ()]{1,8}")
                 .prop_map(|(kind, pattern)| NormalCommand::Prompt { kind, pattern }),
             (1usize..=500).prop_map(|n| NormalCommand::CommandLine(CommandLine::Goto(n))),
@@ -755,6 +818,144 @@ mod tests {
             command(),
             fixed.prop_map(|text| NormalCommand::parse(text).unwrap())
         ]
+    }
+
+    fn oracle_counts() -> [Option<NonZeroUsize>; 4] {
+        [None, Some(nz(1)), Some(nz(2)), Some(nz(12))]
+    }
+
+    /// Every command shape the input layer builds, over the arguments that
+    /// matter to the id grammar.
+    fn exhaustive_commands() -> Vec<NormalCommand> {
+        let mut all = vec![
+            NormalCommand::Repeat,
+            NormalCommand::Escape,
+            NormalCommand::Macro(MacroOp::ToggleRecording),
+            NormalCommand::Macro(MacroOp::Replay),
+        ];
+        for count in oracle_counts() {
+            all.extend(
+                normal_registry()
+                    .all_commands()
+                    .map(|meta| NormalCommand::Registered {
+                        command: RegisteredCommand::lookup(meta.key()).unwrap(),
+                        count,
+                    }),
+            );
+            all.push(NormalCommand::GotoLine { count });
+            for motion in ['f', 'F', 't', 'T'] {
+                for ch in ['a', '=', ' '] {
+                    all.push(NormalCommand::Find {
+                        motion: FindMotion::from_key(motion).unwrap(),
+                        ch,
+                        count,
+                    });
+                }
+            }
+        }
+        for count in [nz(1), nz(2), nz(12)] {
+            all.push(NormalCommand::InsertEntry(InsertEntryCommand::OpenBelow {
+                count,
+            }));
+            all.push(NormalCommand::InsertEntry(InsertEntryCommand::OpenAbove {
+                count,
+            }));
+        }
+        for entry in [
+            InsertEntryCommand::Insert,
+            InsertEntryCommand::Append,
+            InsertEntryCommand::InsertLineStart,
+            InsertEntryCommand::AppendLineEnd,
+            InsertEntryCommand::ChangeNoYank,
+            InsertEntryCommand::Change {
+                register: Register::Unnamed,
+            },
+        ] {
+            all.push(NormalCommand::InsertEntry(entry));
+        }
+        for register in ['_', 'a', '%'] {
+            all.push(NormalCommand::InsertEntry(InsertEntryCommand::Change {
+                register: Register::from(register),
+            }));
+        }
+        for ch in ['x', ' ', '\u{e9}'] {
+            all.push(NormalCommand::Replace(ch));
+            all.push(NormalCommand::Surround(SurroundOp::Add(ch)));
+            all.push(NormalCommand::Surround(SurroundOp::Delete(ch)));
+            all.push(NormalCommand::Surround(SurroundOp::Replace {
+                from: ch,
+                to: '(',
+            }));
+        }
+        for scope in [TextObjectScope::Around, TextObjectScope::Inside] {
+            for object in ['w', '(', 'm', '"'] {
+                all.push(NormalCommand::TextObject { scope, object });
+            }
+        }
+        for op in [
+            RegisterOp::Yank,
+            RegisterOp::PasteAfter,
+            RegisterOp::PasteBefore,
+            RegisterOp::ReplaceWithYanked,
+            RegisterOp::Delete,
+        ] {
+            for register in ['a', '_', '"', '%'] {
+                all.push(NormalCommand::Register {
+                    register: Register::from(register),
+                    op,
+                });
+            }
+        }
+        for kind in PromptKind::ALL {
+            for pattern in [String::new(), "foo".to_string(), "x".repeat(70)] {
+                all.push(NormalCommand::Prompt { kind, pattern });
+            }
+        }
+        for line in [1, 3, 500] {
+            all.push(NormalCommand::CommandLine(CommandLine::Goto(line)));
+        }
+        all
+    }
+
+    #[test]
+    fn typed_ids_equal_the_string_derivation_for_every_command() {
+        for command in exhaustive_commands() {
+            let text = command.to_string();
+            assert_eq!(
+                command.command_id(),
+                CommandId::from_action(&text),
+                "{text:?}"
+            );
+            assert_eq!(
+                command.normalized(),
+                NormalizedCommand::from_raw(&text),
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn typed_ids_equal_the_string_derivation_for_every_bundled_solution_token() {
+        let scenarios = crate::config::ScenarioLoader::new()
+            .load_from_embedded("en")
+            .expect("embedded scenarios load");
+        let mut checked = 0;
+        for token in scenarios.iter().flat_map(|s| &s.solution.commands) {
+            if let Ok(command) = NormalCommand::parse(token) {
+                assert_eq!(
+                    command.command_id(),
+                    CommandId::from_action(token),
+                    "{token:?}"
+                );
+                assert_eq!(
+                    command.normalized(),
+                    NormalizedCommand::from_raw(&command.to_string()),
+                    "{token:?}"
+                );
+                checked += 1;
+            }
+        }
+        assert!(checked > 0);
     }
 
     proptest! {
@@ -777,6 +978,13 @@ mod tests {
 
         /// Canonical spellings only (`:g 3` or `3gg` are not canonical): the
         /// string is a rendering of the value and parses back to it.
+        #[test]
+        fn typed_ids_equal_the_string_derivation(command in replayable_forms()) {
+            let text = command.to_string();
+            prop_assert_eq!(command.command_id(), CommandId::from_action(&text), "{}", text);
+            prop_assert_eq!(command.normalized(), NormalizedCommand::from_raw(&text), "{}", text);
+        }
+
         #[test]
         fn display_then_parse_is_the_identity(command in command()) {
             let text = command.to_string();

@@ -3,10 +3,10 @@
 //! Attempt limits and best-score tracking for the daily challenge; the
 //! scenario selection itself lives in `minigame::challenge`.
 
-use chrono::NaiveDate;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::constants::{CHALLENGE_MAX_ATTEMPTS, CHALLENGE_SCENARIO_COUNT};
+use crate::time::PlayerDay;
 
 /// The calendar day a daily challenge was last attempted.
 ///
@@ -18,7 +18,7 @@ pub enum ChallengeDay {
     #[default]
     NotStarted,
     /// The last attempt happened on this day.
-    On(NaiveDate),
+    On(PlayerDay),
     /// The stored day could not be read; counters are kept and never reset.
     Unreadable,
 }
@@ -39,7 +39,7 @@ impl<'de> Deserialize<'de> for ChallengeDay {
         if value.is_null() {
             return Ok(Self::NotStarted);
         }
-        Ok(NaiveDate::deserialize(value).map_or(Self::Unreadable, Self::On))
+        Ok(PlayerDay::deserialize(value).map_or(Self::Unreadable, Self::On))
     }
 }
 
@@ -54,28 +54,28 @@ pub struct ChallengeProgress {
     /// A malformed stored value, or a missing one with used attempts, loads as
     /// [`ChallengeDay::Unreadable`] so one bad field neither fails the profile
     /// load nor resets the attempt limit.
-    pub last_challenge_date: ChallengeDay,
+    pub(super) last_challenge_date: ChallengeDay,
 
     /// Attempts used today (0-3)
-    pub attempts_used_today: u8,
+    pub(super) attempts_used_today: u8,
 
     /// Best score achieved today
-    pub best_score_today: u64,
+    pub(super) best_score_today: u64,
 
     /// Best scenarios completed today (out of 10)
-    pub best_scenarios_today: u8,
+    pub(super) best_scenarios_today: u8,
 
     /// All-time best challenge score
-    pub all_time_best_score: u64,
+    pub(super) all_time_best_score: u64,
 
     /// All-time best scenarios completed in a single challenge
-    pub all_time_best_scenarios: u8,
+    pub(super) all_time_best_scenarios: u8,
 
     /// Total challenges attempted (lifetime)
-    pub total_challenges_attempted: u32,
+    pub(super) total_challenges_attempted: u32,
 
     /// Total challenges completed (all 10 scenarios)
-    pub total_challenges_completed: u32,
+    pub(super) total_challenges_completed: u32,
 }
 
 #[derive(Deserialize)]
@@ -97,20 +97,104 @@ impl From<ChallengeProgressWire> for ChallengeProgress {
             ChallengeDay::NotStarted if wire.attempts_used_today > 0 => ChallengeDay::Unreadable,
             day => day,
         };
+        // A stored value that breaks a bound is repaired and logged, never rejected; the
+        // attempts stay spent (fail-closed).
+        let attempts_used_today = if wire.attempts_used_today > CHALLENGE_MAX_ATTEMPTS {
+            tracing::warn!(
+                stored = wire.attempts_used_today,
+                max = CHALLENGE_MAX_ATTEMPTS,
+                "Challenge attempts above the limit; clamped"
+            );
+            CHALLENGE_MAX_ATTEMPTS
+        } else {
+            wire.attempts_used_today
+        };
+        let all_time_best_score = repaired_max(
+            "all_time_best_score",
+            wire.all_time_best_score,
+            wire.best_score_today,
+        );
+        let all_time_best_scenarios = repaired_max(
+            "all_time_best_scenarios",
+            wire.all_time_best_scenarios,
+            wire.best_scenarios_today,
+        );
+        let total_challenges_attempted = repaired_max(
+            "total_challenges_attempted",
+            wire.total_challenges_attempted,
+            wire.total_challenges_completed,
+        );
         Self {
             last_challenge_date,
-            attempts_used_today: wire.attempts_used_today,
+            attempts_used_today,
             best_score_today: wire.best_score_today,
             best_scenarios_today: wire.best_scenarios_today,
-            all_time_best_score: wire.all_time_best_score,
-            all_time_best_scenarios: wire.all_time_best_scenarios,
-            total_challenges_attempted: wire.total_challenges_attempted,
+            all_time_best_score,
+            all_time_best_scenarios,
+            total_challenges_attempted,
             total_challenges_completed: wire.total_challenges_completed,
         }
     }
 }
 
+/// `stored` raised to `floor`, logging the repair when it had to move.
+fn repaired_max<T: Ord + Copy + std::fmt::Display>(field: &str, stored: T, floor: T) -> T {
+    if stored >= floor {
+        return stored;
+    }
+    tracing::warn!(field, %stored, %floor, "Challenge progress below its bound; repaired");
+    floor
+}
+
 impl ChallengeProgress {
+    /// Day of the current or last challenge.
+    #[must_use]
+    pub fn last_challenge_date(&self) -> ChallengeDay {
+        self.last_challenge_date
+    }
+
+    /// Attempts used today; never above the attempt limit.
+    #[must_use]
+    pub fn attempts_used_today(&self) -> u8 {
+        self.attempts_used_today
+    }
+
+    /// Best score achieved today.
+    #[must_use]
+    pub fn best_score_today(&self) -> u64 {
+        self.best_score_today
+    }
+
+    /// Most scenarios completed in one challenge today.
+    #[must_use]
+    pub fn best_scenarios_today(&self) -> u8 {
+        self.best_scenarios_today
+    }
+
+    /// All-time best challenge score; never below today's best.
+    #[must_use]
+    pub fn all_time_best_score(&self) -> u64 {
+        self.all_time_best_score
+    }
+
+    /// All-time most scenarios completed in one challenge.
+    #[must_use]
+    pub fn all_time_best_scenarios(&self) -> u8 {
+        self.all_time_best_scenarios
+    }
+
+    /// Challenges attempted in total; never below the completed count.
+    #[must_use]
+    pub fn total_challenges_attempted(&self) -> u32 {
+        self.total_challenges_attempted
+    }
+
+    /// Challenges completed in total (all scenarios).
+    #[must_use]
+    pub fn total_challenges_completed(&self) -> u32 {
+        self.total_challenges_completed
+    }
+
     /// Create a new empty challenge progress.
     ///
     /// Note: This is identical to `Default::default()` but provides a conventional
@@ -122,7 +206,7 @@ impl ChallengeProgress {
     }
 
     /// Check if player can attempt today's challenge
-    pub fn can_attempt(&self, today: NaiveDate) -> bool {
+    pub fn can_attempt(&self, today: PlayerDay) -> bool {
         if self.is_new_day(today) {
             return true;
         }
@@ -131,7 +215,7 @@ impl ChallengeProgress {
     }
 
     /// Get remaining attempts for today
-    pub fn attempts_remaining(&self, today: NaiveDate) -> u8 {
+    pub fn attempts_remaining(&self, today: PlayerDay) -> u8 {
         if self.is_new_day(today) {
             return CHALLENGE_MAX_ATTEMPTS;
         }
@@ -140,8 +224,8 @@ impl ChallengeProgress {
     }
 
     /// Start a new attempt, resetting if new day
-    pub fn start_attempt(&mut self, today: NaiveDate) {
-        // Reset for new day
+    pub fn start_attempt(&mut self, today: PlayerDay) {
+        // Reset for new day; a stored day at or after today is today (never rewound)
         if self.is_new_day(today) {
             self.last_challenge_date = ChallengeDay::On(today);
             self.attempts_used_today = 0;
@@ -177,25 +261,76 @@ impl ChallengeProgress {
         }
     }
 
-    /// Check whether the calendar day has rolled over since `last_challenge_date`
-    fn is_new_day(&self, today: NaiveDate) -> bool {
+    /// Check whether today is strictly after `last_challenge_date`
+    fn is_new_day(&self, today: PlayerDay) -> bool {
         match self.last_challenge_date {
             ChallengeDay::NotStarted => true,
-            ChallengeDay::On(day) => day != today,
+            ChallengeDay::On(day) => today > day,
             ChallengeDay::Unreadable => false,
+        }
+    }
+
+    /// Clamps a stored day implausibly far ahead of `today` back to `today`.
+    pub fn clamp_future_day(&mut self, today: PlayerDay) {
+        if let ChallengeDay::On(day) = self.last_challenge_date {
+            self.last_challenge_date = ChallengeDay::On(day.clamp_ahead(today));
         }
     }
 
     /// Counts a [`ChallengeDay::Unreadable`] day as `today`, keeping the used
     /// attempts and best-today score instead of refilling the allowance.
-    pub fn settle_unreadable_day(&mut self, today: NaiveDate) {
+    pub fn settle_unreadable_day(&mut self, today: PlayerDay) {
         if self.last_challenge_date == ChallengeDay::Unreadable {
             self.last_challenge_date = ChallengeDay::On(today);
         }
     }
 
     /// Check if progress is for the given date
-    pub fn is_today(&self, today: NaiveDate) -> bool {
+    pub fn is_today(&self, today: PlayerDay) -> bool {
         !self.is_new_day(today)
+    }
+}
+/// Direct writes of the bounded values, for tests that need a specific state.
+#[cfg(any(test, feature = "test-util"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
+impl ChallengeProgress {
+    /// Set the stored value, bypassing the bounds the recording methods keep.
+    pub fn set_last_challenge_date(&mut self, value: ChallengeDay) {
+        self.last_challenge_date = value;
+    }
+
+    /// Set the stored value, bypassing the bounds the recording methods keep.
+    pub fn set_attempts_used_today(&mut self, value: u8) {
+        self.attempts_used_today = value;
+    }
+
+    /// Set the stored value, bypassing the bounds the recording methods keep.
+    pub fn set_best_score_today(&mut self, value: u64) {
+        self.best_score_today = value;
+    }
+
+    /// Set the stored value, bypassing the bounds the recording methods keep.
+    pub fn set_best_scenarios_today(&mut self, value: u8) {
+        self.best_scenarios_today = value;
+    }
+
+    /// Set the stored value, bypassing the bounds the recording methods keep.
+    pub fn set_all_time_best_score(&mut self, value: u64) {
+        self.all_time_best_score = value;
+    }
+
+    /// Set the stored value, bypassing the bounds the recording methods keep.
+    pub fn set_all_time_best_scenarios(&mut self, value: u8) {
+        self.all_time_best_scenarios = value;
+    }
+
+    /// Set the stored value, bypassing the bounds the recording methods keep.
+    pub fn set_total_challenges_attempted(&mut self, value: u32) {
+        self.total_challenges_attempted = value;
+    }
+
+    /// Set the stored value, bypassing the bounds the recording methods keep.
+    pub fn set_total_challenges_completed(&mut self, value: u32) {
+        self.total_challenges_completed = value;
     }
 }

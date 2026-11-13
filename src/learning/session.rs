@@ -1,4 +1,6 @@
-use super::performance::{CommandPerformance, MasteryLevel, PerformanceTracker, ReferenceTime};
+use super::performance::{
+    AttemptOutcome, CommandPerformance, MasteryLevel, PerformanceTracker, ReferenceTime,
+};
 use crate::ids::CommandId;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -17,6 +19,14 @@ impl ReviewOutcome {
     pub fn is_recalled(self) -> bool {
         self == Self::Recalled
     }
+
+    /// The same result as a tracker attempt outcome
+    pub fn attempt(self) -> AttemptOutcome {
+        match self {
+            Self::Recalled => AttemptOutcome::Succeeded,
+            Self::Forgot => AttemptOutcome::Failed,
+        }
+    }
 }
 
 /// Result of a single review attempt
@@ -26,8 +36,8 @@ pub struct ReviewResult {
     pub command: CommandId,
     /// Time from showing the command to the answer.
     pub duration: Duration,
-    /// Whether the attempt succeeded.
-    pub success: bool,
+    /// Whether the command was recalled.
+    pub outcome: ReviewOutcome,
     /// Mastery level before the attempt.
     pub old_mastery: MasteryLevel,
     /// Mastery level after the attempt.
@@ -52,7 +62,7 @@ pub struct SessionSummary {
 impl SessionSummary {
     fn from_results(results: &[ReviewResult]) -> Self {
         let total_reviews = results.len();
-        let successful = results.iter().filter(|r| r.success).count();
+        let successful = results.iter().filter(|r| r.outcome.is_recalled()).count();
         let failed = total_reviews.saturating_sub(successful);
 
         let total_time: Duration = results.iter().map(|r| r.duration).sum();
@@ -175,15 +185,19 @@ impl ReviewSession {
         } = self;
 
         let duration = now.saturating_duration_since(shown_at);
-        let success = outcome.is_recalled();
         let old_mastery = mastery_of(tracker, &current);
-        tracker.record_attempt_against(&current, duration, success, ReferenceTime::SINGLE_ACTION);
+        tracker.record_attempt_against(
+            &current,
+            duration,
+            outcome.attempt(),
+            ReferenceTime::SINGLE_ACTION,
+        );
         let new_mastery = mastery_of(tracker, &current);
 
         results.push(ReviewResult {
             command: current,
             duration,
-            success,
+            outcome,
             old_mastery,
             new_mastery,
         });

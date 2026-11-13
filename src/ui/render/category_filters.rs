@@ -109,7 +109,7 @@ fn render_popup_content(
 
     // Get currently active category filter
     let active_filter = state.game.scenario_collection.active_filter();
-    let enabled_categories = active_filter.categories.as_ref();
+    let enabled_categories = &active_filter.categories;
 
     let mut lines = vec![];
     lines.push(Line::from("")); // Top padding
@@ -120,7 +120,7 @@ fn render_popup_content(
         // Determine if this category is enabled:
         // - If no categories filter is set (None), all categories are enabled
         // - If categories filter is set, check if this category is in the set
-        let is_enabled = enabled_categories.is_none_or(|set| set.contains(category));
+        let is_enabled = enabled_categories.admits(Some(category));
 
         // Build the checkbox indicator
         let checkbox = if is_enabled { "[x]" } else { "[ ]" };
@@ -158,7 +158,10 @@ fn render_popup_content(
     // Add summary line
     lines.push(Line::from("")); // Spacing
 
-    let enabled_count = enabled_categories.map_or(categories.len(), std::collections::HashSet::len);
+    let enabled_count = categories
+        .iter()
+        .filter(|category| enabled_categories.admits(Some(*category)))
+        .count();
 
     let summary_text = if enabled_count == categories.len() {
         t!("category.all_enabled").to_string()
@@ -371,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_render_category_filters_with_partial_filter() {
-        use crate::game::ScenarioFilter;
+        use crate::game::{Criterion, NonEmptySet, ScenarioFilter};
         use std::collections::HashSet;
 
         let backend = TestBackend::new(80, 24);
@@ -383,7 +386,7 @@ mod tests {
         let mut categories = HashSet::new();
         categories.insert(ScenarioCategory::Movement);
         let filter = ScenarioFilter {
-            categories: Some(categories),
+            categories: Criterion::OneOf(NonEmptySet::try_from(categories).unwrap()),
             ..Default::default()
         };
         state.game.scenario_collection.apply_filter(&filter, None);
@@ -469,21 +472,41 @@ mod tests {
     }
 
     #[test]
-    fn test_render_category_filters_no_categories_enabled() {
-        use crate::game::ScenarioFilter;
-        use std::collections::HashSet;
+    fn test_render_category_filters_with_unrestricted_categories() {
+        use crate::game::{Criterion, ScenarioFilter};
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
 
         let mut state = create_test_state_with_categories();
 
-        // Apply empty filter (no categories enabled)
+        // An empty selection cannot be expressed: `Any` is the unrestricted filter
         let filter = ScenarioFilter {
-            categories: Some(HashSet::new()),
+            categories: Criterion::Any,
             ..Default::default()
         };
         state.game.scenario_collection.apply_filter(&filter, None);
+
+        state.screen = TypedScreen::CategoryFilters(CategoryFiltersData::default());
+
+        let result = terminal.draw(|f| render_category_filters(f, &state));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_render_category_filters_with_a_category_matching_no_scenario() {
+        use crate::game::{Criterion, ScenarioFilter};
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        let mut state = create_test_state_with_categories();
+        let filter = ScenarioFilter {
+            categories: Criterion::one_of(ScenarioCategory::Search, []),
+            ..Default::default()
+        };
+        state.game.scenario_collection.apply_filter(&filter, None);
+        assert_eq!(state.game.scenario_collection.count(), 0);
 
         state.screen = TypedScreen::CategoryFilters(CategoryFiltersData::default());
 

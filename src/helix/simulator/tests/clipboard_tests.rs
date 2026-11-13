@@ -8,6 +8,7 @@
 use super::sim_with_selection;
 use crate::grammar::commands::*;
 use crate::helix::simulator::AnyModeSimulator;
+use crate::helix::{CursorRange, Pos};
 
 // ============================================================================
 // Yank and Paste After Tests
@@ -22,7 +23,7 @@ fn test_yank_and_paste_after() {
 
     // Move to 'b'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    assert_eq!(sim.display().cursor_position().1, 1);
+    assert_eq!(sim.display().cursor_position().col(), 1);
 
     // Paste after 'b' - should insert 'a' between 'b' and 'c'
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
@@ -30,7 +31,7 @@ fn test_yank_and_paste_after() {
     let state = sim.display();
     assert_eq!(state.content(), "abac");
     // In Helix, cursor stays on last pasted character
-    assert_eq!(state.cursor_position().1, 2); // Cursor on pasted 'a'
+    assert_eq!(state.cursor_position().col(), 2); // Cursor on pasted 'a'
 }
 
 // ============================================================================
@@ -44,7 +45,7 @@ fn test_yank_and_paste_before() {
     // Move to 'c'
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    assert_eq!(sim.display().cursor_position().1, 2);
+    assert_eq!(sim.display().cursor_position().col(), 2);
 
     // Yank 'c'
     sim.execute_command(CMD_YANK).unwrap();
@@ -52,7 +53,7 @@ fn test_yank_and_paste_before() {
     // Move back to 'a'
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
-    assert_eq!(sim.display().cursor_position().1, 0);
+    assert_eq!(sim.display().cursor_position().col(), 0);
 
     // Paste before 'a'
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
@@ -60,7 +61,7 @@ fn test_yank_and_paste_before() {
     let state = sim.display();
     assert_eq!(state.content(), "cabc");
     // In Helix, cursor stays on last pasted character
-    assert_eq!(state.cursor_position().1, 0); // Cursor on pasted 'c'
+    assert_eq!(state.cursor_position().col(), 0); // Cursor on pasted 'c'
 }
 
 // ============================================================================
@@ -82,7 +83,7 @@ fn test_paste_before_cursor_scenario() {
 
     let state = sim.display();
     assert_eq!(
-        state.cursor_position().1,
+        state.cursor_position().col(),
         2,
         "Should be at position 2 ('z')"
     );
@@ -100,7 +101,7 @@ fn test_paste_before_cursor_scenario() {
 
     let state = sim.display();
     assert_eq!(
-        state.cursor_position().1,
+        state.cursor_position().col(),
         1,
         "Should be at position 1 ('y')"
     );
@@ -112,7 +113,7 @@ fn test_paste_before_cursor_scenario() {
     assert_eq!(state.content(), "xzyz", "Content should be 'xzyz'");
     // In Helix, cursor stays on last pasted character (position 1)
     assert_eq!(
-        state.cursor_position().1,
+        state.cursor_position().col(),
         1,
         "Cursor should be at position 1 (on pasted 'z')"
     );
@@ -125,7 +126,10 @@ fn test_paste_before_cursor_scenario() {
 #[test]
 fn test_yank_multichar_forward_selection_round_trips_full_text() {
     // "world" as a forward range (anchor=6 < head=11)
-    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
+    let mut sim = sim_with_selection(
+        "hello world",
+        CursorRange::new(Pos::new(0, 6), Pos::new(0, 11)),
+    );
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
 
@@ -140,7 +144,10 @@ fn test_yank_multichar_forward_selection_round_trips_full_text() {
 #[test]
 fn test_yank_multichar_backward_selection_extracts_same_range() {
     // Same "world" range, flipped to a backward selection (anchor=11 > head=6)
-    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
+    let mut sim = sim_with_selection(
+        "hello world",
+        CursorRange::new(Pos::new(0, 6), Pos::new(0, 11)),
+    );
     sim.execute_command(CMD_FLIP_SELECTIONS).unwrap();
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_AFTER).unwrap();
@@ -158,7 +165,10 @@ fn test_yank_multichar_backward_selection_extracts_same_range() {
 #[test]
 fn test_paste_before_multichar_forward_selection_inserts_at_selection_start() {
     // "world" as a forward range (anchor=6 < head=11)
-    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
+    let mut sim = sim_with_selection(
+        "hello world",
+        CursorRange::new(Pos::new(0, 6), Pos::new(0, 11)),
+    );
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();
 
@@ -173,7 +183,10 @@ fn test_paste_before_multichar_forward_selection_inserts_at_selection_start() {
 #[test]
 fn test_paste_before_multichar_backward_selection_inserts_at_selection_start() {
     // Same "world" range, flipped to a backward selection (anchor=11 > head=6)
-    let mut sim = sim_with_selection("hello world", [0, 6, 0, 11]);
+    let mut sim = sim_with_selection(
+        "hello world",
+        CursorRange::new(Pos::new(0, 6), Pos::new(0, 11)),
+    );
     sim.execute_command(CMD_FLIP_SELECTIONS).unwrap();
     sim.execute_command(CMD_YANK).unwrap();
     sim.execute_command(CMD_PASTE_BEFORE).unwrap();

@@ -300,6 +300,44 @@ tags = ["case", "lowercase", "editing", "selection"]
 commands_taught = ["`"]
 
 # ============================================================================
+# UPPERCASE (Alt-` command)
+# ============================================================================
+
+[[scenarios]]
+id = "uppercase_001"
+name = "Convert a selection to uppercase"
+description = "Use 'Alt-`' to turn mixed-case text into all capitals"
+
+hints = [
+    "'x' selects the whole line",
+    "'Alt-`' converts the selection to uppercase",
+    "'~' would only flip each letter's case, leaving 'Hello' as 'hELLO'",
+]
+
+[scenarios.setup]
+file_content = """Hello World"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """HELLO WORLD"""
+selection = [0, 0, 0, 11]
+
+[scenarios.solution]
+commands = ["x", "Alt-`"]
+description = "Press 'x' to select the line, then 'Alt-`' to uppercase it"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "beginner"
+tags = ["case", "uppercase", "editing", "selection"]
+commands_taught = ["Alt-`"]
+
+# ============================================================================
 # REPLACE WITH YANKED (R command)
 # ============================================================================
 

@@ -8,70 +8,71 @@ pub mod select_mode;
 pub mod selection;
 pub mod view;
 
-use super::{
-    AnyModeSimulator, HelixSimulator, InsertCommand, InsertEntryCommand, InsertMode, Mode,
-    NormalMode,
-};
-use crate::grammar::commands::{
-    CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_COMMAND_LINE, CMD_ESCAPE,
-};
+use super::{AnyModeSimulator, HelixSimulator, InsertEntryCommand, InsertMode, NormalMode};
+use crate::grammar::commands::CMD_COMMAND_LINE;
 use crate::grammar::find::{FindDirection, FindKind};
+use crate::helix::InsertInput;
 use crate::helix::error::SimulatorError;
 use crate::helix::normal_command::{
     MacroOp, NormalCommand, PromptKind, RegisterOp, SurroundOp, TextObjectScope,
 };
 use crate::helix::registry::{CountBehavior, normal_registry};
-use crate::helix::repeat::{Movement, is_repeatable_command};
-use crossterm::event::KeyEvent;
+use crate::helix::repeat::{InsertAction, Movement};
 
 type ArrowStep = fn(&mut HelixSimulator<InsertMode>, usize) -> Result<(), SimulatorError>;
 
-/// The cursor motion of an Insert-mode arrow key and how `.` records it.
-fn insert_arrow(cmd: &str) -> Option<(ArrowStep, Movement)> {
-    match cmd {
-        CMD_ARROW_LEFT => Some((movement::move_left, Movement::Left)),
-        CMD_ARROW_RIGHT => Some((movement::move_right, Movement::Right)),
-        CMD_ARROW_UP => Some((movement::move_up, Movement::Up)),
-        CMD_ARROW_DOWN => Some((movement::move_down, Movement::Down)),
-        _ => None,
+/// The cursor motion of an Insert-mode arrow key.
+fn arrow_step(movement: Movement) -> ArrowStep {
+    match movement {
+        Movement::Left => movement::move_left,
+        Movement::Right => movement::move_right,
+        Movement::Up => movement::move_up,
+        Movement::Down => movement::move_down,
     }
 }
 
 fn execute_insert_mode_command_internal(
     sim: &mut HelixSimulator<InsertMode>,
-    cmd: &str,
+    input: &InsertInput,
 ) -> Result<(), SimulatorError> {
-    if cmd == CMD_ESCAPE {
-        if !sim.is_repeating {
-            let action = sim.repeat_buffer.insert_recorder_mut().finish();
-            sim.repeat_buffer.set_last_action(action);
-        }
-        Ok(())
-    } else if let Some((step, movement)) = insert_arrow(cmd) {
-        let result = step(sim, 1);
-        if result.is_ok() {
-            sim.session.drop_entry_ranges(&sim.selection);
+    match input {
+        InsertInput::Escape => {
             if !sim.is_repeating {
+                let session = sim.repeat_buffer.insert_recorder_mut().finish();
+                sim.repeat_buffer.set_last_insert(session);
+            }
+            Ok(())
+        }
+        InsertInput::Key(InsertAction::Move(movement)) => {
+            let result = arrow_step(*movement)(sim, 1);
+            if result.is_ok() {
+                sim.session.drop_entry_ranges(&sim.selection);
+                if !sim.is_repeating {
+                    sim.repeat_buffer
+                        .insert_recorder_mut()
+                        .record_movement(*movement);
+                }
+            }
+            result
+        }
+        InsertInput::Key(InsertAction::Edit(command)) => {
+            let result = sim.apply_insert_command(*command);
+            if result.is_ok() && !sim.is_repeating {
                 sim.repeat_buffer
                     .insert_recorder_mut()
-                    .record_movement(movement);
+                    .record_edit(*command);
             }
+            result
         }
-        result
-    } else if let Some(command) = InsertCommand::parse(cmd) {
-        let result = sim.apply_insert_command(command);
-        if result.is_ok() && !sim.is_repeating {
-            sim.repeat_buffer.insert_recorder_mut().record_edit(command);
-        }
-        result
-    } else {
-        let result = sim.insert_text(cmd);
-        if result.is_ok() && !sim.is_repeating {
-            for ch in cmd.chars() {
-                sim.repeat_buffer.insert_recorder_mut().record_char(ch);
+        InsertInput::Text(text) => {
+            let result = sim.insert_text(text);
+            if result.is_ok() && !sim.is_repeating {
+                for ch in text.chars() {
+                    sim.repeat_buffer.insert_recorder_mut().record_char(ch);
+                }
             }
+            result
         }
-        result
     }
 }
 
@@ -90,9 +91,9 @@ pub(super) fn execute_normal_mode_command(
             count: None,
         } => normal_registry().execute(sim, command.key()).map(drop),
         NormalCommand::Registered { count: Some(_), .. } => Err(SimulatorError::CountNotAccepted),
-        NormalCommand::InsertEntry(InsertEntryCommand::Change {
-            register: Some(register),
-        }) => sim.change_selection_from_register(Some(*register)),
+        NormalCommand::InsertEntry(InsertEntryCommand::Change { register }) => {
+            sim.change_selection_from_register(*register)
+        }
         NormalCommand::InsertEntry(entry) => normal_registry()
             .execute(sim, &entry.uncounted().command())
             .map(drop),
@@ -137,7 +138,7 @@ pub(super) fn execute_normal_mode_command(
             object,
         } => editing::select_inside_textobject(sim, *object),
         NormalCommand::Register { register, op } => {
-            let register = Some(*register);
+            let register = *register;
             match op {
                 RegisterOp::Yank => clipboard::yank_to_register(sim, register),
                 RegisterOp::PasteAfter => clipboard::paste_after_from_register(sim, register),
@@ -162,26 +163,9 @@ pub(super) fn execute_normal_mode_command(
     }
 }
 
-fn record_command_if_needed_normal(
-    sim: &mut HelixSimulator<NormalMode>,
-    key_events: &[KeyEvent],
-    mode_before: Mode,
-) {
-    let should_record =
-        !key_events.is_empty() && !sim.is_repeating && key_events.iter().all(is_repeatable_command);
-
-    if should_record {
-        sim.repeat_buffer
-            .record_command(key_events.to_vec(), mode_before);
-    }
-}
-
-/// Record a successfully run Insert-entering command for `.`: the command
-/// itself, then the start of the Insert recording that `Escape` finishes.
+/// Start the Insert recording that `Escape` finishes and `.` replays.
 /// Nothing is recorded while a `.` replay is running.
 pub(super) fn record_insert_entry(sim: &mut HelixSimulator<NormalMode>, entry: InsertEntryCommand) {
-    let keys = NormalCommand::InsertEntry(entry).keys();
-    record_command_if_needed_normal(sim, &keys, Mode::Normal);
     if !sim.is_repeating {
         sim.repeat_buffer
             .insert_recorder_mut()
@@ -221,12 +205,28 @@ pub(super) fn execute_command_any_mode(
     sim: &mut AnyModeSimulator,
     cmd: &str,
 ) -> Result<(), SimulatorError> {
+    run_input(sim, cmd, || InsertInput::parse(cmd))
+}
+
+/// Run an Insert-mode input; a Normal-mode simulator takes the command its text names.
+pub(super) fn execute_insert_any_mode(
+    sim: &mut AnyModeSimulator,
+    input: &InsertInput,
+) -> Result<(), SimulatorError> {
+    run_input(sim, input.command(), || input.clone())
+}
+
+fn run_input(
+    sim: &mut AnyModeSimulator,
+    cmd: &str,
+    insert_input: impl FnOnce() -> InsertInput,
+) -> Result<(), SimulatorError> {
     transition(sim, |sim| match sim {
         AnyModeSimulator::Normal(normal_sim) => match NormalCommand::parse(cmd) {
             Ok(command) => run_normal(normal_sim, &command),
             Err(error) => (Err(error), AnyModeSimulator::Normal(normal_sim)),
         },
-        AnyModeSimulator::Insert(insert_sim) => run_insert_text(insert_sim, cmd),
+        AnyModeSimulator::Insert(insert_sim) => run_insert(insert_sim, &insert_input()),
     })
 }
 
@@ -241,7 +241,9 @@ pub(super) fn execute_normal_any_mode(
 ) -> Result<(), SimulatorError> {
     transition(sim, |sim| match sim {
         AnyModeSimulator::Normal(normal_sim) => run_normal(normal_sim, command),
-        AnyModeSimulator::Insert(insert_sim) => run_insert_text(insert_sim, &command.to_string()),
+        AnyModeSimulator::Insert(insert_sim) => {
+            run_insert(insert_sim, &InsertInput::parse(&command.to_string()))
+        }
     })
 }
 
@@ -305,9 +307,6 @@ fn run_normal(
         }
     } else {
         let result = select_mode::execute(&mut normal_sim, command);
-        if result.is_ok() {
-            record_command_if_needed_normal(&mut normal_sim, &command.keys(), Mode::Normal);
-        }
         (result, AnyModeSimulator::Normal(normal_sim))
     };
 
@@ -321,12 +320,16 @@ fn run_normal(
     (result, new_sim)
 }
 
-/// Run `cmd` as typed text or an Insert-mode key in an Insert-mode simulator.
-fn run_insert_text(
+/// Run `input` against an Insert-mode simulator.
+pub(super) fn run_insert(
     mut insert_sim: HelixSimulator<InsertMode>,
-    cmd: &str,
+    input: &InsertInput,
 ) -> (Result<(), SimulatorError>, AnyModeSimulator) {
-    let (result, mut new_sim) = if cmd.len() > 1 && cmd.starts_with(CMD_COMMAND_LINE) {
+    let cmd = input.command();
+    let (result, mut new_sim) = if matches!(input, InsertInput::Text(_))
+        && cmd.len() > 1
+        && cmd.starts_with(CMD_COMMAND_LINE)
+    {
         // Command-line strings are assembled by `CommandLinePending` in
         // Normal mode only; guarded here too so an *assembled* `:`-prefixed
         // string (e.g. ":goto 3") can never be inserted as literal text.
@@ -339,9 +342,8 @@ fn run_insert_text(
             AnyModeSimulator::Insert(insert_sim),
         )
     } else {
-        let exiting = cmd == CMD_ESCAPE;
-        let result = execute_insert_mode_command_internal(&mut insert_sim, cmd);
-        if result.is_ok() && exiting {
+        let result = execute_insert_mode_command_internal(&mut insert_sim, input);
+        if result.is_ok() && *input == InsertInput::Escape {
             (
                 result,
                 AnyModeSimulator::Normal(insert_sim.exit_insert_mode()),
@@ -467,7 +469,7 @@ mod tests {
 
             assert_eq!(run("a caf\u{e9} b", "f\u{e9}").selection.primary().head, 6);
             assert_eq!(run("abc", "r\u{1f600}").doc.to_string(), "\u{1f600}bc");
-            assert_eq!(run("abc", "ms\u{e9}").doc.to_string(), "\u{e9}\u{e9}abc");
+            assert_eq!(run("abc", "ms\u{e9}").doc.to_string(), "\u{e9}a\u{e9}bc");
             for cmd in ["md\u{e9}", "mr\u{e9}\u{1f600}", "mi\u{e9}", "ma\u{1f600}"] {
                 run("abc", cmd);
             }

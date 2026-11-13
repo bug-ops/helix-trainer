@@ -1,0 +1,101 @@
+# Insert Mode Editing Keys
+# Scenarios for Ctrl-w, Ctrl-k and Alt-Backspace while typing
+
+[[scenarios]]
+id = "insert_delete_word_001"
+name = "Delete the word part before the cursor with Ctrl-w"
+description = "Remove the text before the cursor up to the word start without leaving Insert mode"
+
+hints = [
+    "'i' inserts before the cursor, which sits in the middle of the word",
+    "'Ctrl-w' deletes from the cursor back to the start of the word in Insert mode",
+]
+
+[scenarios.setup]
+file_content = """oldname"""
+cursor_position = [0, 3]
+
+[scenarios.target]
+file_content = """name"""
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["i", "Ctrl-w", "Escape"]
+description = "Press 'i', erase 'old' with 'Ctrl-w', then Escape"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["insert-mode", "delete", "word"]
+commands_taught = ["Ctrl-w"]
+
+[[scenarios]]
+id = "insert_delete_to_end_001"
+name = "Delete to line end with Ctrl-k"
+description = "Replace the tail of a line without leaving Insert mode"
+
+hints = [
+    "'i' inserts before the cursor",
+    "'Ctrl-k' deletes from the cursor to the end of the line in Insert mode",
+]
+
+[scenarios.setup]
+file_content = """name = old value here"""
+cursor_position = [0, 7]
+
+[scenarios.target]
+file_content = """name = new"""
+cursor_position = [0, 10]
+
+[scenarios.solution]
+commands = ["i", "Ctrl-k", "n", "e", "w", "Escape"]
+description = "Press 'i', erase the rest of the line with 'Ctrl-k', type 'new', then Escape"
+
+[scenarios.scoring]
+optimal_count = 6
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["insert-mode", "delete", "line-end"]
+commands_taught = ["Ctrl-k"]
+
+[[scenarios]]
+id = "insert_alt_backspace_001"
+name = "Delete the word part before the cursor with Alt-Backspace"
+description = "Remove the text before the cursor up to the word start with 'Alt-Backspace'"
+
+hints = [
+    "'i' inserts before the cursor, which sits in the middle of the word",
+    "'Alt-Backspace' deletes from the cursor back to the start of the word in Insert mode",
+]
+
+[scenarios.setup]
+file_content = """tmpvalue"""
+cursor_position = [0, 3]
+
+[scenarios.target]
+file_content = """value"""
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["i", "Alt-Backspace", "Escape"]
+description = "Press 'i', erase 'tmp' with 'Alt-Backspace', then Escape"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["insert-mode", "delete", "word"]
+commands_taught = ["Alt-Backspace"]

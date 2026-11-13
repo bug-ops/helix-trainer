@@ -129,11 +129,6 @@ impl KeyTrie {
         self.single_key.insert(key);
     }
 
-    /// Check if a key string is a registered single-key command (including modifiers)
-    pub fn is_registered_single(&self, key: &str) -> bool {
-        self.single_key.contains(key)
-    }
-
     /// Resolve a command buffer to a `KeyMatch`
     ///
     /// # Arguments

@@ -940,7 +940,7 @@ mod tests {
         fn insert_mode_state() -> AppState {
             let mut state = create_test_app_state();
             let session = match make_active_task_session()
-                .record_action(CMD_INSERT.to_string())
+                .record_action(CMD_INSERT)
                 .unwrap()
             {
                 crate::game::SessionAfterAction::StillActive(session) => session,
@@ -1276,7 +1276,7 @@ mod tests {
         fn test_escape_exits_insert_mode_even_with_hint_panel_open() {
             let mut state = create_test_app_state();
             let session = make_active_task_session();
-            let session = match session.record_action(CMD_INSERT.to_string()).unwrap() {
+            let session = match session.record_action(CMD_INSERT).unwrap() {
                 crate::game::SessionAfterAction::StillActive(session) => session,
                 crate::game::SessionAfterAction::Completed(_) => {
                     panic!("entering insert mode should not complete the scenario")
@@ -2092,7 +2092,8 @@ mod tests {
             );
             assert_matches!(
                 input_state(&state),
-                crate::input::typestate::InputState::RegisterOpPending { register: 'a' }
+                crate::input::typestate::InputState::RegisterOpPending { register }
+                    if register == crate::helix::Register::from('a')
             );
 
             // Must not panic and must fall through to the stock key, which

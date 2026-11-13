@@ -32,9 +32,9 @@ pub enum SecurityError {
         actual: u64,
     },
 
-    /// TOML parsing failed; carries the parser message for logs only.
-    #[error("Invalid TOML format: {0}")]
-    InvalidToml(String),
+    /// TOML parsing failed; the typed parser error (with line/column span) is the source.
+    #[error("Invalid TOML format")]
+    InvalidToml(#[source] Box<toml::de::Error>),
 
     /// A scenario file holds more scenarios than allowed.
     #[error("Too many scenarios in file (max {max}, got {actual})")]
@@ -54,10 +54,6 @@ pub enum SecurityError {
         actual: usize,
     },
 
-    /// A cursor position lies outside the document.
-    #[error("Invalid cursor position")]
-    InvalidCursorPosition,
-
     /// A scenario declares more hints than allowed.
     #[error("Too many hints (max {max})")]
     TooManyHints {
@@ -66,12 +62,11 @@ pub enum SecurityError {
     },
 
     /// A session recorded more actions than the cap.
-    #[error("Too many actions (max: 1000000)")]
-    TooManyActions,
-
-    /// A score computation overflowed its integer type.
-    #[error("Score calculation overflow")]
-    ScoreOverflow,
+    #[error("Too many actions (max: {max})")]
+    TooManyActions {
+        /// The most actions a run may record.
+        max: usize,
+    },
 
     /// A command sequence exceeds the length cap.
     #[error("Command sequence too long (max {max})")]
@@ -84,13 +79,9 @@ pub enum SecurityError {
     #[error("Invalid content: contains null bytes or invalid encoding")]
     InvalidContent,
 
-    /// Bytes are not valid UTF-8.
+    /// Bytes are not valid UTF-8; the source carries the byte offset.
     #[error("Invalid UTF-8 encoding")]
-    InvalidEncoding,
-
-    /// The application reached a state that violates an invariant.
-    #[error("Invalid state: {0}")]
-    InvalidState(String),
+    InvalidEncoding(#[source] std::string::FromUtf8Error),
 
     /// A keymap file defines more bindings than allowed.
     #[error("Too many keymap bindings (max {max}, got {actual})")]
@@ -105,9 +96,14 @@ pub enum SecurityError {
     #[error("Not a regular file")]
     NotRegularFile,
 
-    /// Reading a file failed; carries the I/O message for logs only.
-    #[error("Failed to read file: {0}")]
-    ReadFailed(String),
+    /// Reading a file failed; the source keeps the [`std::io::ErrorKind`].
+    #[error("Failed to read file")]
+    ReadFailed(#[source] std::io::Error),
+
+    /// The file could not be inspected or opened; the source tells "not found" from
+    /// "permission denied".
+    #[error("File could not be opened")]
+    Inaccessible(#[source] std::io::Error),
 }
 
 /// Why [`path_validator::read_capped`] refused or failed to read a file.
@@ -159,11 +155,17 @@ impl From<CappedReadError> for SecurityError {
         match err {
             CappedReadError::NotRegularFile => Self::NotRegularFile,
             CappedReadError::TooLarge { max, actual } => Self::FileTooLarge { max, actual },
-            CappedReadError::Inaccessible(_) => Self::InvalidPath,
-            CappedReadError::Io(e) => Self::ReadFailed(e.to_string()),
-            CappedReadError::InvalidUtf8(_) => Self::InvalidEncoding,
+            CappedReadError::Inaccessible(e) => Self::Inaccessible(e),
+            CappedReadError::Io(e) => Self::ReadFailed(e),
+            CappedReadError::InvalidUtf8(e) => Self::InvalidEncoding(e),
         }
     }
+}
+
+/// A real `toml::de::Error` for tests that need a typed parse failure.
+#[cfg(test)]
+pub(crate) fn sample_toml_error() -> toml::de::Error {
+    toml::from_str::<toml::Value>("key = ").unwrap_err()
 }
 
 /// Renders `error` and every cause below it as `top: cause: root cause`.
@@ -372,106 +374,21 @@ pub mod sanitizer {
     }
 }
 
-/// Safe arithmetic operations for scoring and calculations
+/// Bounds checks on counts supplied by a session
 pub mod arithmetic {
     use super::SecurityError;
-
-    /// Safely calculates score with overflow prevention
-    ///
-    /// # Errors
-    /// Returns `ScoreOverflow` if the calculation would overflow
-    ///
-    /// # Examples
-    /// ```
-    /// use helix_trainer::security::arithmetic::checked_score_calculation;
-    ///
-    /// let score = checked_score_calculation(5, 10, 100)?;
-    /// assert_eq!(score, 50);
-    /// # Ok::<(), helix_trainer::security::SecurityError>(())
-    /// ```
-    pub fn checked_score_calculation(
-        optimal_count: usize,
-        actual_count: usize,
-        max_points: u32,
-    ) -> Result<u32, SecurityError> {
-        // Validate inputs to prevent division by zero and negative scenarios
-        if optimal_count == 0 || actual_count == 0 {
-            return Err(SecurityError::ScoreOverflow);
-        }
-
-        // Use checked arithmetic to prevent overflow
-        let numerator = u64::from(max_points)
-            .checked_mul(optimal_count as u64)
-            .ok_or(SecurityError::ScoreOverflow)?;
-
-        let result = numerator
-            .checked_div(actual_count as u64)
-            .ok_or(SecurityError::ScoreOverflow)?;
-
-        // Ensure result fits in u32 and doesn't exceed max_points
-        u32::try_from(result.min(u64::from(max_points))).map_err(|_| SecurityError::ScoreOverflow)
-    }
-
-    /// Safely adds two scores with overflow prevention
-    ///
-    /// # Errors
-    /// Returns `ScoreOverflow` if the sum would overflow
-    pub fn checked_score_add(a: u32, b: u32) -> Result<u32, SecurityError> {
-        a.checked_add(b).ok_or(SecurityError::ScoreOverflow)
-    }
-
-    /// Safely multiplies a score with a multiplier (for alternatives)
-    ///
-    /// # Errors
-    /// Returns `ScoreOverflow` if the multiplication would overflow
-    pub fn checked_score_multiply(score: u32, multiplier: f32) -> Result<u32, SecurityError> {
-        // Ensure multiplier is reasonable (0.0 to 2.0)
-        if !(0.0..=2.0).contains(&multiplier) {
-            return Err(SecurityError::ScoreOverflow);
-        }
-
-        let result = f64::from(score) * f64::from(multiplier);
-
-        if result > f64::from(u32::MAX) {
-            return Err(SecurityError::ScoreOverflow);
-        }
-
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "0.0 <= result <= u32::MAX is checked above"
-        )]
-        let scaled = result as u32;
-        Ok(scaled)
-    }
+    use crate::limits::MAX_USER_ACTIONS;
 
     /// Validates that action counts are within reasonable bounds
     ///
     /// # Errors
     /// Returns `TooManyActions` if count exceeds maximum
     pub fn validate_action_count(count: usize) -> Result<(), SecurityError> {
-        if count > 1_000_000 {
-            return Err(SecurityError::TooManyActions);
+        if count > MAX_USER_ACTIONS {
+            return Err(SecurityError::TooManyActions {
+                max: MAX_USER_ACTIONS,
+            });
         }
-        Ok(())
-    }
-
-    /// Validates cursor position is within bounds
-    ///
-    /// # Errors
-    /// Returns `InvalidCursorPosition` if row or col exceeds reasonable bounds
-    pub fn validate_cursor_position(
-        row: usize,
-        col: usize,
-        max_content_size: usize,
-    ) -> Result<(), SecurityError> {
-        // Cursor position should be reasonable - not exceeding a line that's 10x the content size
-        let max_reasonable = max_content_size.saturating_mul(10);
-
-        if row > max_reasonable || col > max_reasonable {
-            return Err(SecurityError::InvalidCursorPosition);
-        }
-
         Ok(())
     }
 }
@@ -546,77 +463,6 @@ mod tests {
         assert_eq!(sanitized, "[redacted]");
     }
 
-    // Arithmetic safety tests
-    #[test]
-    fn test_normal_score_calculation() {
-        let result = arithmetic::checked_score_calculation(5, 10, 100);
-        assert_eq!(result.unwrap(), 50);
-    }
-
-    #[test]
-    fn test_score_calculation_zero_optimal() {
-        let result = arithmetic::checked_score_calculation(0, 10, 100);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_score_calculation_zero_actual() {
-        let result = arithmetic::checked_score_calculation(10, 0, 100);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_score_calculation_capped_at_max() {
-        // If actual < optimal, score should be capped at max_points
-        let result = arithmetic::checked_score_calculation(10, 5, 100);
-        assert_eq!(result.unwrap(), 100);
-    }
-
-    #[test]
-    fn test_score_calculation_overflow_prevention() {
-        // Test with values that would overflow
-        let result = arithmetic::checked_score_calculation(usize::MAX / 2, 1, u32::MAX);
-        // This will overflow when computing the numerator
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_score_add_normal() {
-        let result = arithmetic::checked_score_add(50, 30);
-        assert_eq!(result.unwrap(), 80);
-    }
-
-    #[test]
-    fn test_score_add_overflow() {
-        let result = arithmetic::checked_score_add(u32::MAX, 1);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_score_multiply_normal() {
-        let result = arithmetic::checked_score_multiply(100, 0.5);
-        assert_eq!(result.unwrap(), 50);
-    }
-
-    #[test]
-    fn test_score_multiply_boundary() {
-        // Test edge of valid range
-        let result = arithmetic::checked_score_multiply(100, 2.0);
-        assert_eq!(result.unwrap(), 200);
-
-        let result = arithmetic::checked_score_multiply(100, 0.0);
-        assert_eq!(result.unwrap(), 0);
-    }
-
-    #[test]
-    fn test_score_multiply_invalid_multiplier() {
-        let result = arithmetic::checked_score_multiply(100, -0.5);
-        assert!(result.is_err());
-
-        let result = arithmetic::checked_score_multiply(100, 3.0);
-        assert!(result.is_err());
-    }
-
     #[test]
     fn test_action_count_validation_normal() {
         let result = arithmetic::validate_action_count(1000);
@@ -625,31 +471,13 @@ mod tests {
 
     #[test]
     fn test_action_count_validation_boundary() {
-        let result = arithmetic::validate_action_count(1_000_000);
+        let result = arithmetic::validate_action_count(crate::limits::MAX_USER_ACTIONS);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_action_count_validation_exceeds() {
-        let result = arithmetic::validate_action_count(2_000_000);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_cursor_position_validation_normal() {
-        let result = arithmetic::validate_cursor_position(10, 5, 1000);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_cursor_position_validation_col_excessive() {
-        let result = arithmetic::validate_cursor_position(0, 1_000_000_000, 100);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_cursor_position_validation_excessive() {
-        let result = arithmetic::validate_cursor_position(1_000_000_000, 0, 100);
+        let result = arithmetic::validate_action_count(crate::limits::MAX_USER_ACTIONS + 1);
         assert!(result.is_err());
     }
 
@@ -680,7 +508,7 @@ mod tests {
             .contains("too large")
         );
         assert!(
-            SecurityError::InvalidToml("error".to_string())
+            SecurityError::InvalidToml(Box::new(sample_toml_error()))
                 .to_string()
                 .contains("TOML")
         );
@@ -701,24 +529,14 @@ mod tests {
             .contains("Content")
         );
         assert!(
-            SecurityError::InvalidCursorPosition
-                .to_string()
-                .contains("cursor")
-        );
-        assert!(
             SecurityError::TooManyHints { max: 10 }
                 .to_string()
                 .contains("hints")
         );
         assert!(
-            SecurityError::TooManyActions
+            SecurityError::TooManyActions { max: 5 }
                 .to_string()
                 .contains("actions")
-        );
-        assert!(
-            SecurityError::ScoreOverflow
-                .to_string()
-                .contains("overflow")
         );
         assert!(
             SecurityError::CommandSequenceTooLong { max: 100 }
@@ -730,12 +548,58 @@ mod tests {
                 .to_string()
                 .contains("content")
         );
-        assert!(SecurityError::InvalidEncoding.to_string().contains("UTF-8"));
         assert!(
-            SecurityError::InvalidState("err".to_string())
+            SecurityError::InvalidEncoding(String::from_utf8(vec![0xff]).unwrap_err())
                 .to_string()
-                .contains("Invalid state")
+                .contains("UTF-8")
         );
+    }
+
+    mod typed_causes {
+        use super::*;
+        use std::error::Error;
+        use std::io::ErrorKind;
+
+        #[test]
+        fn capped_read_conversion_keeps_io_kind() {
+            let inaccessible = SecurityError::from(CappedReadError::Inaccessible(
+                ErrorKind::PermissionDenied.into(),
+            ));
+            let source = inaccessible.source().unwrap();
+            let io = source.downcast_ref::<std::io::Error>().unwrap();
+            assert_eq!(io.kind(), ErrorKind::PermissionDenied);
+
+            let read = SecurityError::from(CappedReadError::Io(ErrorKind::NotFound.into()));
+            let io = read
+                .source()
+                .unwrap()
+                .downcast_ref::<std::io::Error>()
+                .unwrap();
+            assert_eq!(io.kind(), ErrorKind::NotFound);
+        }
+
+        #[test]
+        fn capped_read_conversion_keeps_utf8_offset() {
+            let utf8 = String::from_utf8(vec![b'a', 0xff]).unwrap_err();
+            let err = SecurityError::from(CappedReadError::InvalidUtf8(utf8));
+            let cause = err
+                .source()
+                .unwrap()
+                .downcast_ref::<std::string::FromUtf8Error>()
+                .unwrap();
+            assert_eq!(cause.utf8_error().valid_up_to(), 1);
+        }
+
+        #[test]
+        fn toml_error_keeps_span() {
+            let err = SecurityError::InvalidToml(Box::new(sample_toml_error()));
+            let cause = err
+                .source()
+                .unwrap()
+                .downcast_ref::<Box<toml::de::Error>>()
+                .unwrap();
+            assert!(cause.span().is_some());
+        }
     }
 
     mod read_capped {
@@ -785,19 +649,19 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let err = path_validator::read_capped(&dir.path().join("nope"), 5).unwrap_err();
             assert!(err.is_not_found(), "{err}");
-            assert_matches!(SecurityError::from(err), SecurityError::InvalidPath);
+            assert_matches!(SecurityError::from(err), SecurityError::Inaccessible(_));
         }
 
         #[cfg(unix)]
         #[test]
-        fn stat_failures_other_than_not_found_map_to_invalid_path() {
+        fn stat_failures_other_than_not_found_map_to_inaccessible() {
             let dir = tempfile::tempdir().unwrap();
             let file = dir.path().join("f.txt");
             std::fs::write(&file, "x").unwrap();
             let err = path_validator::read_capped(&file.join("child"), 5).unwrap_err();
             assert_matches!(err, CappedReadError::Inaccessible(_), "{err}");
             assert!(!err.is_not_found(), "ENOTDIR is not NotFound");
-            assert_matches!(SecurityError::from(err), SecurityError::InvalidPath);
+            assert_matches!(SecurityError::from(err), SecurityError::Inaccessible(_));
         }
 
         #[test]

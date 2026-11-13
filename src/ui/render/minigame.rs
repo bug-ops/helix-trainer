@@ -177,7 +177,7 @@ fn render_playing(
 
     // Editor content (current scenario)
     let target_area = session.current_scenario().map(|current| {
-        render_scenario_editor(frame, chunks[2], current, &current.scenario.description)
+        render_scenario_editor(frame, chunks[2], current, &current.scenario().description)
     });
 
     // Timer bar

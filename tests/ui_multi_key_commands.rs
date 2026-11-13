@@ -58,17 +58,13 @@ fn create_test_app_state(scenarios: Vec<Scenario>) -> AppState {
     AppState::new(scenarios, profile, storage, tracker)
 }
 
-fn cursor_at(row: usize, col: usize) -> CursorSpec {
-    CursorSpec::Point(Pos::try_from([row, col]).expect("valid position fixture"))
-}
-
 /// Helper to create a simple test scenario
 fn create_test_scenario(
     id: &str,
     setup_content: &str,
-    setup_cursor: (usize, usize),
+    setup_cursor: Pos,
     target_content: &str,
-    target_cursor: (usize, usize),
+    target_cursor: Pos,
 ) -> Scenario {
     Scenario {
         id: helix_trainer::ids::ScenarioId::parse(id).expect("valid scenario id fixture"),
@@ -77,11 +73,11 @@ fn create_test_scenario(
         setup: Setup {
             file_content: setup_content.to_string(),
             language: None,
-            cursor: cursor_at(setup_cursor.0, setup_cursor.1),
+            cursor: CursorSpec::Point(setup_cursor),
         },
         target: TargetState {
             file_content: target_content.to_string(),
-            cursor: cursor_at(target_cursor.0, target_cursor.1),
+            cursor: CursorSpec::Point(target_cursor),
         },
         solution: Solution {
             commands: vec!["test".to_string()],
@@ -103,9 +99,9 @@ fn test_replace_command_multi_key() {
     let scenario = create_test_scenario(
         "test_replace",
         "Hxllo",
-        (0, 1), // cursor on 'x'
+        Pos::new(0, 1), // cursor on 'x'
         "Hello",
-        (0, 1),
+        Pos::new(0, 1),
     );
 
     let mut state = create_test_app_state(vec![scenario]);
@@ -160,7 +156,13 @@ fn test_replace_command_multi_key() {
 /// reaches the pending `f` (which Space would have completed as `f<space>`)
 #[test]
 fn test_unparsable_key_token_is_dropped_and_keeps_the_pending_state() {
-    let scenario = create_test_scenario("test_unparsable", "a b", (0, 0), "a b", (0, 2));
+    let scenario = create_test_scenario(
+        "test_unparsable",
+        "a b",
+        Pos::new(0, 0),
+        "a b",
+        Pos::new(0, 2),
+    );
     let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 
@@ -185,9 +187,9 @@ fn test_xd_command_line_delete() {
     let scenario = create_test_scenario(
         "test_xd",
         "line1\nline2\nline3",
-        (1, 0),                // cursor on line2
+        Pos::new(1, 0),        // cursor on line2
         "line1\nline3\nextra", // Different target - won't auto-complete on xd
-        (1, 0),
+        Pos::new(1, 0),
     );
 
     let mut state = create_test_app_state(vec![scenario]);
@@ -234,9 +236,9 @@ fn test_gg_command_multi_key() {
     let scenario = create_test_scenario(
         "test_gg",
         "line1\nline2\nline3",
-        (2, 0), // cursor on line3
+        Pos::new(2, 0), // cursor on line3
         "line1\nline2\nline3",
-        (0, 2), // cursor at different position - won't auto-complete on gg
+        Pos::new(0, 2), // cursor at different position - won't auto-complete on gg
     );
 
     let mut state = create_test_app_state(vec![scenario]);
@@ -263,7 +265,7 @@ fn test_gg_command_multi_key() {
         // Input state should be back to Base
         assert!(task_data.input_state().state().is_base());
         let cursor = task_data.session.playable().current_cursor();
-        assert_eq!(cursor, (0, 0));
+        assert_eq!(cursor, Pos::new(0, 0));
     } else {
         panic!("Should be on Task screen after gg (scenario incomplete)");
     }
@@ -273,7 +275,7 @@ fn test_gg_command_multi_key() {
 fn test_replace_command_valid_sequence() {
     // Test that 'rr' is valid - replace character with 'r'
     // Target is different to avoid auto-complete
-    let scenario = create_test_scenario("test", "test", (0, 0), "best", (0, 0));
+    let scenario = create_test_scenario("test", "test", Pos::new(0, 0), "best", Pos::new(0, 0));
 
     let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
@@ -312,9 +314,9 @@ fn test_single_key_command_immediate_execution() {
     let scenario = create_test_scenario(
         "test_single",
         "hello",
-        (0, 0),
+        Pos::new(0, 0),
         "hello",
-        (0, 2), // Different target position - won't auto-complete on 'l'
+        Pos::new(0, 2), // Different target position - won't auto-complete on 'l'
     );
 
     let mut state = create_test_app_state(vec![scenario]);
@@ -327,7 +329,7 @@ fn test_single_key_command_immediate_execution() {
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
         // Cursor should have moved
-        assert_eq!(task_data.session.playable().current_cursor().1, 1);
+        assert_eq!(task_data.session.playable().current_cursor().col(), 1);
     } else {
         panic!("Should be on Task screen (scenario incomplete)");
     }
@@ -337,7 +339,7 @@ fn test_single_key_command_immediate_execution() {
 fn test_replace_with_special_chars() {
     // Test replacing with various characters
     // Target is different to avoid auto-complete
-    let scenario = create_test_scenario("test_special", "x", (0, 0), "!!", (0, 0));
+    let scenario = create_test_scenario("test_special", "x", Pos::new(0, 0), "!!", Pos::new(0, 0));
 
     let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
@@ -360,9 +362,9 @@ fn test_undo_integration() {
     let scenario = create_test_scenario(
         "test_undo",
         "line1\nline2",
-        (0, 0),
+        Pos::new(0, 0),
         "line1\nline2\nline3",
-        (0, 0),
+        Pos::new(0, 0),
     );
 
     let mut state = create_test_app_state(vec![scenario]);
@@ -399,8 +401,13 @@ fn test_undo_integration() {
 fn test_register_yank_paste_multi_key() {
     // "ay yanks into register a; a later plain 'y' overwrites only the
     // default register; "ap then proves register a survived independently.
-    let scenario =
-        create_test_scenario("test_register", "alpha beta", (0, 0), "aalpha beta", (0, 1));
+    let scenario = create_test_scenario(
+        "test_register",
+        "alpha beta",
+        Pos::new(0, 0),
+        "aalpha beta",
+        Pos::new(0, 1),
+    );
 
     let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
@@ -421,7 +428,8 @@ fn test_register_yank_paste_multi_key() {
     if let TypedScreen::Task(task_data) = &state.screen {
         assert_matches!(
             task_data.input_state().state(),
-            helix_trainer::input::typestate::InputState::RegisterOpPending { register: 'a' }
+            helix_trainer::input::typestate::InputState::RegisterOpPending { register }
+                if *register == helix_trainer::helix::Register::from('a')
         );
         // Nothing executed yet
         assert_eq!(task_data.session.playable().current_content(), "alpha beta");
@@ -461,7 +469,13 @@ fn test_register_yank_paste_multi_key() {
 fn test_register_op_cancels_on_out_of_scope_operator() {
     // Register scope is limited to y/p/P/R/d/c; any other operator cancels
     // back to Base rather than executing a bare command.
-    let scenario = create_test_scenario("test_register_cancel", "hello", (0, 0), "world", (0, 0));
+    let scenario = create_test_scenario(
+        "test_register_cancel",
+        "hello",
+        Pos::new(0, 0),
+        "world",
+        Pos::new(0, 0),
+    );
 
     let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
@@ -485,9 +499,9 @@ fn test_command_line_goto_multi_key() {
     let scenario = create_test_scenario(
         "test_command_line",
         "line1\nline2\nline3\nline4",
-        (0, 0),
+        Pos::new(0, 0),
         "line1\nline2\nline3\nline4",
-        (2, 0),
+        Pos::new(2, 0),
     );
 
     let mut state = create_test_app_state(vec![scenario]);
@@ -517,7 +531,10 @@ fn test_command_line_goto_multi_key() {
             Some("goto 3")
         );
         // Nothing executed yet - the buffer only assembles until Enter
-        assert_eq!(task_data.session.playable().current_cursor(), (0, 0));
+        assert_eq!(
+            task_data.session.playable().current_cursor(),
+            Pos::new(0, 0)
+        );
     } else {
         panic!("Should be on Task screen");
     }
@@ -529,7 +546,10 @@ fn test_command_line_goto_multi_key() {
     // session in its completed state.
     if let TypedScreen::Task(task_data) = &state.screen {
         assert!(task_data.input_state().state().is_base());
-        assert_eq!(task_data.session.playable().current_cursor(), (2, 0));
+        assert_eq!(
+            task_data.session.playable().current_cursor(),
+            Pos::new(2, 0)
+        );
     } else {
         panic!("Should be on Task screen (or completed) after ':goto 3'");
     }
@@ -537,7 +557,13 @@ fn test_command_line_goto_multi_key() {
 
 #[test]
 fn test_command_line_escape_cancels_buffer() {
-    let scenario = create_test_scenario("test_cmdline_cancel", "hello", (0, 0), "world", (0, 0));
+    let scenario = create_test_scenario(
+        "test_cmdline_cancel",
+        "hello",
+        Pos::new(0, 0),
+        "world",
+        Pos::new(0, 0),
+    );
 
     let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
@@ -561,7 +587,13 @@ fn test_ctrl_c_toggle_comments_on_task_screen_keeps_the_selection_valid() {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use helix_trainer::ui::handle_key_event;
 
-    let scenario = create_test_scenario("test_ctrl_c", "// a\n", (0, 0), "unreachable", (0, 0));
+    let scenario = create_test_scenario(
+        "test_ctrl_c",
+        "// a\n",
+        Pos::new(0, 0),
+        "unreachable",
+        Pos::new(0, 0),
+    );
     let mut state = create_test_app_state(vec![scenario]);
     start_scenario_from_menu(&mut state, 0).unwrap();
 

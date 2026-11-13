@@ -2,7 +2,7 @@
 
 use super::helpers::find_surrounding_brackets;
 use crate::game::PlayableScenario;
-use crate::helix::SelectionBounds;
+use crate::helix::{Pos, SelectionBounds};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -25,10 +25,8 @@ pub(crate) enum PreviewType {
 /// Encapsulates cursor position and primary/secondary status for style differentiation.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CursorInfo {
-    /// Row position (0-indexed)
-    pub row: usize,
-    /// Column position (0-indexed)
-    pub col: usize,
+    /// Document position of the cursor
+    pub pos: Pos,
     /// Whether this is the primary cursor
     pub is_primary: bool,
 }
@@ -58,10 +56,8 @@ impl CursorInfo {
 /// Contains positions of brackets that will be modified and the operation type
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct PreviewHighlight {
-    pub open_row: usize,
-    pub open_col: usize,
-    pub close_row: usize,
-    pub close_col: usize,
+    pub open: Pos,
+    pub close: Pos,
     pub preview_type: PreviewType,
 }
 
@@ -69,18 +65,14 @@ impl PreviewHighlight {
     /// Create preview highlight by finding surrounding brackets
     pub(crate) fn from_surround_char(
         content: &str,
-        cursor_row: usize,
-        cursor_col: usize,
+        cursor: Pos,
         bracket_char: char,
         preview_type: PreviewType,
     ) -> Option<Self> {
-        let (open_row, open_col, close_row, close_col) =
-            find_surrounding_brackets(content, cursor_row, cursor_col, bracket_char)?;
+        let (open, close) = find_surrounding_brackets(content, cursor, bracket_char)?;
         Some(Self {
-            open_row,
-            open_col,
-            close_row,
-            close_col,
+            open,
+            close,
             preview_type,
         })
     }
@@ -114,7 +106,7 @@ fn render_line_with_multi_cursor(
         let char_str = &line_text[byte_pos..byte_pos + char_len];
 
         // Check if any cursor is at this position
-        let cursor_at_pos = cursors.iter().find(|c| c.col == col);
+        let cursor_at_pos = cursors.iter().find(|c| c.pos.col() == col);
 
         let style = cursor_at_pos.map_or_else(
             || {
@@ -135,7 +127,7 @@ fn render_line_with_multi_cursor(
     }
 
     // Cursors at end of line
-    for cursor in cursors.iter().filter(|c| c.col >= line_chars.len()) {
+    for cursor in cursors.iter().filter(|c| c.pos.col() >= line_chars.len()) {
         spans.push(Span::styled("\u{2588}".to_string(), cursor.style()));
     }
 
@@ -159,13 +151,13 @@ fn render_line_with_multi_selection(
             continue;
         }
 
-        let start_col = if line_idx == sel.start_row {
-            sel.start_col
+        let start_col = if line_idx == sel.start().row() {
+            sel.start().col()
         } else {
             0
         };
-        let end_col = if line_idx == sel.end_row {
-            sel.end_col
+        let end_col = if line_idx == sel.end().row() {
+            sel.end().col()
         } else {
             line_text.chars().count()
         };
@@ -205,11 +197,11 @@ fn get_preview_positions(preview: Option<PreviewHighlight>, line_idx: usize) -> 
     };
 
     let mut positions = Vec::new();
-    if line_idx == p.open_row {
-        positions.push(p.open_col);
+    if line_idx == p.open.row() {
+        positions.push(p.open.col());
     }
-    if line_idx == p.close_row {
-        positions.push(p.close_col);
+    if line_idx == p.close.row() {
+        positions.push(p.close.col());
     }
     positions.sort_unstable();
     positions
@@ -217,10 +209,10 @@ fn get_preview_positions(preview: Option<PreviewHighlight>, line_idx: usize) -> 
 
 /// Check if a line has selection (accounting for edge cases)
 fn line_has_selection(line_idx: usize, sel: &SelectionBounds) -> bool {
-    if line_idx == sel.end_row && sel.end_col == 0 {
+    if line_idx == sel.end().row() && sel.end().col() == 0 {
         return false;
     }
-    line_idx >= sel.start_row && line_idx <= sel.end_row
+    line_idx >= sel.start().row() && line_idx <= sel.end().row()
 }
 
 /// Render editor text with multi-cursor, multi-selection and diff highlighting.
@@ -269,7 +261,7 @@ pub(super) fn render_editor_with_diff(
             // Gather cursors on this line
             let cursors_on_line: Vec<CursorInfo> = cursors
                 .iter()
-                .filter(|c| c.row == line_idx)
+                .filter(|c| c.pos.row() == line_idx)
                 .copied()
                 .collect();
 
@@ -331,9 +323,8 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     let cursors: Vec<CursorInfo> = all_cursor_positions
         .iter()
         .enumerate()
-        .map(|(idx, &(row, col))| CursorInfo {
-            row,
-            col,
+        .map(|(idx, &pos)| CursorInfo {
+            pos,
             is_primary: idx == 0, // First cursor is primary
         })
         .collect();
@@ -346,9 +337,8 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     let target_cursors: Vec<CursorInfo> = all_target_cursor_positions
         .iter()
         .enumerate()
-        .map(|(idx, &(row, col))| CursorInfo {
-            row,
-            col,
+        .map(|(idx, &pos)| CursorInfo {
+            pos,
             is_primary: idx == 0, // First cursor is primary
         })
         .collect();
@@ -395,7 +385,10 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     // panels identically, so a line that runs past the panel's inner width scrolls into view
     // around the cursor while keeping Current/Target columns aligned.
     let panel_inner_width = current_area.width.saturating_sub(2) as usize;
-    let primary_cursor_col = cursors.iter().find(|c| c.is_primary).map_or(0, |c| c.col);
+    let primary_cursor_col = cursors
+        .iter()
+        .find(|c| c.is_primary)
+        .map_or(0, |c| c.pos.col());
     let h_off: u16 = if primary_cursor_col < panel_inner_width {
         0
     } else {
@@ -412,7 +405,10 @@ pub(super) fn render_editor_pair<S: PlayableScenario + ?Sized>(
     // (a trailing `\n` makes `Rope::char_to_line` report a phantom final row that `str::lines()`
     // drops), so this clamp is required for correctness, not just polish.
     let panel_inner_height = current_area.height.saturating_sub(2) as usize;
-    let primary_cursor_row = cursors.iter().find(|c| c.is_primary).map_or(0, |c| c.row);
+    let primary_cursor_row = cursors
+        .iter()
+        .find(|c| c.is_primary)
+        .map_or(0, |c| c.pos.row());
     let max_v_offset = current_lines.len().saturating_sub(panel_inner_height);
     let v_off_raw = primary_cursor_row
         .saturating_sub(panel_inner_height / 2)
@@ -458,10 +454,8 @@ mod tests {
     #[test]
     fn test_preview_highlight_color_replace() {
         let preview = PreviewHighlight {
-            open_row: 0,
-            open_col: 0,
-            close_row: 0,
-            close_col: 5,
+            open: Pos::new(0, 0),
+            close: Pos::new(0, 5),
             preview_type: PreviewType::Replace,
         };
 
@@ -471,10 +465,8 @@ mod tests {
     #[test]
     fn test_preview_highlight_color_delete() {
         let preview = PreviewHighlight {
-            open_row: 0,
-            open_col: 0,
-            close_row: 0,
-            close_col: 5,
+            open: Pos::new(0, 0),
+            close: Pos::new(0, 5),
             preview_type: PreviewType::Delete,
         };
 
@@ -486,10 +478,8 @@ mod tests {
     #[test]
     fn test_get_preview_positions_open_bracket() {
         let preview = PreviewHighlight {
-            open_row: 0,
-            open_col: 5,
-            close_row: 2,
-            close_col: 10,
+            open: Pos::new(0, 5),
+            close: Pos::new(2, 10),
             preview_type: PreviewType::Replace,
         };
 
@@ -501,10 +491,8 @@ mod tests {
     #[test]
     fn test_get_preview_positions_close_bracket() {
         let preview = PreviewHighlight {
-            open_row: 0,
-            open_col: 5,
-            close_row: 2,
-            close_col: 10,
+            open: Pos::new(0, 5),
+            close: Pos::new(2, 10),
             preview_type: PreviewType::Replace,
         };
 
@@ -516,10 +504,8 @@ mod tests {
     #[test]
     fn test_get_preview_positions_both_on_same_line() {
         let preview = PreviewHighlight {
-            open_row: 0,
-            open_col: 3,
-            close_row: 0,
-            close_col: 8,
+            open: Pos::new(0, 3),
+            close: Pos::new(0, 8),
             preview_type: PreviewType::Delete,
         };
 
@@ -546,10 +532,8 @@ mod tests {
     )]
     fn test_get_preview_positions_middle_line() {
         let preview = PreviewHighlight {
-            open_row: 0,
-            open_col: 5,
-            close_row: 3,
-            close_col: 10,
+            open: Pos::new(0, 5),
+            close: Pos::new(3, 10),
             preview_type: PreviewType::Replace,
         };
 
@@ -568,20 +552,25 @@ mod tests {
     fn test_preview_highlight_from_surround_char_found() {
         let content = "fn test(arg) { }";
         // Cursor inside parentheses
-        let preview =
-            PreviewHighlight::from_surround_char(content, 0, 8, '(', PreviewType::Replace);
+        let preview = PreviewHighlight::from_surround_char(
+            content,
+            Pos::new(0, 8),
+            '(',
+            PreviewType::Replace,
+        );
 
         assert!(preview.is_some());
         let p = preview.unwrap();
-        assert_eq!(p.open_col, 7);
-        assert_eq!(p.close_col, 11);
+        assert_eq!(p.open.col(), 7);
+        assert_eq!(p.close.col(), 11);
         assert_eq!(p.preview_type, PreviewType::Replace);
     }
 
     #[test]
     fn test_preview_highlight_from_surround_char_not_found() {
         let content = "no brackets here";
-        let preview = PreviewHighlight::from_surround_char(content, 0, 5, '(', PreviewType::Delete);
+        let preview =
+            PreviewHighlight::from_surround_char(content, Pos::new(0, 5), '(', PreviewType::Delete);
 
         assert!(preview.is_none());
     }
@@ -589,7 +578,8 @@ mod tests {
     #[test]
     fn test_preview_highlight_from_surround_char_delete_type() {
         let content = "[item]";
-        let preview = PreviewHighlight::from_surround_char(content, 0, 2, '[', PreviewType::Delete);
+        let preview =
+            PreviewHighlight::from_surround_char(content, Pos::new(0, 2), '[', PreviewType::Delete);
 
         assert!(preview.is_some());
         let p = preview.unwrap();
@@ -610,7 +600,7 @@ mod tests {
 
     #[test]
     fn test_line_has_selection_within_range() {
-        let sel = SelectionBounds::new(1, 0, 3, 5);
+        let sel = SelectionBounds::new(Pos::new(1, 0), Pos::new(3, 5));
 
         assert!(!line_has_selection(0, &sel)); // Before selection
         assert!(line_has_selection(1, &sel)); // Start of selection
@@ -621,7 +611,7 @@ mod tests {
 
     #[test]
     fn test_line_has_selection_edge_case_end_col_zero() {
-        let sel = SelectionBounds::new(1, 0, 2, 0);
+        let sel = SelectionBounds::new(Pos::new(1, 0), Pos::new(2, 0));
 
         // When end_col is 0, line 2 should NOT be considered selected
         assert!(line_has_selection(1, &sel));
@@ -633,8 +623,7 @@ mod tests {
     #[test]
     fn test_cursor_info_primary_style() {
         let cursor = CursorInfo {
-            row: 0,
-            col: 5,
+            pos: Pos::new(0, 5),
             is_primary: true,
         };
         let style = cursor.style();
@@ -645,8 +634,7 @@ mod tests {
     #[test]
     fn test_cursor_info_secondary_style() {
         let cursor = CursorInfo {
-            row: 1,
-            col: 3,
+            pos: Pos::new(1, 3),
             is_primary: false,
         };
         let style = cursor.style();
@@ -663,8 +651,7 @@ mod tests {
     )]
     fn test_render_line_with_multi_cursor_single() {
         let cursors = vec![CursorInfo {
-            row: 0,
-            col: 5,
+            pos: Pos::new(0, 5),
             is_primary: true,
         }];
         let line = render_line_with_multi_cursor(
@@ -682,13 +669,11 @@ mod tests {
     fn test_render_line_with_multi_cursor_multiple() {
         let cursors = vec![
             CursorInfo {
-                row: 0,
-                col: 0,
+                pos: Pos::new(0, 0),
                 is_primary: true,
             },
             CursorInfo {
-                row: 0,
-                col: 5,
+                pos: Pos::new(0, 5),
                 is_primary: false,
             },
         ];
@@ -706,8 +691,7 @@ mod tests {
     #[test]
     fn test_render_line_with_multi_cursor_at_end() {
         let cursors = vec![CursorInfo {
-            row: 0,
-            col: 5,
+            pos: Pos::new(0, 5),
             is_primary: true,
         }];
         // Cursor at col 5 on a line with only 5 chars (indices 0-4) should render block
@@ -721,13 +705,11 @@ mod tests {
     fn test_render_line_with_multi_cursor_primary_secondary() {
         let cursors = vec![
             CursorInfo {
-                row: 0,
-                col: 0,
+                pos: Pos::new(0, 0),
                 is_primary: true,
             },
             CursorInfo {
-                row: 0,
-                col: 2,
+                pos: Pos::new(0, 2),
                 is_primary: false,
             },
         ];
@@ -748,7 +730,7 @@ mod tests {
         reason = "assert!(x.is_empty()) reads better than the machine fix"
     )]
     fn test_render_line_with_multi_selection_single() {
-        let selections = vec![SelectionBounds::new(0, 2, 0, 5)];
+        let selections = vec![SelectionBounds::new(Pos::new(0, 2), Pos::new(0, 5))];
         let line = render_line_with_multi_selection("hello world", 0, Color::Green, &selections);
         // Should highlight chars at indices 2, 3, 4
         assert!(!line.spans.is_empty());
@@ -761,8 +743,8 @@ mod tests {
     )]
     fn test_render_line_with_multi_selection_overlapping() {
         let selections = vec![
-            SelectionBounds::new(0, 0, 0, 5),
-            SelectionBounds::new(0, 3, 0, 8),
+            SelectionBounds::new(Pos::new(0, 0), Pos::new(0, 5)),
+            SelectionBounds::new(Pos::new(0, 3), Pos::new(0, 8)),
         ];
         let line = render_line_with_multi_selection("hello world", 0, Color::Green, &selections);
         // Overlapping selections (0-5 and 3-8) should merge to highlight 0-8
@@ -777,7 +759,7 @@ mod tests {
     )]
     fn test_render_line_with_multi_selection_spanning_lines() {
         // Selection from row 0 to row 2
-        let selections = vec![SelectionBounds::new(0, 3, 2, 5)];
+        let selections = vec![SelectionBounds::new(Pos::new(0, 3), Pos::new(2, 5))];
 
         // Line 0: should highlight from col 3 to end
         let line0 = render_line_with_multi_selection("hello", 0, Color::Green, &selections);
@@ -798,7 +780,7 @@ mod tests {
         reason = "assert!(x.is_empty()) reads better than the machine fix"
     )]
     fn test_render_line_with_multi_selection_no_selection_on_line() {
-        let selections = vec![SelectionBounds::new(2, 0, 3, 5)];
+        let selections = vec![SelectionBounds::new(Pos::new(2, 0), Pos::new(3, 5))];
         // Line 0 is not in the selection range (2-3)
         let line = render_line_with_multi_selection("hello", 0, Color::Green, &selections);
         // Should render with normal styling (no selection highlight)
@@ -936,11 +918,11 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // "A" (append at end of line) puts the cursor at col == line length, i.e. past-EOL.
-        let session = match session.record_action("A".to_string()).unwrap() {
+        let session = match session.record_action("A").unwrap() {
             SessionAfterAction::StillActive(session) => session,
             SessionAfterAction::Completed(_) => panic!("expected session to remain active"),
         };
-        assert_eq!(session.all_cursors(), vec![(0, inner_width)]);
+        assert_eq!(session.all_cursors(), vec![Pos::new(0, inner_width)]);
 
         let backend = TestBackend::new(area_width, 10);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -1013,12 +995,12 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // "A" (append at end of line) puts the cursor past-EOL, beyond the inner width.
-        let session = match session.record_action("A".to_string()).unwrap() {
+        let session = match session.record_action("A").unwrap() {
             SessionAfterAction::StillActive(session) => session,
             SessionAfterAction::Completed(_) => panic!("expected session to remain active"),
         };
         let cursor_col = inner_width + 8;
-        assert_eq!(session.all_cursors(), vec![(0, cursor_col)]);
+        assert_eq!(session.all_cursors(), vec![Pos::new(0, cursor_col)]);
 
         let backend = TestBackend::new(area_width, 10);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -1101,12 +1083,12 @@ mod tests {
         area_height: u16,
     ) -> ratatui::buffer::Buffer {
         let lines: Vec<String> = (0..total_lines).map(|i| format!("line{i}")).collect();
-        render_buffer_with_lines(&lines, (cursor_row, 0), area_width, area_height)
+        render_buffer_with_lines(&lines, Pos::new(cursor_row, 0), area_width, area_height)
     }
 
     fn render_buffer_with_lines(
         lines: &[String],
-        cursor: (usize, usize),
+        cursor: Pos,
         area_width: u16,
         area_height: u16,
     ) -> ratatui::buffer::Buffer {
@@ -1121,7 +1103,7 @@ mod tests {
         let scenario = ScenarioBuilder::new()
             .id("vertical_scroll_test")
             .setup_content(content.clone())
-            .setup_cursor(cursor.0, cursor.1)
+            .setup_cursor(cursor.row(), cursor.col())
             .target_content(content)
             .build();
         let session = crate::game::GameSession::new(scenario).unwrap();
@@ -1268,7 +1250,8 @@ mod tests {
         let mut lines: Vec<String> = (0..30).map(|i| format!("line{i}")).collect();
         lines[25] = long_line;
 
-        let buffer = render_buffer_with_lines(&lines, (25, cursor_col), area_width, area_height);
+        let buffer =
+            render_buffer_with_lines(&lines, Pos::new(25, cursor_col), area_width, area_height);
         let half_width = area_width / 2;
 
         assert!(

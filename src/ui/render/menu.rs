@@ -43,7 +43,7 @@ fn build_menu_items(state: &AppState, selected_item: usize) -> Vec<ListItem<'_>>
             });
 
             // Get completion status
-            let completion_indicator = if profile.scenario_history.get(&scenario.id).is_some() {
+            let completion_indicator = if profile.scenario_history().get(&scenario.id).is_some() {
                 "✅"
             } else {
                 "  "
@@ -382,8 +382,8 @@ fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: 
 
     let header_text = format!(
         "Level {} ⭐  🔥 {} days   XP: {}/{} ({}%)",
-        profile.level,
-        profile.current_streak,
+        profile.level(),
+        profile.current_streak(),
         progress.earned(),
         progress.span(),
         progress.percent()
@@ -403,7 +403,7 @@ fn render_profile_header(frame: &mut Frame, area: ratatui::layout::Rect, state: 
 /// Render the quest panel showing daily quests
 fn render_quest_panel(frame: &mut Frame, area: ratatui::layout::Rect, state: &AppState) {
     let profile = &state.progress.profile;
-    let quests = &profile.daily_quests;
+    let quests = &profile.daily_quests();
 
     let completed_count = quests.iter().filter(|q| q.is_completed()).count();
     let title = format!(" Daily Quests ({}/{}) ", completed_count, quests.len());

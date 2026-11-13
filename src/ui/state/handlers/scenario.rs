@@ -2,22 +2,21 @@
 //!
 //! Handles starting, completing, retrying, and abandoning scenarios
 
-use super::apply_quest_progress;
+use super::apply_quest_event;
 use crate::config::Difficulty;
 use crate::error::UserError;
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
 use crate::gamification::UserProfile;
-use crate::learning::{Analytics, ProgressionTier, ReferenceTime};
+use crate::learning::{Analytics, AttemptOutcome, ProgressionTier, ReferenceTime};
 use crate::security::error_chain;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
 use crate::ui::state::{
     AppState, CompletedTask, EndGameSummaryData, HandlerContext, HandlerOutcome, MenuData,
-    NextStep, ResultsData, TaskData, TaskSession, TypedScreen, XPBreakdown,
+    NextStep, QuestEvent, ResultsData, TaskData, TaskSession, TypedScreen, XPBreakdown,
 };
 use crate::ui::state::{CategoryProgress, MasteryInfo};
-use rust_i18n::t;
 use std::num::NonZeroUsize;
 
 /// Handle `StartScenario` message
@@ -81,18 +80,20 @@ fn record_scenario_completion(
 
     ctx.progress.scenarios_completed_today += 1;
 
-    ctx.progress.profile.commands_executed = ctx
-        .progress
+    ctx.progress
         .profile
-        .commands_executed
-        .saturating_add(u32::try_from(feedback.user_actions.len()).unwrap_or(u32::MAX));
+        .add_commands_executed(u32::try_from(feedback.user_actions.len()).unwrap_or(u32::MAX));
     let commands = ScenarioCompletionService::extract_commands(feedback);
     let mastery_changes = ScenarioCompletionService::record_fsrs_data_with_mastery(
         &mut ctx.progress.scheduler,
         &mut ctx.progress.performance_tracker,
         &commands,
         feedback.duration,
-        feedback.score > 0,
+        if feedback.score > 0 {
+            AttemptOutcome::Succeeded
+        } else {
+            AttemptOutcome::Failed
+        },
         ReferenceTime::for_optimal_actions(
             NonZeroUsize::new(feedback.optimal_actions).unwrap_or(NonZeroUsize::MIN),
         ),
@@ -141,7 +142,7 @@ fn record_scenario_completion(
     // notification queue's fixed-size visible window even when mastery or
     // achievement notifications also fire during this completion.
     if let Some(notification) =
-        ScenarioCompletionService::level_up_notification(leveled_up, ctx.progress.profile.level)
+        ScenarioCompletionService::level_up_notification(leveled_up, ctx.progress.profile.level())
     {
         ctx.ui.notifications.push(notification.into());
     }
@@ -181,7 +182,13 @@ pub(crate) fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
     let duration = feedback.duration;
 
     // Update quest progress
-    let quest_update = apply_quest_progress(state, None, true, Some(scenario_id.clone()), duration);
+    let quest_update = apply_quest_event(
+        state,
+        QuestEvent::ScenarioCompleted {
+            id: scenario_id.clone(),
+            duration,
+        },
+    );
 
     // Create context for helper functions
     let mut ctx = HandlerContext::new(
@@ -194,7 +201,7 @@ pub(crate) fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
     let is_first_today = ctx.progress.scenarios_completed_today == 0;
     let xp = ScenarioCompletionService::calculate_xp_components(&feedback, is_first_today);
 
-    let now = ctx.progress.now();
+    let now = ctx.progress.moment();
     let xp_scaling = ScenarioCompletionService::record_and_scale_xp(
         &mut ctx.progress.profile,
         &scenario_id,
@@ -338,9 +345,7 @@ pub(crate) fn handle_next_lesson(
         }
         ctx.ui
             .notifications
-            .push(Notification::new(NotificationType::Info {
-                message: t!("results.no_more_scenarios").to_string(),
-            }));
+            .push(Notification::new(NotificationType::NoMoreScenarios));
         return Ok(HandlerOutcome::Stay);
     }
 
@@ -373,9 +378,9 @@ fn build_end_game_summary(ctx: &HandlerContext<'_>) -> EndGameSummaryData {
     EndGameSummaryData {
         scenarios_total: stats.total,
         perfected: stats.perfected,
-        total_completions: profile.scenarios_completed,
-        total_xp: profile.total_xp,
-        level: profile.level,
+        total_completions: profile.scenarios_completed(),
+        total_xp: profile.total_xp(),
+        level: profile.level(),
         command_success_rate: Analytics::avg_success_rate(tracker),
         journey_days: journey_days(profile),
         commands_mastered: Analytics::get_mastery_summary(tracker).master,
@@ -394,7 +399,7 @@ fn build_end_game_summary(ctx: &HandlerContext<'_>) -> EndGameSummaryData {
 /// correction, VM snapshot restore) between two attempts could otherwise
 /// produce a negative span.
 fn journey_days(profile: &UserProfile) -> i64 {
-    let mut history = profile.scenario_history.iter();
+    let mut history = profile.scenario_history().iter();
     let Some(first) = history.next() else {
         return 0;
     };
@@ -424,9 +429,9 @@ fn next_steps(ctx: &HandlerContext<'_>, imperfect: usize) -> Vec<NextStep> {
     let pending_quests = ctx
         .progress
         .profile
-        .daily_quests
+        .daily_quests()
         .iter()
-        .filter(|q| !q.completed)
+        .filter(|q| !q.status().is_completed())
         .count();
 
     let mut steps = Vec::new();
@@ -482,7 +487,7 @@ mod tests {
     use super::*;
     use crate::config::{Difficulty, Scenario};
     use crate::game::GameSession;
-    use crate::gamification::{ProfileStorage, Quest, QuestDifficulty, QuestType, UserProfile};
+    use crate::gamification::{ProfileStorage, QuestType, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
     use crate::testing::{cid, qid, sid};
@@ -512,14 +517,10 @@ mod tests {
         use crate::game::SessionAfterAction;
 
         let session = GameSession::new(create_test_scenario()).unwrap();
-        let SessionAfterAction::StillActive(session) =
-            session.record_action("x".to_string()).unwrap()
-        else {
+        let SessionAfterAction::StillActive(session) = session.record_action("x").unwrap() else {
             panic!("Should not complete after just 'x'");
         };
-        let SessionAfterAction::Completed(completed) =
-            session.record_action("d".to_string()).unwrap()
-        else {
+        let SessionAfterAction::Completed(completed) = session.record_action("d").unwrap() else {
             panic!("Should complete after 'x' + 'd'");
         };
         completed
@@ -530,7 +531,7 @@ mod tests {
         state: &mut AppState,
         completed: GameSession<crate::game::session::Completed>,
     ) {
-        let completed = CompletedTask::new(completed, state.progress.monotonic_now()).unwrap();
+        let completed = CompletedTask::new(completed, state.progress.monotonic_now());
         state.screen = TypedScreen::Task(TaskData {
             session: TaskSession::Completed(completed),
             ..TaskData::new(GameSession::new(create_test_scenario()).unwrap())
@@ -613,18 +614,18 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // Complete the scenario by executing the solution commands
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        let feedback = completed.feedback().unwrap();
+        let feedback = completed.feedback();
         let results_data = ResultsData::from_completed(completed, feedback, None);
 
         let mut ctx = HandlerContext::new(
@@ -673,25 +674,26 @@ mod tests {
         use crate::game::SessionAfterAction;
 
         let mut state = create_test_state();
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("quest_scenario_completion"),
-            quest_type: QuestType::ScenarioCompletion {
-                target: 1,
-                current: 0,
-            },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 100,
-            completed: false,
-        }];
+        state
+            .progress
+            .profile
+            .set_daily_quests(vec![crate::testing::quest(
+                qid("quest_scenario_completion"),
+                QuestType::ScenarioCompletion {
+                    target: 1,
+                    current: 0,
+                },
+                100,
+            )]);
 
         let scenario = create_test_scenario();
         let session = GameSession::new(scenario).unwrap();
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -722,31 +724,33 @@ mod tests {
         use crate::game::SessionAfterAction;
 
         let mut state = create_test_state();
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("quest_already_done"),
-            quest_type: QuestType::ScenarioCompletion {
-                target: 1,
-                current: 1,
-            },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 100,
-            completed: true,
-        }];
+        state.progress.profile.set_daily_quests(vec![{
+            let mut quest = crate::testing::quest(
+                qid("quest_already_done"),
+                QuestType::ScenarioCompletion {
+                    target: 1,
+                    current: 1,
+                },
+                100,
+            );
+            quest.mark_completed();
+            quest
+        }]);
 
         let scenario = create_test_scenario();
         let session = GameSession::new(scenario).unwrap();
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
         show_completed_task(&mut state, completed);
-        let initial_xp = state.progress.profile.total_xp;
+        let initial_xp = state.progress.profile.total_xp();
 
         let outcome = handle_complete_scenario(&mut state);
 
@@ -761,7 +765,7 @@ mod tests {
             "already-completed quest must not show as a bonus"
         );
         // Only actual scenario XP should have been granted, no quest XP.
-        let actual_xp = state.progress.profile.total_xp - initial_xp;
+        let actual_xp = state.progress.profile.total_xp() - initial_xp;
         assert!(actual_xp > 0);
         assert!(actual_xp < 100, "no quest XP should have been re-awarded");
     }
@@ -791,12 +795,12 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // Complete the scenario
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -804,7 +808,7 @@ mod tests {
 
         show_completed_task(&mut state, completed);
 
-        let initial_xp = state.progress.profile.total_xp;
+        let initial_xp = state.progress.profile.total_xp();
 
         let outcome = handle_complete_scenario(&mut state);
 
@@ -813,7 +817,7 @@ mod tests {
             HandlerOutcome::Transition(ref screen) if matches!(**screen, TypedScreen::Results(_))
         );
 
-        assert!(state.progress.profile.total_xp > initial_xp);
+        assert!(state.progress.profile.total_xp() > initial_xp);
         assert_eq!(state.progress.scenarios_completed_today, 1);
     }
 
@@ -828,17 +832,17 @@ mod tests {
         let mut state = create_test_state();
         // One completion away from the Centurion milestone (100 scenarios completed),
         // regardless of this scenario's score.
-        state.progress.profile.scenarios_completed = 99;
+        state.progress.profile.set_scenarios_completed(99);
 
         let scenario = create_test_scenario();
         let session = GameSession::new(scenario).unwrap();
 
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -856,30 +860,29 @@ mod tests {
         );
         assert!(state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
-            crate::ui::notification::NotificationType::Achievement { ref name, .. }
-                if name == "Centurion"
+            crate::ui::notification::NotificationType::Achievement(AchievementId::Centurion)
         )));
     }
 
     /// Regression test for #290: completing a scenario must record its difficulty
-    /// into `profile.difficulties_completed` via the `difficulty` param threaded
+    /// into `profile.difficulties_completed()` via the `difficulty` param threaded
     /// through `record_scenario_completion`, not just update score-based counters.
     #[test]
     fn test_handle_complete_scenario_updates_difficulties_completed() {
         use crate::game::SessionAfterAction;
 
         let mut state = create_test_state();
-        assert!(state.progress.profile.difficulties_completed.is_empty());
+        assert!(state.progress.profile.difficulties_completed().is_empty());
 
         let scenario = create_test_scenario(); // Difficulty::Beginner
         let session = GameSession::new(scenario).unwrap();
 
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -893,7 +896,7 @@ mod tests {
             state
                 .progress
                 .profile
-                .difficulties_completed
+                .difficulties_completed()
                 .contains(&Difficulty::Beginner)
         );
     }
@@ -915,12 +918,12 @@ mod tests {
             let scenario = create_test_scenario_with_difficulty("multi_difficulty", difficulty);
             let session = GameSession::new(scenario).unwrap();
 
-            let result = session.record_action("x".to_string()).unwrap();
+            let result = session.record_action("x").unwrap();
             let session = match result {
                 SessionAfterAction::StillActive(s) => s,
                 SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
             };
-            let result = session.record_action("d".to_string()).unwrap();
+            let result = session.record_action("d").unwrap();
             let completed = match result {
                 SessionAfterAction::Completed(c) => c,
                 SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -939,8 +942,7 @@ mod tests {
         );
         assert!(state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
-            crate::ui::notification::NotificationType::Achievement { ref name, .. }
-                if name == "Polyglot"
+            crate::ui::notification::NotificationType::Achievement(AchievementId::Polyglot)
         )));
     }
 
@@ -959,12 +961,12 @@ mod tests {
         let scenario = create_test_scenario(); // Difficulty::Beginner
         let session = GameSession::new(scenario).unwrap();
 
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -974,8 +976,8 @@ mod tests {
 
         handle_complete_scenario(&mut state);
 
-        assert_eq!(state.progress.profile.speed_run_count, 1);
-        assert_eq!(state.progress.profile.flash_run_count, 1);
+        assert_eq!(state.progress.profile.speed_run_count(), 1);
+        assert_eq!(state.progress.profile.flash_run_count(), 1);
         assert!(
             state
                 .progress
@@ -1012,36 +1014,28 @@ mod tests {
         let scenario = create_test_scenario();
         let session = GameSession::new(scenario).unwrap();
 
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        completed.feedback().unwrap()
+        completed.feedback()
     }
 
     /// `commands_executed` counts every recorded action; only FSRS cards are filtered
     /// to reviewable commands.
     #[test]
     fn test_record_scenario_completion_counts_all_actions_but_only_reviewable_cards() {
-        use crate::game::UserAction;
-
         let mut state = create_test_state();
         let mut feedback = minimal_feedback();
-        feedback.user_actions = ["i", "!", "Escape", "3h", "f="]
-            .iter()
-            .map(|c| UserAction {
-                command: (*c).to_string(),
-                timestamp: std::time::Duration::ZERO,
-            })
-            .collect();
-        let before = state.progress.profile.commands_executed;
+        feedback.user_actions = crate::testing::user_actions(&["i", "!", "Escape", "3h", "f="]);
+        let before = state.progress.profile.commands_executed();
 
         let mut ctx = HandlerContext::new(
             &mut state.ui,
@@ -1052,7 +1046,7 @@ mod tests {
         record_scenario_completion(&mut ctx, &feedback, 1, false, None);
         crate::testing::run_queued_effects(ctx.ui, ctx.progress);
 
-        assert_eq!(ctx.progress.profile.commands_executed, before + 5);
+        assert_eq!(ctx.progress.profile.commands_executed(), before + 5);
         let mut cards = ctx.progress.performance_tracker.all_commands();
         cards.sort_unstable();
         assert_eq!(cards, [&cid("f"), &cid("h"), &cid("i")]);
@@ -1090,18 +1084,18 @@ mod tests {
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert!(
-            !persisted.performance_data.is_empty(),
+            !persisted.performance_data().is_empty(),
             "persisted profile should contain FSRS data recorded during completion"
         );
         assert!(stats_match(
-            &persisted.performance_data,
+            persisted.performance_data(),
             &ctx.progress.performance_tracker.stats_clone()
         ));
     }
 
     /// Regression test for #296/S1/S2: an achievement unlock (independent of any
     /// level-up) must persist through `ProgressState::save_immediate` - not a raw
-    /// `storage.save` - so `profile.performance_data` reflects the FSRS tracker even
+    /// `storage.save` - so `profile.performance_data()` reflects the FSRS tracker even
     /// when the earlier `save_debounced` call in the same completion was skipped
     /// (debounce window not yet elapsed).
     #[test]
@@ -1115,7 +1109,7 @@ mod tests {
         let mut state = create_test_state();
         state.progress.storage = ProfileStorage::with_path(&profile_path);
         // One completion away from the Centurion milestone, independent of level-up.
-        state.progress.profile.scenarios_completed = 99;
+        state.progress.profile.set_scenarios_completed(99);
         // Simulate a save that just happened, so the debounced save below is skipped.
         state.progress.mark_saved();
         assert!(!state.progress.should_save());
@@ -1143,11 +1137,11 @@ mod tests {
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert!(
-            !persisted.performance_data.is_empty(),
+            !persisted.performance_data().is_empty(),
             "persisted profile should contain FSRS data even though save_debounced was skipped"
         );
         assert!(stats_match(
-            &persisted.performance_data,
+            persisted.performance_data(),
             &ctx.progress.performance_tracker.stats_clone()
         ));
     }
@@ -1164,8 +1158,7 @@ mod tests {
         let mut state = create_test_state();
         state.progress.storage = ProfileStorage::with_path(&profile_path);
         let xp_for_level_2 = XPCalculator::xp_for_level(2);
-        state.progress.profile.total_xp = xp_for_level_2 - 10;
-        state.progress.profile.level = 1;
+        state.progress.profile.set_total_xp(xp_for_level_2 - 10);
 
         let feedback = completed_feedback_with_commands();
 
@@ -1179,12 +1172,12 @@ mod tests {
         record_scenario_completion(&mut ctx, &feedback, 100, false, None);
 
         crate::testing::run_queued_effects(ctx.ui, ctx.progress);
-        assert!(ctx.progress.profile.level >= 2, "expected a level-up");
+        assert!(ctx.progress.profile.level() >= 2, "expected a level-up");
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
-        assert!(!persisted.performance_data.is_empty());
+        assert!(!persisted.performance_data().is_empty());
         assert!(stats_match(
-            &persisted.performance_data,
+            persisted.performance_data(),
             &ctx.progress.performance_tracker.stats_clone()
         ));
 
@@ -1232,8 +1225,7 @@ mod tests {
         let mut state = create_test_state();
         state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
         let xp_for_level_2 = XPCalculator::xp_for_level(2);
-        state.progress.profile.total_xp = xp_for_level_2 - 10;
-        state.progress.profile.level = 1;
+        state.progress.profile.set_total_xp(xp_for_level_2 - 10);
 
         let feedback = minimal_feedback();
         let mut ctx = HandlerContext::new(
@@ -1246,7 +1238,7 @@ mod tests {
         record_scenario_completion(&mut ctx, &feedback, 100, false, None);
 
         crate::testing::run_queued_effects(ctx.ui, ctx.progress);
-        assert!(ctx.progress.profile.level >= 2, "expected a level-up");
+        assert!(ctx.progress.profile.level() >= 2, "expected a level-up");
 
         assert!(
             ctx.ui.notifications.visible().any(|n| matches!(
@@ -1303,25 +1295,25 @@ mod tests {
         // One XP away from leveling up; the quest's 1 XP reward alone crosses the
         // threshold before any scenario XP is even considered.
         let xp_for_level_2 = XPCalculator::xp_for_level(2);
-        state.progress.profile.total_xp = xp_for_level_2 - 1;
-        state.progress.profile.level = 1;
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("quest_scenario_completion"),
-            quest_type: QuestType::ScenarioCompletion {
-                target: 1,
-                current: 0,
-            },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 1,
-            completed: false,
-        }];
+        state.progress.profile.set_total_xp(xp_for_level_2 - 1);
+        state
+            .progress
+            .profile
+            .set_daily_quests(vec![crate::testing::quest(
+                qid("quest_scenario_completion"),
+                QuestType::ScenarioCompletion {
+                    target: 1,
+                    current: 0,
+                },
+                1,
+            )]);
 
         show_completed_task(&mut state, finished_session());
 
         handle_complete_scenario(&mut state);
 
         assert!(
-            state.progress.profile.level >= 2,
+            state.progress.profile.level() >= 2,
             "expected a level-up driven by quest XP"
         );
         assert!(
@@ -1342,7 +1334,7 @@ mod tests {
     /// quest_xp`.
     #[test]
     fn test_handle_complete_scenario_awards_quest_xp_exactly_once() {
-        use crate::gamification::{ProfileStorage, Quest, QuestDifficulty, QuestType};
+        use crate::gamification::{ProfileStorage, QuestType};
         use tempfile::TempDir;
 
         // Baseline: identical completion, no in-progress quest - isolates `actual_xp`.
@@ -1351,9 +1343,9 @@ mod tests {
         baseline_state.progress.storage =
             ProfileStorage::with_path(baseline_dir.path().join("profile.json"));
         show_completed_task(&mut baseline_state, finished_session());
-        let baseline_initial_xp = baseline_state.progress.profile.total_xp;
+        let baseline_initial_xp = baseline_state.progress.profile.total_xp();
         handle_complete_scenario(&mut baseline_state);
-        let actual_xp = baseline_state.progress.profile.total_xp - baseline_initial_xp;
+        let actual_xp = baseline_state.progress.profile.total_xp() - baseline_initial_xp;
 
         // Same completion, but with a daily quest one completion away from its target -
         // this is the path that previously double-counted `quest_xp`.
@@ -1361,24 +1353,27 @@ mod tests {
         let quest_dir = TempDir::new().unwrap();
         state.progress.storage = ProfileStorage::with_path(quest_dir.path().join("profile.json"));
         let quest_xp_reward = 100u32;
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("quest_scenario_completion"),
-            quest_type: QuestType::ScenarioCompletion {
-                target: 1,
-                current: 0,
-            },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: quest_xp_reward,
-            completed: false,
-        }];
+        state
+            .progress
+            .profile
+            .set_daily_quests(vec![crate::testing::quest(
+                qid("quest_scenario_completion"),
+                QuestType::ScenarioCompletion {
+                    target: 1,
+                    current: 0,
+                },
+                quest_xp_reward,
+            )]);
         show_completed_task(&mut state, finished_session());
 
-        let initial_xp = state.progress.profile.total_xp;
+        let initial_xp = state.progress.profile.total_xp();
         handle_complete_scenario(&mut state);
-        let total_xp_gained = state.progress.profile.total_xp - initial_xp;
+        let total_xp_gained = state.progress.profile.total_xp() - initial_xp;
 
         assert!(
-            state.progress.profile.daily_quests[0].completed,
+            state.progress.profile.daily_quests()[0]
+                .status()
+                .is_completed(),
             "quest should have completed on this scenario completion"
         );
         assert_eq!(
@@ -1708,18 +1703,18 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // Complete the scenario
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        let feedback = completed.feedback().unwrap();
+        let feedback = completed.feedback();
         let results_data = ResultsData::from_completed(completed, feedback, Some(0));
 
         let mut ctx = HandlerContext::new(
@@ -1793,18 +1788,18 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // Complete the scenario
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        let feedback = completed.feedback().unwrap();
+        let feedback = completed.feedback();
         let results_data = ResultsData::from_completed(completed, feedback, Some(2));
 
         let mut ctx = HandlerContext::new(
@@ -1870,12 +1865,16 @@ mod tests {
     fn test_handle_next_lesson_transitions_to_end_game_summary_when_curriculum_complete() {
         let mut state = create_multi_scenario_state();
         for id in ["scenario_1", "scenario_2", "scenario_3"] {
-            state.progress.profile.scenario_history.record_completion(
-                &sid(id),
-                100,
-                50,
-                chrono::Utc::now(),
-            );
+            state
+                .progress
+                .profile
+                .scenario_history_mut()
+                .record_completion(
+                    &sid(id),
+                    100,
+                    50,
+                    crate::time::Moment::local(chrono::Utc::now()),
+                );
         }
         let results_data = create_results_data_with_index(Some(2));
 
@@ -1906,12 +1905,16 @@ mod tests {
         let mut state = create_multi_scenario_state();
         // Only 2 of 3 scenarios completed - curriculum is not complete.
         for id in ["scenario_1", "scenario_2"] {
-            state.progress.profile.scenario_history.record_completion(
-                &sid(id),
-                100,
-                50,
-                chrono::Utc::now(),
-            );
+            state
+                .progress
+                .profile
+                .scenario_history_mut()
+                .record_completion(
+                    &sid(id),
+                    100,
+                    50,
+                    crate::time::Moment::local(chrono::Utc::now()),
+                );
         }
         let results_data = create_results_data_with_index(Some(2));
 
@@ -1928,7 +1931,7 @@ mod tests {
         assert!(
             ctx.ui.notifications.visible().any(|n| matches!(
                 n.notification_type,
-                crate::ui::notification::NotificationType::Info { .. }
+                crate::ui::notification::NotificationType::NoMoreScenarios
             )),
             "expected the no-more-scenarios notification"
         );
@@ -1936,25 +1939,26 @@ mod tests {
 
     #[test]
     fn test_next_steps_all_conditions_true_keeps_all_three_plus_arcade() {
-        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+        use crate::gamification::QuestType;
 
         let mut state = create_test_state();
         state.progress.performance_tracker.record_attempt(
             &cid("x"),
             std::time::Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             std::time::Duration::from_secs(1),
         );
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("quest_1"),
-            quest_type: QuestType::ScenarioCompletion {
-                target: 1,
-                current: 0,
-            },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 10,
-            completed: false,
-        }];
+        state
+            .progress
+            .profile
+            .set_daily_quests(vec![crate::testing::quest(
+                qid("quest_1"),
+                QuestType::ScenarioCompletion {
+                    target: 1,
+                    current: 0,
+                },
+                10,
+            )]);
 
         let ctx = HandlerContext::new(
             &mut state.ui,
@@ -1983,7 +1987,7 @@ mod tests {
         state.progress.performance_tracker.record_attempt(
             &cid("x"),
             std::time::Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             std::time::Duration::from_secs(1),
         );
         // No pending quests, no imperfect scenarios.
@@ -2025,9 +2029,12 @@ mod tests {
     fn test_journey_days_same_day_is_zero() {
         let mut profile = crate::gamification::UserProfile::new();
         let now = chrono::Utc::now();
-        profile
-            .scenario_history
-            .record_completion(&sid("a"), 100, 50, now);
+        profile.scenario_history_mut().record_completion(
+            &sid("a"),
+            100,
+            50,
+            crate::time::Moment::local(now),
+        );
         assert_eq!(journey_days(&profile), 0);
     }
 
@@ -2043,13 +2050,19 @@ mod tests {
             .unwrap()
             .with_timezone(&chrono::Utc);
         let day_one = day_ten - chrono::Duration::days(9);
-        profile
-            .scenario_history
-            .record_completion(&sid("a"), 100, 50, day_ten);
+        profile.scenario_history_mut().record_completion(
+            &sid("a"),
+            100,
+            50,
+            crate::time::Moment::local(day_ten),
+        );
         // Clock jumped backwards for the second attempt on the same scenario.
-        profile
-            .scenario_history
-            .record_completion(&sid("a"), 100, 50, day_one);
+        profile.scenario_history_mut().record_completion(
+            &sid("a"),
+            100,
+            50,
+            crate::time::Moment::local(day_one),
+        );
         assert_eq!(journey_days(&profile), 0);
     }
 
@@ -2060,12 +2073,18 @@ mod tests {
             .unwrap()
             .with_timezone(&chrono::Utc);
         let day_four = day_one + chrono::Duration::days(3);
-        profile
-            .scenario_history
-            .record_completion(&sid("a"), 100, 50, day_one);
-        profile
-            .scenario_history
-            .record_completion(&sid("b"), 100, 50, day_four);
+        profile.scenario_history_mut().record_completion(
+            &sid("a"),
+            100,
+            50,
+            crate::time::Moment::local(day_one),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("b"),
+            100,
+            50,
+            crate::time::Moment::local(day_four),
+        );
         assert_eq!(journey_days(&profile), 3);
     }
 }

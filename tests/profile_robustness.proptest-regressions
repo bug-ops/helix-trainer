@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 9fffa87b9839f10daead9e1912e4447b767de3c3c4aa7b818a36ce2ef79e7d12 # shrinks to mutations = [Mutation { leaf: Index(4949126458800123605), selector: 3248085836053452391 }], unknown_fields = 0, clock_selector = 0

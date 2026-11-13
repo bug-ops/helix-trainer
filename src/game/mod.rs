@@ -5,36 +5,39 @@
 
 use std::time::Duration;
 
-use crate::helix::{ModeKind, SelectionBounds};
+use crate::helix::{ModeKind, Pos, SelectionBounds};
 
 pub mod command_context;
 mod error;
+mod live_scenario;
+mod recorded_action;
 pub mod scenario_collection;
 pub mod scenario_state;
 pub mod scorer;
 pub mod services;
 pub mod session;
 
-pub use command_context::{CommandExecutor, format_key_for_display};
+pub use command_context::format_key_for_display;
 pub use error::GameError;
+pub use live_scenario::LiveScenario;
+pub use recorded_action::{RecordedAction, UserAction};
 pub use scenario_collection::{
-    CompletionFilter, CurriculumStats, ScenarioCollection, ScenarioFilter, SortMode,
+    CompletionFilter, Criterion, CurriculumStats, EmptyCriterion, NonEmptySet, PrerequisiteFilter,
+    ScenarioCollection, ScenarioFilter, SortMode,
 };
 pub use scenario_state::ScenarioState;
 pub use scorer::{PerformanceRating, Scorer};
 pub use session::{
     Abandoned, Active, Completed, Feedback, FeedbackOutcome, GameSession, SessionAfterAction,
-    SessionState, UserAction,
+    SessionState,
 };
 
 /// Trait for types that represent a playable scenario session.
 ///
 /// Both training mode (`GameSession<Active>`) and arcade mode (`ActiveMiniScenario`)
 /// implement this trait, enabling shared rendering and state inspection logic.
-///
-/// This trait uses primitive types (strings, tuples) to minimize coupling
-/// with the simulator. Implementations typically use the simulator's
-/// `EditorDisplay` facade internally.
+/// An implementor names its [`LiveScenario`] and its own clock; every query
+/// is answered from the live scenario, so the two modes cannot drift apart.
 ///
 /// # Examples
 ///
@@ -43,80 +46,85 @@ pub use session::{
 ///
 /// fn render_editor<S: PlayableScenario>(session: &S) {
 ///     let current_content = session.current_content();
-///     let (cursor_row, cursor_col) = session.current_cursor();
+///     let cursor = session.current_cursor();
 ///     // ... render editor
 /// }
 /// ```
 pub trait PlayableScenario {
-    /// Get current editor content as string
-    fn current_content(&self) -> String;
-
-    /// Get target editor content as string
-    fn target_content(&self) -> String;
-
-    /// Get current cursor position as (row, col)
-    fn current_cursor(&self) -> (usize, usize);
-
-    /// Get target cursor position as (row, col)
-    fn target_cursor(&self) -> (usize, usize);
-
-    /// Get current selection bounds (if any)
-    fn current_selection(&self) -> Option<SelectionBounds>;
-
-    /// Get target selection bounds (if any)
-    fn target_selection(&self) -> Option<SelectionBounds>;
-
-    /// Get the number of actions taken so far
-    fn action_count(&self) -> usize;
-
-    /// Check if the session is in Insert mode
-    fn is_insert_mode(&self) -> bool;
+    /// The live scenario behind this session.
+    fn live(&self) -> &LiveScenario;
 
     /// Get elapsed time since scenario start
     fn elapsed(&self) -> Duration;
 
+    /// Get current editor content as string
+    fn current_content(&self) -> String {
+        self.live().current_content()
+    }
+
+    /// Get target editor content as string
+    fn target_content(&self) -> String {
+        self.live().target_content()
+    }
+
+    /// Get current cursor position as a [`Pos`]
+    fn current_cursor(&self) -> Pos {
+        self.live().current_cursor()
+    }
+
+    /// Get target cursor position as a [`Pos`]
+    fn target_cursor(&self) -> Pos {
+        self.live().target_cursor()
+    }
+
+    /// Get current selection bounds (if any)
+    fn current_selection(&self) -> Option<SelectionBounds> {
+        self.live().current_selection()
+    }
+
+    /// Get target selection bounds (if any)
+    fn target_selection(&self) -> Option<SelectionBounds> {
+        self.live().target_selection()
+    }
+
+    /// Get the number of actions taken so far
+    fn action_count(&self) -> usize {
+        self.live().action_count()
+    }
+
+    /// Check if the session is in Insert mode
+    fn is_insert_mode(&self) -> bool {
+        self.live().is_insert_mode()
+    }
+
     /// Get the scenario's effective content language, used to select syntax
     /// highlighting for the target panel.
-    ///
-    /// Default implementation returns [`crate::config::DEFAULT_LANGUAGE`], matching the
-    /// highlighter's historical hardcoded behavior; implementors backed by a `Scenario`
-    /// should resolve this from `Setup.language`.
     fn language(&self) -> crate::helix::Language {
-        crate::config::DEFAULT_LANGUAGE
+        self.live().language()
     }
 
     /// Get the current editor mode for UI display
-    fn mode_kind(&self) -> ModeKind;
+    fn mode_kind(&self) -> ModeKind {
+        self.live().mode_kind()
+    }
 
-    /// Get all cursor positions for multi-cursor scenarios.
-    ///
-    /// Returns a vector of (row, col) pairs. The first cursor is the primary cursor.
-    /// Default implementation returns only the primary cursor.
-    fn all_cursors(&self) -> Vec<(usize, usize)> {
-        vec![self.current_cursor()]
+    /// Get all cursor positions for multi-cursor scenarios; the first is the primary cursor.
+    fn all_cursors(&self) -> Vec<Pos> {
+        self.live().all_cursors()
     }
 
     /// Get all selection bounds for multi-selection scenarios.
-    ///
-    /// Returns a vector of `SelectionBounds`. Default implementation
-    /// returns the primary selection if any.
     fn all_selections(&self) -> Vec<SelectionBounds> {
-        self.current_selection().into_iter().collect()
+        self.live().all_selections()
     }
 
-    /// Get all target cursor positions for multi-cursor scenarios.
-    ///
-    /// Returns a vector of (row, col) pairs. The first cursor is the primary cursor.
-    /// Default implementation returns only the primary target cursor.
-    fn all_target_cursors(&self) -> Vec<(usize, usize)> {
-        vec![self.target_cursor()]
+    /// Get all target cursor positions for multi-cursor scenarios; the first is the primary cursor.
+    fn all_target_cursors(&self) -> Vec<Pos> {
+        self.live().all_target_cursors()
     }
 
     /// Get all target selection bounds for multi-selection scenarios.
-    ///
-    /// Returns a vector of `SelectionBounds`. Default implementation
-    /// returns the primary target selection if any.
     fn all_target_selections(&self) -> Vec<SelectionBounds> {
-        self.target_selection().into_iter().collect()
+        self.live().all_target_selections()
     }
 }

@@ -10,6 +10,7 @@ use helix_trainer::gamification::{
     StreakManager, UserProfile,
 };
 use helix_trainer::ids::{CommandId, ScenarioId};
+use helix_trainer::learning::AttemptOutcome;
 use helix_trainer::learning::PerformanceTracker;
 use proptest::prelude::*;
 use serde_json::{Value, json};
@@ -22,20 +23,26 @@ fn base_profile() -> UserProfile {
     let mut profile = UserProfile::new();
     let now = Utc::now();
     profile.add_xp(1_500);
-    profile.scenarios_completed = 7;
-    profile.current_streak = 3;
-    profile.longest_streak = 5;
-    profile.scenario_history.record_completion(
+    profile.set_scenarios_completed(7);
+    profile.set_current_streak(3);
+    profile.set_longest_streak(5);
+    profile.scenario_history_mut().record_completion(
         &ScenarioId::parse("delete_line_001").unwrap(),
         100,
         50,
-        now,
+        helix_trainer::time::Moment::local(now),
     );
     profile.unlock_achievement(AchievementId::FirstPerfect);
-    profile.performance_data = serde_json::from_str(PERFORMANCE_FIXTURE).unwrap();
+    profile.set_performance_data(serde_json::from_str(PERFORMANCE_FIXTURE).unwrap());
     let registry = QuestTemplateRegistry::from_embedded("en").unwrap();
-    profile.daily_quests =
-        QuestGenerator::generate_quests(&profile, &registry, now.date_naive()).quests;
+    profile.set_daily_quests(
+        QuestGenerator::generate_quests(
+            &profile,
+            &registry,
+            helix_trainer::time::Moment::local(now).day(),
+        )
+        .quests,
+    );
     profile
 }
 
@@ -120,30 +127,50 @@ fn mutate(document: &mut Value, mutations: &[Mutation], unknown_fields: usize) {
     reason = "assert!(x.is_empty()) reads better than the machine fix"
 )]
 fn exercise_consumers(mut profile: UserProfile, clock_selector: usize) {
-    let level_before = profile.level;
+    let level_before = profile.level();
     let now = match clock_selector % 3 {
         0 => Utc::now(),
         1 => DateTime::<Utc>::MIN_UTC,
         _ => DateTime::<Utc>::MAX_UTC,
     };
     let registry = QuestTemplateRegistry::from_embedded("en").unwrap();
-    let mut tracker = PerformanceTracker::from_stats(profile.performance_data.clone());
+    let mut tracker = PerformanceTracker::from_stats(profile.performance_data().clone());
 
     let command = CommandId::from_action("x").unwrap();
-    tracker.record_attempt(&command, Duration::MAX, true, Duration::ZERO);
-    tracker.record_attempt(&command, Duration::ZERO, false, Duration::MAX);
+    tracker.record_attempt(
+        &command,
+        Duration::MAX,
+        AttemptOutcome::Succeeded,
+        Duration::ZERO,
+    );
+    tracker.record_attempt(
+        &command,
+        Duration::ZERO,
+        AttemptOutcome::Failed,
+        Duration::MAX,
+    );
 
     let id = ScenarioId::parse("delete_line_001").unwrap();
-    profile
-        .scenario_history
-        .record_completion(&id, u32::MAX, u64::MAX, now);
-    profile
-        .scenario_history
-        .record_completion(&id, 100, u64::MAX, now);
+    profile.scenario_history_mut().record_completion(
+        &id,
+        u32::MAX,
+        u64::MAX,
+        helix_trainer::time::Moment::local(now),
+    );
+    profile.scenario_history_mut().record_completion(
+        &id,
+        100,
+        u64::MAX,
+        helix_trainer::time::Moment::local(now),
+    );
 
-    StreakManager::update_streak(&mut profile, now);
+    StreakManager::update_streak(&mut profile, helix_trainer::time::Moment::local(now));
     AchievementEngine::check_and_unlock(&mut profile, &tracker);
-    let generated = QuestGenerator::generate_quests(&profile, &registry, Utc::now().date_naive());
+    let generated = QuestGenerator::generate_quests(
+        &profile,
+        &registry,
+        helix_trainer::time::Moment::local(chrono::Utc::now()).day(),
+    );
     assert!(!generated.quests.is_empty());
     assert_eq!(
         generated.unfilled_slots, 0,
@@ -155,7 +182,7 @@ fn exercise_consumers(mut profile: UserProfile, clock_selector: usize) {
         (0.0..=1.0).contains(&progress),
         "xp progress {progress} out of range"
     );
-    assert!(profile.level >= 1, "level started at {level_before}");
+    assert!(profile.level() >= 1, "level started at {level_before}");
 }
 
 fn mutation_strategy() -> impl Strategy<Value = Mutation> {

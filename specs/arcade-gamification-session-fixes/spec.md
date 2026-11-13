@@ -256,7 +256,7 @@ No changes to `Profile`, `CardState`, or `MiniGameStats` schema.
 | User has never had an active streak but has a freeze from some other earned source | Freeze is preserved (not silently consumed), per FR-002 |
 | Review session XP does not cross a level boundary | No `LevelUp` notification shown — existing no-op path |
 | A missed-day gap is exactly `STREAK_FREEZE_MAX_GAP_DAYS` | Covered by the freeze (inclusive upper bound) |
-| A missed-day gap is negative (backwards clock / NTP correction) | Lower-bounded at 2 days — cannot silently consume the freeze |
+| A missed-day gap is negative (backwards clock / NTP correction / time-zone change) | Amended 2026-11-13 (#660): the gap is a difference of local player days; a negative gap counts as the same day (streak continues), the freeze is not consumed, and the last activity day never moves backward; see [[local-day-boundary-for-daily-rules/spec]] FR-004 |
 | Daily Challenge launch fails after the attempt was already consumed (e.g. empty scenario pool discovered late) | Attempt is only consumed once the launch is confirmed to succeed — a failed launch never burns an attempt |
 
 ## 6. Success Criteria
@@ -449,9 +449,72 @@ THEN  the feedback outcome is Completed, success is true and is_optimal is false
 | SC-016 | Feedback tests assert outcome, `success` and `is_optimal` for optimal, within-tolerance and abandoned runs; existing results-screen tests stay green | Pass |
 | SC-017 | The infallible handlers contain no `Ok(...)` wrapping and the lint allowance is gone | Pass |
 
-## 11. See Also
+## 11. Bug-Fix: Typed Quest Events and a Single Source of Quest Completion (#650, #652)
+
+> [!info] Added 2026-11-13 (spec-first update for the typed-position batch)
+> FR numbers continue after FR-024. Today `Message::UpdateQuestProgress` packs events into `command: Option<String>`, `scenario_completed: bool`, `scenario_id: Option<ScenarioId>` and `duration`; its only producer sends the dead combination (`scenario_completed: true, scenario_id: None`) while scenario completion reaches quests through a separate direct call. Quest completion is stored twice (`Quest.completed` and `completed_quests_today`), written at different times and correlated by list index.
+
+### 11.1 Requirements
+
+| ID | Requirement | Priority |
+|----|------------|----------|
+| FR-030 | QUEST progress SHALL be driven by one closed event type `QuestEvent` with the cases `CommandExecuted(NormalizedCommand)` and `ScenarioCompleted { id, duration }`. The quest message and the apply function take a `QuestEvent`; no `bool`/`Option` field combination can express an event that does nothing, and the typed command is never stringified and re-parsed on the way to the tracker | must |
+| FR-031 | EACH scenario completion (training and arcade) SHALL reach quest progress exactly once, as `ScenarioCompleted` carrying the completion's duration; the zero-duration sentinel for "no time invested" is removed | must |
+| FR-032 | ARCADE scenario completions SHALL count toward `TimeInvested` quests (their duration is the arcade scenario's duration). This is an intended behavior change, to be stated in the PR text and CHANGELOG | must |
+| FR-033 | INSERT-mode typed text in arcade SHALL NOT count as command practice: only `CommandExecuted` events built from a typed Normal-mode command count toward `CommandPractice` quests (consistent with [[data-and-runtime-hardening/spec]] FR-158). This is an intended behavior change, to be stated in the PR text and CHANGELOG | must |
+| FR-034 | WHETHER a quest is completed SHALL be stored once, as a per-quest two-state status (`InProgress`, `Completed { rewarded }`) where `rewarded` records that the completion XP was granted. The set `completed_quests_today` is derived from the quests and is not stored or written | must |
+| FR-035 | STREAK increment and streak-freeze eligibility SHALL read the derived completed set (every quest in the `Completed` state, rewarded or not), the same state the quest UI and the XP award read | must |
+| FR-036 | THE quest tracker SHALL return the ids of quests newly completed by an event (`#[must_use]`); the XP award runs on that return in the same function, before any early return, and nothing correlates quests by list position. The positional completion snapshot is removed. A quest already `Completed` is never returned again, so a completion cannot be awarded twice | must |
+| FR-037 | LOADING a profile written by an earlier version SHALL succeed: the legacy `completed_quests_today` key is still read and parsed strictly (a malformed value is a load error of the document), used only to build `rewarded` below, and never written back (an older binary then reads a profile saved by this version as Corrupt: downgrade is unsupported, CHANGELOG breaking note); a legacy quest whose boolean `completed` is true loads as `Completed { rewarded }` with `rewarded` true exactly when its id was in the legacy set. No retroactive XP is granted on load. This extends the legacy-profile fixture of [[data-and-runtime-hardening/spec]] FR-155 | must |
+
+### 11.2 Acceptance Criteria
+
+```
+GIVEN a daily TimeInvested quest and a scenario completed in arcade after 90 seconds
+WHEN  the completion is handled
+THEN  the quest progress grows by those 90 seconds, once
+```
+```
+GIVEN an arcade scenario whose solution types text in Insert mode
+WHEN  the scenario is played
+THEN  no CommandPractice quest progress comes from the typed text
+```
+```
+GIVEN two daily quests that both complete on the same scenario completion
+WHEN  the event is applied
+THEN  the tracker returns both ids, each is awarded exactly once, and the quest list order does not matter
+```
+```
+GIVEN a legacy profile.json with completed_quests_today = [q1], a daily quest q1 with completed = true, and q2 with completed = true but absent from the set
+WHEN  the profile loads
+THEN  it loads without error; q1 is Completed{rewarded: true}, q2 is Completed{rewarded: false}; the saved file has no completed_quests_today key
+```
+```
+GIVEN every quest of the day is Completed
+WHEN  the streak is updated
+THEN  the streak increments and the freeze-eligibility check sees the same count the quest UI shows
+```
+
+### 11.3 Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| Event arrives with no active quests | No change, empty return |
+| Quest list refreshed between two events (new day) | The new quests start `InProgress`; no index correlation exists to go stale |
+| `ScenarioCompleted` with zero duration | Counts as a completion with zero time; no sentinel meaning |
+| A handler returns early after the event is applied | The award has already run (FR-036) |
+
+### 11.4 Success Criteria
+
+| ID | Metric | Target |
+|----|--------|--------|
+| SC-018 | Handler tests for FR-030..FR-036 including the double-completion case; `rg "scenario_completed: bool\|snapshot_quest_completion\|completed_quests_today" src/` | Pass; 0 matches outside the legacy-load shim |
+| SC-019 | Legacy-profile fixture of the acceptance criterion above | Pass |
+
+## 12. See Also
 
 - [[constitution]] — project principles
+- [[local-day-boundary-for-daily-rules/spec]] — local-midnight day rule (#660)
 - [[../end-game-summary-screen/spec|End-Game Summary Screen]] — sibling
   progress/gamification UI work from the same release cycle
 - [[MOC-specs]] — all specifications

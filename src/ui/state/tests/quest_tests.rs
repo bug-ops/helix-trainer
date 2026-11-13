@@ -8,7 +8,7 @@ use super::common::{create_test_app_state, create_test_scenario};
 use crate::gamification::{Quest, QuestDifficulty, QuestType, StreakManager};
 use crate::testing::update_executing_effects as update;
 use crate::ui::notification::NotificationType;
-use crate::ui::state::Message;
+use crate::ui::state::{Message, QuestEvent};
 
 #[test]
 fn test_quest_progress_command_practice() {
@@ -18,7 +18,7 @@ fn test_quest_progress_command_practice() {
     // Add a CommandPractice quest to profile
     {
         let profile = &mut state.progress.profile;
-        profile.daily_quests.push(Quest::new(
+        profile.push_daily_quest(Quest::new(
             qid("test_x"),
             QuestType::CommandPractice {
                 command: ncmd("x"),
@@ -32,50 +32,35 @@ fn test_quest_progress_command_practice() {
     // Execute "x" command twice
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
     // Quest should not be completed yet (2/3)
     {
         let profile = &state.progress.profile;
-        assert!(!profile.daily_quests[0].is_completed());
+        assert!(!profile.daily_quests()[0].is_completed());
     }
 
     // Execute once more
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
     // Quest should now be completed and bonus XP awarded
     {
         let profile = &state.progress.profile;
-        assert!(profile.daily_quests[0].is_completed());
+        assert!(profile.daily_quests()[0].is_completed());
         // XP should be at least the quest reward
-        assert!(profile.total_xp >= 25); // Easy CommandPractice = 25 XP
+        assert!(profile.total_xp() >= 25); // Easy CommandPractice = 25 XP
     }
 }
 
@@ -87,7 +72,7 @@ fn test_quest_progress_scenario_completion() {
     // Add a ScenarioCompletion quest to profile
     {
         let profile = &mut state.progress.profile;
-        profile.daily_quests.push(Quest::new(
+        profile.push_daily_quest(Quest::new(
             qid("test_scenario"),
             QuestType::ScenarioCompletion {
                 target: 2,
@@ -103,39 +88,35 @@ fn test_quest_progress_scenario_completion() {
     // Simulate scenario completion
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: None,
-            scenario_completed: true,
-            scenario_id: Some(sid("test_scenario")),
+        Message::UpdateQuestProgress(QuestEvent::ScenarioCompleted {
+            id: sid("test_scenario"),
             duration: Duration::from_secs(5),
-        },
+        }),
     )
     .unwrap();
 
     // Quest should not be completed yet (1/2)
     {
         let profile = &state.progress.profile;
-        assert!(!profile.daily_quests[0].is_completed());
+        assert!(!profile.daily_quests()[0].is_completed());
     }
 
     // Complete another scenario
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: None,
-            scenario_completed: true,
-            scenario_id: Some(sid("test_scenario")),
+        Message::UpdateQuestProgress(QuestEvent::ScenarioCompleted {
+            id: sid("test_scenario"),
             duration: Duration::from_secs(5),
-        },
+        }),
     )
     .unwrap();
 
     // Quest should now be completed
     {
         let profile = &state.progress.profile;
-        assert!(profile.daily_quests[0].is_completed());
+        assert!(profile.daily_quests()[0].is_completed());
         // XP should include quest reward
-        assert!(profile.total_xp >= 75); // Medium ScenarioCompletion = 75 XP
+        assert!(profile.total_xp() >= 75); // Medium ScenarioCompletion = 75 XP
     }
 }
 
@@ -146,13 +127,13 @@ fn test_quest_completion_awards_bonus_xp() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     // Add a quest
     {
         let profile = &mut state.progress.profile;
-        profile.daily_quests.push(Quest::new(
+        profile.push_daily_quest(Quest::new(
             qid("test_quest"),
             QuestType::CommandPractice {
                 command: ncmd("x"),
@@ -166,20 +147,15 @@ fn test_quest_completion_awards_bonus_xp() {
     // Complete the quest
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
     // Check that XP was awarded
     {
         let profile = &state.progress.profile;
-        assert_eq!(profile.total_xp, initial_xp + 25); // Easy CommandPractice = 25 XP
-        assert!(profile.daily_quests[0].is_completed());
+        assert_eq!(profile.total_xp(), initial_xp + 25); // Easy CommandPractice = 25 XP
+        assert!(profile.daily_quests()[0].is_completed());
     }
 }
 
@@ -190,13 +166,13 @@ fn test_exploration_quest_tracking() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     // Add an Exploration quest
     {
         let profile = &mut state.progress.profile;
-        profile.daily_quests.push(Quest::new(
+        profile.push_daily_quest(Quest::new(
             qid("test_exploration"),
             QuestType::Exploration {
                 target_commands: 3,
@@ -209,49 +185,34 @@ fn test_exploration_quest_tracking() {
     // Execute different commands
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("yy".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("yy"))),
     )
     .unwrap();
 
     // Not completed yet (2/3)
     {
         let profile = &state.progress.profile;
-        assert!(!profile.daily_quests[0].is_completed());
+        assert!(!profile.daily_quests()[0].is_completed());
     }
 
     // Execute third unique command
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("p".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("p"))),
     )
     .unwrap();
 
     // Should be completed now and bonus XP awarded
     {
         let profile = &state.progress.profile;
-        assert!(profile.daily_quests[0].is_completed());
-        assert_eq!(profile.total_xp, initial_xp + 160); // Hard Exploration = 160 XP
+        assert!(profile.daily_quests()[0].is_completed());
+        assert_eq!(profile.total_xp(), initial_xp + 160); // Hard Exploration = 160 XP
     }
 }
 
@@ -265,35 +226,20 @@ fn test_commands_used_today_tracking() {
     // Execute some commands
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("yy".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("yy"))),
     )
     .unwrap();
 
     // Same command again (should not duplicate)
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
@@ -311,7 +257,7 @@ fn test_quest_progress_changes_tracking() {
     // Add a quest
     {
         let profile = &mut state.progress.profile;
-        profile.daily_quests.push(Quest::new(
+        profile.push_daily_quest(Quest::new(
             qid("test_quest"),
             QuestType::CommandPractice {
                 command: ncmd("x"),
@@ -323,12 +269,9 @@ fn test_quest_progress_changes_tracking() {
     }
 
     // Execute command to trigger progress
-    let quest_update = crate::ui::state::handlers::apply_quest_progress(
+    let quest_update = crate::ui::state::handlers::apply_quest_event(
         &mut state,
-        Some("x"),
-        false,
-        None,
-        Duration::from_secs(0),
+        QuestEvent::CommandExecuted(ncmd("x")),
     );
 
     // Check that progress changes were returned
@@ -340,8 +283,8 @@ fn test_quest_progress_changes_tracking() {
 }
 
 /// Regression test for #267: completing a quest through the live message-passing
-/// flow must populate `completed_quests_today`, since `StreakManager::update_streak`
-/// gates next-day streak increments on that set being non-empty.
+/// flow must show in `completed_quests_today`, since `StreakManager::update_streak`
+/// gates next-day streak increments on it.
 #[test]
 fn test_quest_completion_populates_completed_quests_today() {
     let scenario = create_test_scenario();
@@ -349,7 +292,7 @@ fn test_quest_completion_populates_completed_quests_today() {
 
     {
         let profile = &mut state.progress.profile;
-        profile.daily_quests.push(Quest::new(
+        profile.push_daily_quest(Quest::new(
             qid("test_quest"),
             QuestType::CommandPractice {
                 command: ncmd("x"),
@@ -360,16 +303,11 @@ fn test_quest_completion_populates_completed_quests_today() {
         ));
     }
 
-    assert!(state.progress.profile.completed_quests_today.is_empty());
+    assert_eq!(state.progress.profile.completed_quests_today().count(), 0);
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
@@ -377,8 +315,7 @@ fn test_quest_completion_populates_completed_quests_today() {
         state
             .progress
             .profile
-            .completed_quests_today
-            .contains("test_quest")
+            .is_quest_completed(&qid("test_quest"))
     );
 }
 
@@ -398,11 +335,11 @@ fn test_streak_increments_next_day_after_live_quest_completion() {
         .profile(UserProfile::new_at(clock.now()))
         .with_clock(clock.clone())
         .build();
-    state.progress.profile.current_streak = 3;
+    state.progress.profile.set_current_streak(3);
 
     {
         let profile = &mut state.progress.profile;
-        profile.daily_quests.push(Quest::new(
+        profile.push_daily_quest(Quest::new(
             qid("test_quest"),
             QuestType::CommandPractice {
                 command: ncmd("x"),
@@ -415,12 +352,7 @@ fn test_streak_increments_next_day_after_live_quest_completion() {
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
@@ -429,13 +361,14 @@ fn test_streak_increments_next_day_after_live_quest_completion() {
     clock.advance_days(1);
 
     let now = state.progress.now();
-    let change = StreakManager::update_streak(&mut state.progress.profile, now);
+    let change =
+        StreakManager::update_streak(&mut state.progress.profile, crate::time::Moment::local(now));
 
     assert_eq!(
         change,
         crate::gamification::StreakChange::Incremented { new_streak: 4 }
     );
-    assert_eq!(state.progress.profile.current_streak, 4);
+    assert_eq!(state.progress.profile.current_streak(), 4);
 }
 
 /// Regression test for #257: completing *all* of today's daily quests through the live
@@ -449,7 +382,7 @@ fn test_streak_freeze_granted_after_all_daily_quests_completed_live() {
 
     let quest_ids = ["quest_0", "quest_1", "quest_2"];
     for id in quest_ids {
-        state.progress.profile.daily_quests.push(Quest::new(
+        state.progress.profile.push_daily_quest(Quest::new(
             qid(id),
             QuestType::CommandPractice {
                 command: ncmd(id),
@@ -463,18 +396,13 @@ fn test_streak_freeze_granted_after_all_daily_quests_completed_live() {
     for (i, id) in quest_ids.iter().enumerate() {
         update(
             &mut state,
-            Message::UpdateQuestProgress {
-                command: Some(id.to_string()),
-                scenario_completed: false,
-                scenario_id: None,
-                duration: Duration::from_secs(0),
-            },
+            Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd(id))),
         )
         .unwrap();
 
         // Freeze must not be granted until every daily quest is completed
         let is_last = i == quest_ids.len() - 1;
-        assert_eq!(state.progress.profile.streak_freeze_available, is_last);
+        assert_eq!(state.progress.profile.streak_freeze_available(), is_last);
     }
 
     assert!(
@@ -492,8 +420,8 @@ fn test_streak_freeze_granted_after_all_daily_quests_completed_live() {
 fn test_streak_freeze_not_granted_twice() {
     let scenario = create_test_scenario();
     let mut state = create_test_app_state(vec![scenario]);
-    state.progress.profile.streak_freeze_available = true;
-    state.progress.profile.daily_quests.push(Quest::new(
+    state.progress.profile.set_streak_freeze_available(true);
+    state.progress.profile.push_daily_quest(Quest::new(
         qid("quest_0"),
         QuestType::CommandPractice {
             command: ncmd("x"),
@@ -505,16 +433,11 @@ fn test_streak_freeze_not_granted_twice() {
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
-    assert!(state.progress.profile.streak_freeze_available);
+    assert!(state.progress.profile.streak_freeze_available());
     assert!(
         !state
             .ui
@@ -522,4 +445,128 @@ fn test_streak_freeze_not_granted_twice() {
             .visible()
             .any(|n| n.notification_type == NotificationType::StreakFreezeGranted)
     );
+}
+
+/// FR-031/FR-032: a completion's duration feeds time-invested quests.
+#[test]
+fn test_scenario_completed_event_feeds_time_invested() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    state.progress.profile.set_daily_quests(vec![Quest::new(
+        qid("time"),
+        QuestType::TimeInvested {
+            target_minutes: 5,
+            current_minutes: 0,
+        },
+        QuestDifficulty::Easy,
+    )]);
+
+    update(
+        &mut state,
+        Message::UpdateQuestProgress(QuestEvent::ScenarioCompleted {
+            id: sid("test_scenario"),
+            duration: Duration::from_secs(90),
+        }),
+    )
+    .unwrap();
+
+    assert!(matches!(
+        state.progress.profile.daily_quests()[0].quest_type,
+        QuestType::TimeInvested {
+            current_minutes: 1,
+            ..
+        }
+    ));
+}
+
+/// FR-032: arcade scenarios last seconds; their durations add up to whole minutes.
+#[test]
+fn test_short_arcade_completions_accumulate_into_minutes() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    state.progress.profile.set_daily_quests(vec![Quest::new(
+        qid("time"),
+        QuestType::TimeInvested {
+            target_minutes: 5,
+            current_minutes: 0,
+        },
+        QuestDifficulty::Easy,
+    )]);
+
+    let complete = |state: &mut crate::ui::AppState| {
+        update(
+            state,
+            Message::UpdateQuestProgress(QuestEvent::ScenarioCompleted {
+                id: sid("test_scenario"),
+                duration: Duration::from_secs(10),
+            }),
+        )
+        .unwrap();
+    };
+    let minutes =
+        |state: &crate::ui::AppState| match state.progress.profile.daily_quests()[0].quest_type {
+            QuestType::TimeInvested {
+                current_minutes, ..
+            } => current_minutes,
+            _ => unreachable!("the only quest is a time quest"),
+        };
+
+    for _ in 0..5 {
+        complete(&mut state);
+    }
+    assert_eq!(minutes(&state), 0);
+    complete(&mut state);
+    assert_eq!(minutes(&state), 1);
+    for _ in 0..6 {
+        complete(&mut state);
+    }
+    assert_eq!(minutes(&state), 2);
+}
+
+/// FR-036: two quests completed by one event are both awarded, once each, whatever
+/// their order in the list; a later event does not award them again.
+#[test]
+fn test_double_completion_is_awarded_once_each_regardless_of_order() {
+    for reversed in [false, true] {
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+        let mut quests = vec![
+            crate::testing::quest(
+                qid("first"),
+                QuestType::CommandPractice {
+                    command: ncmd("x"),
+                    target: 1,
+                    current: 0,
+                },
+                40,
+            ),
+            crate::testing::quest(
+                qid("second"),
+                QuestType::Exploration {
+                    target_commands: 1,
+                    commands_used: HashSet::new(),
+                },
+                60,
+            ),
+        ];
+        if reversed {
+            quests.reverse();
+        }
+        state.progress.profile.set_daily_quests(quests);
+        let xp_before = state.progress.profile.total_xp();
+
+        let first = crate::ui::state::handlers::apply_quest_event(
+            &mut state,
+            QuestEvent::CommandExecuted(ncmd("x")),
+        );
+        assert_eq!(first.award.bonuses.len(), 2);
+        assert_eq!(state.progress.profile.total_xp(), xp_before + 100);
+
+        let again = crate::ui::state::handlers::apply_quest_event(
+            &mut state,
+            QuestEvent::CommandExecuted(ncmd("x")),
+        );
+        assert_eq!(again.award.bonuses, vec![]);
+        assert_eq!(state.progress.profile.total_xp(), xp_before + 100);
+    }
 }

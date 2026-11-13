@@ -24,7 +24,7 @@ use crate::constants::{
     RECENCY_WEIGHT_INCREMENT, RECENT_SUCCESS_RATE_FOR_DECREASE, RECENT_SUCCESS_RATE_FOR_INCREASE,
     RECENT_TREND_WINDOW,
 };
-use crate::learning::PerformanceTracker;
+use crate::learning::{AttemptOutcome, PerformanceTracker};
 use crate::minigame::ScenarioPrioritizer;
 use rand::RngExt;
 use rand::distr::weighted::WeightedIndex;
@@ -42,9 +42,10 @@ use std::time::Duration;
 /// ```
 /// use helix_trainer::minigame::PerformancePoint;
 /// use helix_trainer::config::Difficulty;
+/// use helix_trainer::learning::AttemptOutcome;
 ///
 /// let point = PerformancePoint {
-///     success: true,
+///     outcome: AttemptOutcome::Succeeded,
 ///     time_ratio: 0.5, // completed in half the time limit
 ///     scenario_difficulty: Difficulty::Intermediate,
 ///     efficiency: 1.0, // used optimal number of actions
@@ -53,7 +54,7 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub struct PerformancePoint {
     /// Whether scenario was completed successfully
-    pub success: bool,
+    pub outcome: AttemptOutcome,
 
     /// Time taken relative to time limit (0.0 = instant, 1.0 = timeout)
     pub time_ratio: f64,
@@ -70,7 +71,7 @@ impl PerformancePoint {
     ///
     /// # Arguments
     ///
-    /// * `success` - Whether the scenario was completed successfully
+    /// * `outcome` - Whether the scenario was completed successfully
     /// * `time_ratio` - Time taken as fraction of limit (0.0 to 1.0+)
     /// * `scenario_difficulty` - Difficulty level of the scenario
     /// * `efficiency` - Action efficiency (optimal / actual, capped at 1.0)
@@ -80,22 +81,23 @@ impl PerformancePoint {
     /// ```
     /// use helix_trainer::minigame::PerformancePoint;
     /// use helix_trainer::config::Difficulty;
+    /// use helix_trainer::learning::AttemptOutcome;
     ///
     /// let point = PerformancePoint::new(
-    ///     true,
+    ///     AttemptOutcome::Succeeded,
     ///     0.6, // 60% of time used
     ///     Difficulty::Beginner,
     ///     0.8, // 80% efficiency
     /// );
     /// ```
     pub fn new(
-        success: bool,
+        outcome: AttemptOutcome,
         time_ratio: f64,
         scenario_difficulty: Difficulty,
         efficiency: f64,
     ) -> Self {
         Self {
-            success,
+            outcome,
             time_ratio: time_ratio.clamp(0.0, 1.0),
             scenario_difficulty,
             efficiency: efficiency.clamp(0.0, 1.0),
@@ -114,7 +116,11 @@ impl PerformancePoint {
     /// A score between 0.0 and 1.0 representing overall performance.
     #[must_use]
     pub fn calculate_score(&self) -> f64 {
-        let success_score = if self.success { 1.0 } else { 0.0 };
+        let success_score = if self.outcome.is_succeeded() {
+            1.0
+        } else {
+            0.0
+        };
         let speed_score = 1.0 - self.time_ratio;
         let efficiency_score = self.efficiency;
 
@@ -291,12 +297,13 @@ impl LevelChange {
 /// ```
 /// use helix_trainer::minigame::{DifficultyController, PerformancePoint};
 /// use helix_trainer::config::Difficulty;
+/// use helix_trainer::learning::AttemptOutcome;
 ///
 /// let mut controller = DifficultyController::new();
 ///
 /// // Record some performance
 /// controller.update_after_scenario(PerformancePoint::new(
-///     true,
+///     AttemptOutcome::Succeeded,
 ///     0.4,
 ///     Difficulty::Beginner,
 ///     1.0,
@@ -570,12 +577,13 @@ impl DifficultyController {
     /// ```
     /// use helix_trainer::minigame::{DifficultyController, PerformancePoint};
     /// use helix_trainer::config::Difficulty;
+    /// use helix_trainer::learning::AttemptOutcome;
     ///
     /// let mut controller = DifficultyController::new();
     ///
     /// // Record a successful, fast, efficient completion
     /// controller.update_after_scenario(PerformancePoint::new(
-    ///     true,
+    ///     AttemptOutcome::Succeeded,
     ///     0.3,  // 30% of time used
     ///     Difficulty::Beginner,
     ///     1.0,  // optimal actions
@@ -733,7 +741,7 @@ impl DifficultyController {
             .iter()
             .rev()
             .take(recent_count)
-            .filter(|p| p.success)
+            .filter(|p| p.outcome.is_succeeded())
             .count();
 
         successes as f64 / recent_count as f64
@@ -893,10 +901,11 @@ impl DifficultyController {
     /// ```
     /// use helix_trainer::minigame::{DifficultyController, PerformancePoint};
     /// use helix_trainer::config::Difficulty;
+    /// use helix_trainer::learning::AttemptOutcome;
     ///
     /// let mut controller = DifficultyController::new();
-    /// controller.update_after_scenario(PerformancePoint::new(true, 0.5, Difficulty::Beginner, 0.8));
-    /// controller.update_after_scenario(PerformancePoint::new(false, 1.0, Difficulty::Beginner, 0.0));
+    /// controller.update_after_scenario(PerformancePoint::new(AttemptOutcome::Succeeded, 0.5, Difficulty::Beginner, 0.8));
+    /// controller.update_after_scenario(PerformancePoint::new(AttemptOutcome::Failed, 1.0, Difficulty::Beginner, 0.0));
     /// let rate = controller.success_rate();
     /// assert_eq!(rate, Some(0.5));
     /// ```
@@ -909,7 +918,11 @@ impl DifficultyController {
             return None;
         }
 
-        let successes = self.recent_performance.iter().filter(|p| p.success).count();
+        let successes = self
+            .recent_performance
+            .iter()
+            .filter(|p| p.outcome.is_succeeded())
+            .count();
         let total = self.recent_performance.len();
         Some(successes as f64 / total as f64)
     }
@@ -946,6 +959,7 @@ impl Default for DifficultyController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::learning::AttemptOutcome;
 
     fn level(n: u8) -> DifficultyLevel {
         DifficultyLevel::new(n).unwrap()
@@ -968,12 +982,12 @@ mod tests {
 
     // Helper to create a performance point for testing
     fn create_performance_point(
-        success: bool,
+        outcome: AttemptOutcome,
         time_ratio: f64,
         difficulty: Difficulty,
         efficiency: f64,
     ) -> PerformancePoint {
-        PerformancePoint::new(success, time_ratio, difficulty, efficiency)
+        PerformancePoint::new(outcome, time_ratio, difficulty, efficiency)
     }
 
     // ========================================
@@ -982,8 +996,9 @@ mod tests {
 
     #[test]
     fn test_performance_point_creation() {
-        let point = PerformancePoint::new(true, 0.5, Difficulty::Beginner, 0.8);
-        assert!(point.success);
+        let point =
+            PerformancePoint::new(AttemptOutcome::Succeeded, 0.5, Difficulty::Beginner, 0.8);
+        assert!(point.outcome.is_succeeded());
         assert!((point.time_ratio - 0.5).abs() < 0.001);
         assert_eq!(point.scenario_difficulty, Difficulty::Beginner);
         assert!((point.efficiency - 0.8).abs() < 0.001);
@@ -992,33 +1007,38 @@ mod tests {
     #[test]
     fn test_performance_point_clamps_values() {
         // Time ratio should be clamped to [0, 1]
-        let point_high = PerformancePoint::new(true, 1.5, Difficulty::Beginner, 0.5);
+        let point_high =
+            PerformancePoint::new(AttemptOutcome::Succeeded, 1.5, Difficulty::Beginner, 0.5);
         assert!((point_high.time_ratio - 1.0).abs() < 0.001);
 
-        let point_low = PerformancePoint::new(true, -0.5, Difficulty::Beginner, 0.5);
+        let point_low =
+            PerformancePoint::new(AttemptOutcome::Succeeded, -0.5, Difficulty::Beginner, 0.5);
         assert!((point_low.time_ratio - 0.0).abs() < 0.001);
 
         // Efficiency should also be clamped
-        let point_eff = PerformancePoint::new(true, 0.5, Difficulty::Beginner, 1.5);
+        let point_eff =
+            PerformancePoint::new(AttemptOutcome::Succeeded, 0.5, Difficulty::Beginner, 1.5);
         assert!((point_eff.efficiency - 1.0).abs() < 0.001);
     }
 
     #[test]
     fn test_performance_point_score_calculation() {
         // Perfect performance: success=true, fast (0.0 time), 100% efficiency
-        let perfect = PerformancePoint::new(true, 0.0, Difficulty::Beginner, 1.0);
+        let perfect =
+            PerformancePoint::new(AttemptOutcome::Succeeded, 0.0, Difficulty::Beginner, 1.0);
         let perfect_score = perfect.calculate_score();
         // Expected: 1.0 * 0.6 + 1.0 * 0.25 + 1.0 * 0.15 = 1.0
         assert!((perfect_score - 1.0).abs() < 0.001);
 
         // Total failure: success=false, timeout (1.0 time), 0% efficiency
-        let failure = PerformancePoint::new(false, 1.0, Difficulty::Beginner, 0.0);
+        let failure = PerformancePoint::new(AttemptOutcome::Failed, 1.0, Difficulty::Beginner, 0.0);
         let failure_score = failure.calculate_score();
         // Expected: 0.0 * 0.6 + 0.0 * 0.25 + 0.0 * 0.15 = 0.0
         assert!((failure_score - 0.0).abs() < 0.001);
 
         // Moderate performance: success=true, 50% time, 80% efficiency
-        let moderate = PerformancePoint::new(true, 0.5, Difficulty::Beginner, 0.8);
+        let moderate =
+            PerformancePoint::new(AttemptOutcome::Succeeded, 0.5, Difficulty::Beginner, 0.8);
         let moderate_score = moderate.calculate_score();
         // Expected: 1.0 * 0.6 + 0.5 * 0.25 + 0.8 * 0.15 = 0.6 + 0.125 + 0.12 = 0.845
         assert!((moderate_score - 0.845).abs() < 0.01);
@@ -1026,13 +1046,20 @@ mod tests {
 
     #[test]
     fn test_performance_point_difficulty_weight() {
-        let beginner = PerformancePoint::new(true, 0.5, Difficulty::Beginner, 0.8);
+        let beginner =
+            PerformancePoint::new(AttemptOutcome::Succeeded, 0.5, Difficulty::Beginner, 0.8);
         assert!((beginner.difficulty_weight() - BEGINNER_DIFFICULTY_WEIGHT).abs() < 0.001);
 
-        let intermediate = PerformancePoint::new(true, 0.5, Difficulty::Intermediate, 0.8);
+        let intermediate = PerformancePoint::new(
+            AttemptOutcome::Succeeded,
+            0.5,
+            Difficulty::Intermediate,
+            0.8,
+        );
         assert!((intermediate.difficulty_weight() - INTERMEDIATE_DIFFICULTY_WEIGHT).abs() < 0.001);
 
-        let advanced = PerformancePoint::new(true, 0.5, Difficulty::Advanced, 0.8);
+        let advanced =
+            PerformancePoint::new(AttemptOutcome::Succeeded, 0.5, Difficulty::Advanced, 0.8);
         assert!((advanced.difficulty_weight() - ADVANCED_DIFFICULTY_WEIGHT).abs() < 0.001);
     }
 
@@ -1232,7 +1259,7 @@ mod tests {
     fn test_performance_score_single_perfect() {
         let mut controller = DifficultyController::new();
         controller.update_after_scenario(create_performance_point(
-            true,
+            AttemptOutcome::Succeeded,
             0.0,
             Difficulty::Beginner,
             1.0,
@@ -1246,7 +1273,7 @@ mod tests {
     fn test_performance_score_single_failure() {
         let mut controller = DifficultyController::new();
         controller.update_after_scenario(create_performance_point(
-            false,
+            AttemptOutcome::Failed,
             1.0,
             Difficulty::Beginner,
             0.0,
@@ -1263,7 +1290,7 @@ mod tests {
         // Add old failures
         for _ in 0..5 {
             controller.update_after_scenario(create_performance_point(
-                false,
+                AttemptOutcome::Failed,
                 1.0,
                 Difficulty::Beginner,
                 0.0,
@@ -1275,7 +1302,7 @@ mod tests {
         // Add recent successes
         for _ in 0..5 {
             controller.update_after_scenario(create_performance_point(
-                true,
+                AttemptOutcome::Succeeded,
                 0.3,
                 Difficulty::Beginner,
                 1.0,
@@ -1298,7 +1325,7 @@ mod tests {
         // Controller 1: All beginner successes
         for _ in 0..5 {
             controller1.update_after_scenario(create_performance_point(
-                true,
+                AttemptOutcome::Succeeded,
                 0.3,
                 Difficulty::Beginner,
                 1.0,
@@ -1308,7 +1335,7 @@ mod tests {
         // Controller 2: All advanced successes
         for _ in 0..5 {
             controller2.update_after_scenario(create_performance_point(
-                true,
+                AttemptOutcome::Succeeded,
                 0.3,
                 Difficulty::Advanced,
                 1.0,
@@ -1331,7 +1358,7 @@ mod tests {
         // Use moderate performance (not too good to trigger level increase)
         for _ in 0..5 {
             controller.update_after_scenario(create_performance_point(
-                true,
+                AttemptOutcome::Succeeded,
                 0.7, // Slower (less impressive)
                 Difficulty::Beginner,
                 0.6, // Lower efficiency
@@ -1354,7 +1381,7 @@ mod tests {
         // Add more than PERFORMANCE_HISTORY_SIZE points
         for _ in 0..20 {
             controller.update_after_scenario(create_performance_point(
-                true,
+                AttemptOutcome::Succeeded,
                 0.5,
                 Difficulty::Beginner,
                 0.8,
@@ -1376,7 +1403,7 @@ mod tests {
         // Add fewer scenarios than MIN_SCENARIOS_FOR_INCREASE
         for _ in 0..3 {
             controller.update_after_scenario(create_performance_point(
-                true,
+                AttemptOutcome::Succeeded,
                 0.2, // Very fast
                 Difficulty::Beginner,
                 1.0, // Perfect efficiency
@@ -1389,7 +1416,7 @@ mod tests {
         // Add more excellent performances to reach minimum
         for _ in 0..10 {
             controller.update_after_scenario(create_performance_point(
-                true,
+                AttemptOutcome::Succeeded,
                 0.2,
                 Difficulty::Beginner,
                 1.0,
@@ -1409,7 +1436,7 @@ mod tests {
         // Add consistent failures
         for _ in 0..10 {
             controller.update_after_scenario(create_performance_point(
-                false,
+                AttemptOutcome::Failed,
                 1.0, // Timeout
                 Difficulty::Intermediate,
                 0.0, // No efficiency
@@ -1430,7 +1457,7 @@ mod tests {
         // Force a level increase with excellent performance
         for _ in 0..15 {
             controller.update_after_scenario(create_performance_point(
-                true,
+                AttemptOutcome::Succeeded,
                 0.2,
                 Difficulty::Beginner,
                 1.0,
@@ -1455,7 +1482,7 @@ mod tests {
         // Force a level decrease with poor performance
         for _ in 0..10 {
             controller.update_after_scenario(create_performance_point(
-                false,
+                AttemptOutcome::Failed,
                 1.0,
                 Difficulty::Intermediate,
                 0.0,
@@ -1474,7 +1501,7 @@ mod tests {
 
         // Add some moderate performance
         controller.update_after_scenario(create_performance_point(
-            true,
+            AttemptOutcome::Succeeded,
             0.6, // Slow
             Difficulty::Beginner,
             0.6, // Poor efficiency
@@ -1513,13 +1540,13 @@ mod tests {
         let mut controller = DifficultyController::new();
         controller.level = DifficultyLevel::new(5).unwrap();
         controller.update_after_scenario(create_performance_point(
-            true,
+            AttemptOutcome::Succeeded,
             0.5,
             Difficulty::Beginner,
             0.8,
         ));
         controller.update_after_scenario(create_performance_point(
-            false,
+            AttemptOutcome::Failed,
             1.0,
             Difficulty::Beginner,
             0.0,
@@ -1544,7 +1571,7 @@ mod tests {
         // Add many failures
         for _ in 0..20 {
             controller.update_after_scenario(create_performance_point(
-                false,
+                AttemptOutcome::Failed,
                 1.0,
                 Difficulty::Beginner,
                 0.0,
@@ -1563,7 +1590,7 @@ mod tests {
         // Add many successes
         for _ in 0..20 {
             controller.update_after_scenario(create_performance_point(
-                true,
+                AttemptOutcome::Succeeded,
                 0.1,
                 Difficulty::Advanced,
                 1.0,
@@ -1581,7 +1608,7 @@ mod tests {
         // Add scenarios at level 1
         for _ in 0..15 {
             controller.update_after_scenario(create_performance_point(
-                true,
+                AttemptOutcome::Succeeded,
                 0.2,
                 Difficulty::Beginner,
                 1.0,
@@ -1634,7 +1661,7 @@ mod tests {
                 tracker.record_attempt(
                     &cid("h"),
                     StdDuration::from_secs(1),
-                    true,
+                    AttemptOutcome::Succeeded,
                     StdDuration::from_secs(1),
                 );
             }
@@ -1648,7 +1675,7 @@ mod tests {
                 if let Some(scenario) =
                     controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
                 {
-                    *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
+                    *selection_counts.entry(scenario.id).or_insert(0) += 1;
                 }
             }
 
@@ -1688,7 +1715,7 @@ mod tests {
 
             for _ in 0..300 {
                 if let Some(scenario) = controller.next_scenario(&scenarios, None, &mut rng) {
-                    *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
+                    *selection_counts.entry(scenario.id).or_insert(0) += 1;
                 }
             }
 
@@ -1732,7 +1759,7 @@ mod tests {
                 tracker.record_attempt(
                     &cid("h"),
                     StdDuration::from_secs(1),
-                    true,
+                    AttemptOutcome::Succeeded,
                     StdDuration::from_secs(1),
                 );
             }
@@ -1787,7 +1814,7 @@ mod tests {
                 if let Some(scenario) =
                     controller.next_scenario(&scenarios, Some(&tracker), &mut rng)
                 {
-                    *selection_counts.entry(scenario.id.clone()).or_insert(0) += 1;
+                    *selection_counts.entry(scenario.id).or_insert(0) += 1;
                 }
             }
 

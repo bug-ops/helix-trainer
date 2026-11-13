@@ -6,13 +6,13 @@
 use anyhow::Result;
 use helix_trainer::{
     async_state::SaveWriterOutcome,
-    config::{AppConfig, ConfigStorage, app_config::config_load_failed_message, data_dir::DataDir},
+    config::{AppConfig, ConfigStorage, data_dir::DataDir},
     data_loader::{spawn_data_loaders, spawn_save_writer},
     gamification::ProfileStorage,
     input::keymap::resolve_startup_overlay,
     learning::PerformanceTracker,
     security::error_chain,
-    ui::{self, AppState, Notification, NotificationType, keymap_status_message},
+    ui::{self, AppState, Notification, NotificationType, keymap_status_notification},
 };
 use std::io;
 use tokio::sync::mpsc;
@@ -44,12 +44,15 @@ fn require_data_dir(resolved: Option<DataDir>) -> Result<DataDir, &'static str> 
 
 /// Loads the user configuration; on failure falls back to the defaults and returns the
 /// notification text to show at startup.
-fn load_config_or_default(storage: &ConfigStorage) -> (AppConfig, Option<String>) {
+fn load_config_or_default(storage: &ConfigStorage) -> (AppConfig, Option<NotificationType>) {
     match storage.load() {
         Ok(config) => (config, None),
         Err(e) => {
             tracing::warn!(error = %error_chain(&e), "Failed to load config, using defaults");
-            (AppConfig::default(), Some(config_load_failed_message()))
+            (
+                AppConfig::default(),
+                Some(NotificationType::ConfigLoadFailed),
+            )
         }
     }
 }
@@ -61,10 +64,6 @@ fn load_config_or_default(storage: &ConfigStorage) -> (AppConfig, Option<String>
 /// - Background data loading (scenarios, profile)
 /// - Tick interval for animations
 #[tokio::main(worker_threads = 2)]
-#[expect(
-    clippy::too_many_lines,
-    reason = "one flat sequence of steps; splitting would only add indirection"
-)]
 async fn main() -> Result<()> {
     match cli::parse_args(std::env::args_os().skip(1)) {
         cli::CliAction::Run => {}
@@ -114,7 +113,7 @@ async fn main() -> Result<()> {
     // `use_helix_keymap` is enabled. Degrades to the stock keymap
     // (identity overlay) on any failure - never blocks startup.
     let startup_keymap = resolve_startup_overlay(&app_config);
-    let keymap_startup_message = keymap_status_message(&startup_keymap);
+    let keymap_startup_notice = keymap_status_notification(&startup_keymap);
 
     // Initialize app state (empty, will be populated by async loaders)
     let profile_storage = ProfileStorage::in_data_dir(&data_dir);
@@ -139,14 +138,11 @@ async fn main() -> Result<()> {
         config_state,
     );
 
-    for message in config_startup_message
+    for notice in config_startup_message
         .into_iter()
-        .chain(keymap_startup_message)
+        .chain(keymap_startup_notice)
     {
-        app_state
-            .ui
-            .notifications
-            .push(Notification::new(NotificationType::Info { message }));
+        app_state.ui.notifications.push(Notification::new(notice));
     }
 
     // Every profile save (mid-session and exit-time) is funneled through
@@ -280,7 +276,7 @@ mod tests {
         std::fs::write(&path, "{ not json").unwrap();
 
         let (config, message) = load_config_or_default(&ConfigStorage::with_path(&path));
-        assert_eq!(message, Some(config_load_failed_message()));
+        assert_eq!(message, Some(NotificationType::ConfigLoadFailed));
         assert_eq!(
             serde_json::to_value(&config).unwrap(),
             serde_json::to_value(AppConfig::default()).unwrap()

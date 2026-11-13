@@ -1,0 +1,39 @@
+# Comment Toggling
+# Scenarios for Ctrl-c (toggle comments)
+
+[[scenarios]]
+id = "toggle_comments_rust_001"
+name = "Comment out lines (Rust)"
+description = "Use 'Ctrl-c' to comment out two lines at once"
+
+hints = [
+    "'x' selects a line; pressing it again extends the selection to the next line",
+    "'Ctrl-c' toggles line comments on every selected line",
+]
+
+[scenarios.setup]
+file_content = """fn a() {}
+fn b() {}
+fn c() {}"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """// fn a() {}
+// fn b() {}
+fn c() {}"""
+selection = [0, 3, 2, 0]
+
+[scenarios.solution]
+commands = ["x", "x", "Ctrl-c"]
+description = "Select the first two lines with 'x' 'x', then 'Ctrl-c' to comment them with '//'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["comment", "toggle", "editing", "rust"]
+commands_taught = ["Ctrl-c", "x"]

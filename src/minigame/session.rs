@@ -3,12 +3,11 @@
 //! Manages the complete mini-game session including scenario queue,
 //! active scenario, timing, and score calculation.
 
-use crate::config::{Difficulty, LastAction, Scenario};
+use crate::config::{Difficulty, Scenario};
 use crate::constants::EXTRA_LIFE_SCORE_MILESTONE;
-use crate::game::CommandExecutor;
 use crate::game::GameError;
-use crate::helix::{AnyModeSimulator, EditorSnapshot};
-use crate::learning::PerformanceTracker;
+use crate::game::{LiveScenario, UserAction};
+use crate::learning::{AttemptOutcome, PerformanceTracker};
 use crate::minigame::{
     DifficultyController, DifficultyLevel, LevelChange, MiniGameMode, MiniGameState, MiniGameStats,
     MultiplierChange, PerformancePoint, Ratio, ScoreBreakdown, ScoreCalculator,
@@ -98,30 +97,13 @@ enum Lineup {
     },
 }
 
-/// Helper to execute operations on a target snapshot's `EditorDisplay`
-fn with_target_display<T, F>(snapshot: &EditorSnapshot, f: F) -> T
-where
-    F: FnOnce(&crate::helix::EditorDisplay) -> T,
-{
-    let rope = helix_core::Rope::from(snapshot.content.as_str());
-    let selection = snapshot.to_helix_selection();
-    let display = crate::helix::EditorDisplay::new(&rope, &selection);
-    f(&display)
-}
-
 /// Active scenario being played with timer
 ///
 /// Represents the scenario currently being solved by the player,
 /// including the simulator state, timing information, and action history.
 pub struct ActiveMiniScenario {
-    /// The scenario being played
-    pub scenario: Arc<Scenario>,
-
-    /// Helix simulator instance (source of truth for current state)
-    simulator: AnyModeSimulator,
-
-    /// Target as snapshot for efficient completion checking
-    target_snapshot: EditorSnapshot,
+    /// The scenario in play: simulator, target and the actions taken
+    live: LiveScenario,
 
     /// Scenario stopwatch (excludes paused spans)
     timer: PausableClock,
@@ -131,41 +113,27 @@ pub struct ActiveMiniScenario {
 
     /// Time limit for this scenario
     time_limit: Duration,
-
-    /// Actions taken so far
-    actions: Vec<String>,
-
-    /// Whether the editor already matched the target before the last action ran
-    target_held_before_last: bool,
 }
 
 impl ActiveMiniScenario {
     /// Create a new active scenario
     fn new(scenario: Arc<Scenario>, time_limit: Duration, clock: Arc<dyn MonotonicClock>) -> Self {
-        // Use unified ScenarioState helper for initialization
-        let state = crate::game::ScenarioState::from_scenario(&scenario);
-
         Self {
-            scenario,
-            simulator: state.simulator,
-            target_snapshot: state.target_snapshot,
+            live: LiveScenario::new(scenario),
             timer: PausableClock::start(clock.now()),
             clock,
             time_limit,
-            actions: Vec::new(),
-            target_held_before_last: false,
         }
+    }
+
+    /// The scenario being played
+    pub fn scenario(&self) -> &Scenario {
+        self.live.scenario()
     }
 
     /// Check if scenario is completed
     fn is_completed(&self) -> bool {
-        self.scenario.is_completed_by(
-            self.simulator.matches_snapshot(&self.target_snapshot),
-            self.actions.last().map(|command| LastAction {
-                command: command.as_str(),
-                target_held_before: self.target_held_before_last,
-            }),
-        )
+        self.live.is_completed()
     }
 
     /// Freeze the countdown timer
@@ -204,138 +172,53 @@ impl ActiveMiniScenario {
 
     /// Get number of actions taken
     pub fn action_count(&self) -> usize {
-        self.actions.len()
+        self.live.action_count()
     }
 
     /// Get reference to actions taken
-    pub fn actions(&self) -> &[String] {
-        &self.actions
+    pub fn actions(&self) -> &[UserAction] {
+        self.live.actions()
     }
 
     /// Check if currently in Insert mode
     pub fn is_insert_mode(&self) -> bool {
-        self.simulator.is_insert_mode()
+        self.live.is_insert_mode()
     }
 
     /// Check if a `Q`/`q` macro is currently being recorded
     pub fn is_recording_macro(&self) -> bool {
-        self.simulator.is_recording_macro()
-    }
-}
-
-// Implement PlayableScenario trait for ActiveMiniScenario
-impl crate::game::PlayableScenario for ActiveMiniScenario {
-    fn current_content(&self) -> String {
-        self.simulator.display().content()
+        self.live.is_recording_macro()
     }
 
-    fn target_content(&self) -> String {
-        self.target_snapshot.content.clone()
+    /// Run one command string and record it as one action.
+    fn apply_text(&mut self, command: &str) -> Result<(), GameError> {
+        let at = self.elapsed();
+        self.live.apply_text(command, at)
     }
 
-    fn current_cursor(&self) -> (usize, usize) {
-        self.simulator.display().cursor_position()
-    }
-
-    #[expect(
-        clippy::redundant_closure_for_method_calls,
-        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
-    )]
-    fn target_cursor(&self) -> (usize, usize) {
-        with_target_display(&self.target_snapshot, |d| d.cursor_position())
-    }
-
-    fn current_selection(&self) -> Option<crate::helix::SelectionBounds> {
-        self.simulator.display().selection()
-    }
-
-    #[expect(
-        clippy::redundant_closure_for_method_calls,
-        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
-    )]
-    fn target_selection(&self) -> Option<crate::helix::SelectionBounds> {
-        with_target_display(&self.target_snapshot, |d| d.selection())
-    }
-
-    fn action_count(&self) -> usize {
-        self.actions.len()
-    }
-
-    fn is_insert_mode(&self) -> bool {
-        self.simulator.is_insert_mode()
-    }
-
-    fn mode_kind(&self) -> crate::helix::ModeKind {
-        self.simulator.mode_kind()
-    }
-
-    fn elapsed(&self) -> std::time::Duration {
-        ActiveMiniScenario::elapsed(self)
-    }
-
-    fn language(&self) -> crate::helix::Language {
-        self.scenario
-            .setup
-            .language
-            .unwrap_or(crate::config::DEFAULT_LANGUAGE)
-    }
-
-    fn all_cursors(&self) -> Vec<(usize, usize)> {
-        self.simulator.display().all_cursor_positions()
-    }
-
-    fn all_selections(&self) -> Vec<crate::helix::SelectionBounds> {
-        self.simulator
-            .display()
-            .all_selection_bounds()
-            .into_iter()
-            .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
-            .collect()
-    }
-
-    #[expect(
-        clippy::redundant_closure_for_method_calls,
-        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
-    )]
-    fn all_target_cursors(&self) -> Vec<(usize, usize)> {
-        with_target_display(&self.target_snapshot, |d| d.all_cursor_positions())
-    }
-
-    fn all_target_selections(&self) -> Vec<crate::helix::SelectionBounds> {
-        with_target_display(&self.target_snapshot, |d| {
-            d.all_selection_bounds()
-                .into_iter()
-                .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
-                .collect()
-        })
-    }
-}
-
-impl ActiveMiniScenario {
+    /// Run one parsed Normal-mode command and record it as one action.
     fn apply_command(
         &mut self,
         command: &crate::helix::normal_command::NormalCommand,
     ) -> Result<(), GameError> {
-        let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
-        self.simulator.execute_normal(command)?;
-        self.target_held_before_last = held_before;
-        self.actions.push(command.to_string());
-        Ok(())
+        let at = self.elapsed();
+        self.live.apply_command(command, at)
+    }
+
+    /// Run one typed Insert-mode input and record it as one action.
+    fn apply_insert(&mut self, input: &crate::helix::InsertInput) -> Result<(), GameError> {
+        let at = self.elapsed();
+        self.live.apply_insert(input, at)
     }
 }
 
-// Implement CommandExecutor trait for unified command handling with count prefix
-impl CommandExecutor for ActiveMiniScenario {
-    fn execute_single(&mut self, command: &str) -> Result<(), GameError> {
-        let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
-        self.simulator.execute_command(command)?;
-        self.target_held_before_last = held_before;
-        self.actions.push(command.to_string());
-        Ok(())
+impl crate::game::PlayableScenario for ActiveMiniScenario {
+    fn live(&self) -> &LiveScenario {
+        &self.live
     }
 
-    fn check_completion(&self) -> bool {
-        self.is_completed()
+    fn elapsed(&self) -> Duration {
+        ActiveMiniScenario::elapsed(self)
     }
 }
 
@@ -638,7 +521,7 @@ impl<R: Rng> MiniGameSession<R> {
         let current = self.current.as_mut().ok_or(GameError::NoActiveScenario)?;
 
         // The simulator interprets any count prefix (e.g. "3d", "2G")
-        current.execute_single(command)?;
+        current.apply_text(command)?;
 
         Ok(())
     }
@@ -659,6 +542,23 @@ impl<R: Rng> MiniGameSession<R> {
 
         let current = self.current.as_mut().ok_or(GameError::NoActiveScenario)?;
         current.apply_command(command)
+    }
+
+    /// Run one typed Insert-mode input, recorded as one action.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there is no current scenario or the simulator rejects the input.
+    pub(crate) fn apply_insert(
+        &mut self,
+        input: &crate::helix::InsertInput,
+    ) -> Result<(), GameError> {
+        if !self.state().is_playing() {
+            return Ok(()); // Ignore commands in non-playing states
+        }
+
+        let current = self.current.as_mut().ok_or(GameError::NoActiveScenario)?;
+        current.apply_insert(input)
     }
 
     /// Check if current scenario is complete
@@ -708,11 +608,11 @@ impl<R: Rng> MiniGameSession<R> {
         if let Some(ref scenario) = self.current {
             // Calculate metrics for scoring
             let time_ratio = scenario.time_used().get();
-            let optimal_count = scenario.scenario.scoring.optimal_count.get();
+            let optimal_count = scenario.scenario().scoring.optimal_count.get();
             let actual_count = scenario.action_count().max(1);
             let efficiency = (optimal_count as f64 / actual_count as f64).min(1.0);
             let scenario_difficulty = scenario
-                .scenario
+                .scenario()
                 .metadata
                 .difficulty
                 .unwrap_or(Difficulty::Beginner);
@@ -738,8 +638,12 @@ impl<R: Rng> MiniGameSession<R> {
             self.stats.add_score(breakdown.total);
 
             // Create performance point with full data
-            let performance_point =
-                PerformancePoint::new(true, time_ratio, scenario_difficulty, efficiency);
+            let performance_point = PerformancePoint::new(
+                AttemptOutcome::Succeeded,
+                time_ratio,
+                scenario_difficulty,
+                efficiency,
+            );
 
             // Update difficulty with comprehensive performance data
             self.difficulty.update_after_scenario(performance_point);
@@ -819,12 +723,12 @@ impl<R: Rng> MiniGameSession<R> {
         let scenario_difficulty = self
             .current
             .as_ref()
-            .and_then(|s| s.scenario.metadata.difficulty)
+            .and_then(|s| s.scenario().metadata.difficulty)
             .unwrap_or(Difficulty::Beginner);
 
         let performance_point = PerformancePoint::new(
-            false, // failure
-            1.0,   // timeout = 100% time used
+            AttemptOutcome::Failed,
+            1.0, // timeout = 100% time used
             scenario_difficulty,
             0.0, // no efficiency on failure
         );
@@ -1145,7 +1049,7 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// ```
     /// use helix_trainer::minigame::MiniGameSession;
-    /// use helix_trainer::learning::PerformanceTracker;
+    /// use helix_trainer::learning::{AttemptOutcome, PerformanceTracker};
     /// use helix_trainer::config::ScenarioLoader;
     /// use std::sync::Arc;
     ///
@@ -1154,10 +1058,14 @@ impl<R: Rng> MiniGameSession<R> {
     /// let mut tracker = PerformanceTracker::new();
     ///
     /// // After scenario completion
-    /// session.record_to_fsrs(&mut tracker, true);
+    /// session.record_to_fsrs(&mut tracker, AttemptOutcome::Succeeded);
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
-    pub fn record_to_fsrs(&self, tracker: &mut crate::learning::PerformanceTracker, success: bool) {
+    pub fn record_to_fsrs(
+        &self,
+        tracker: &mut crate::learning::PerformanceTracker,
+        outcome: AttemptOutcome,
+    ) {
         if let Some(ref scenario) = self.current {
             let elapsed = scenario.elapsed();
             let actions = scenario.actions();
@@ -1172,19 +1080,19 @@ impl<R: Rng> MiniGameSession<R> {
 
             // Optimal time estimate: time_limit / action_count would be "perfect"
             // We'll use optimal_count from scenario as reference
-            let optimal_count = scenario.scenario.scoring.optimal_count.get();
+            let optimal_count = scenario.scenario().scoring.optimal_count.get();
             let optimal_time_per_command =
                 scenario.time_limit / u32::try_from(optimal_count).unwrap_or(u32::MAX);
 
             // Same card ids as training mode, so arcade and training practice of one
             // skill share a card; typed text and arguments never become cards.
             let mut recorded_commands = std::collections::HashSet::new();
-            for command in crate::ids::CommandId::from_actions(actions.iter().map(String::as_str)) {
-                if recorded_commands.insert(command.clone()) {
+            for command in actions.iter().filter_map(UserAction::command_id) {
+                if recorded_commands.insert(command) {
                     tracker.record_attempt(
-                        &command,
+                        command,
                         time_per_command,
-                        success,
+                        outcome,
                         optimal_time_per_command,
                     );
                 }
@@ -1194,7 +1102,7 @@ impl<R: Rng> MiniGameSession<R> {
 
     /// Get base points for a scenario based on difficulty
     fn base_points_for(scenario: &ActiveMiniScenario) -> u64 {
-        if let Some(difficulty) = scenario.scenario.metadata.difficulty {
+        if let Some(difficulty) = scenario.scenario().metadata.difficulty {
             use crate::config::Difficulty;
             match difficulty {
                 Difficulty::Beginner => 100,
@@ -1654,7 +1562,7 @@ mod tests {
 
         // Check that the cursor moved
         if let Some(scenario) = session.current_scenario() {
-            let (row, _col) = scenario.current_cursor();
+            let row = scenario.current_cursor().row();
             assert_eq!(row, 2, "Cursor should be on last line (row 2)");
         }
     }
@@ -1685,7 +1593,7 @@ mod tests {
         session.handle_command("\"by").unwrap();
 
         let mut tracker = PerformanceTracker::new();
-        session.record_to_fsrs(&mut tracker, true);
+        session.record_to_fsrs(&mut tracker, AttemptOutcome::Succeeded);
 
         assert!(
             tracker.performance(&cid("\"y")).is_some(),
@@ -1721,7 +1629,7 @@ mod tests {
         }
 
         let mut tracker = PerformanceTracker::new();
-        session.record_to_fsrs(&mut tracker, true);
+        session.record_to_fsrs(&mut tracker, AttemptOutcome::Succeeded);
 
         let mut cards: Vec<&str> = tracker
             .all_commands()
@@ -1775,8 +1683,7 @@ mod tests {
             create_test_scenario("s2", Difficulty::Beginner),
         ]);
 
-        let mode =
-            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
+        let mode = MiniGameMode::Challenge(ChallengeConfig::for_date(crate::testing::today()));
         let session = MiniGameSession::with_mode(scenarios, None, mode);
 
         assert_eq!(session.stats().lives(), 3);
@@ -1789,8 +1696,7 @@ mod tests {
             .map(|i| create_test_scenario(&format!("s{i}"), Difficulty::Beginner))
             .collect();
 
-        let mode =
-            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
+        let mode = MiniGameMode::Challenge(ChallengeConfig::for_date(crate::testing::today()));
         let session = MiniGameSession::with_mode(Arc::new(scenarios), None, mode);
 
         let progress = session.challenge_scenarios_completed();
@@ -1819,8 +1725,7 @@ mod tests {
     fn test_mode_has_session_timer() {
         let arcade = MiniGameMode::Arcade(ArcadeConfig::default());
         let survival = MiniGameMode::Survival(SurvivalConfig::default());
-        let challenge =
-            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
+        let challenge = MiniGameMode::Challenge(ChallengeConfig::for_date(crate::testing::today()));
 
         assert!(arcade.has_session_timer());
         assert!(!survival.has_session_timer());
@@ -1908,7 +1813,7 @@ mod tests {
         survival.tick_countdown();
 
         let challenge_mode =
-            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
+            MiniGameMode::Challenge(ChallengeConfig::for_date(crate::testing::today()));
         let mut challenge = seeded_session(scenarios, challenge_mode, clock.clone());
         challenge.start();
         challenge.tick_countdown();
@@ -1995,8 +1900,7 @@ mod tests {
             .map(|i| create_test_scenario(&format!("s{i}"), Difficulty::Beginner))
             .collect();
 
-        let mode =
-            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
+        let mode = MiniGameMode::Challenge(ChallengeConfig::for_date(crate::testing::today()));
         let mut session = MiniGameSession::with_mode(Arc::new(scenarios), None, mode);
 
         // Not game over initially

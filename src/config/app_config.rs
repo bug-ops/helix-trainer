@@ -7,7 +7,6 @@
 
 use std::path::Path;
 
-use rust_i18n::t;
 use serde::{Deserialize, Serialize};
 
 use super::data_dir::DataDir;
@@ -51,24 +50,6 @@ pub struct AppConfig {
     /// for it. Applies to gameplay only — menus, results, and filter
     /// screens keep the stock keymap.
     pub use_helix_keymap: bool,
-}
-
-/// Localized startup notification shown when `config.json` exists but could not
-/// be loaded and defaults are used instead.
-///
-/// A free function in the library crate because only it expands
-/// `rust_i18n::i18n!`; the binary entry point cannot call `t!` itself.
-///
-/// # Examples
-///
-/// ```
-/// use helix_trainer::config::app_config::config_load_failed_message;
-///
-/// assert!(!config_load_failed_message().is_empty());
-/// ```
-#[must_use]
-pub fn config_load_failed_message() -> String {
-    t!("config.load_failed").to_string()
 }
 
 /// Wrapper for config serialization
@@ -122,11 +103,7 @@ impl ConfigStorage {
     /// let config = storage.load().unwrap();
     /// ```
     pub fn load(&self) -> Result<AppConfig, StorageError> {
-        Ok(self
-            .store
-            .load()?
-            .map(|data| data.config)
-            .unwrap_or_default())
+        Ok(self.store.load()?.map_or_default(|data| data.config))
     }
 
     /// Save configuration to disk

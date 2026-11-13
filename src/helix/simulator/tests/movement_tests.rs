@@ -21,11 +21,11 @@ fn test_move_right() {
 
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().1, 1);
+    assert_eq!(state.cursor_position().col(), 1);
 
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().1, 2);
+    assert_eq!(state.cursor_position().col(), 2);
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn test_move_left() {
     // Move left once
     sim.execute_command(CMD_MOVE_LEFT).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().1, 1);
+    assert_eq!(state.cursor_position().col(), 1);
 }
 
 #[test]
@@ -48,15 +48,15 @@ fn test_move_down_up() {
 
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().0, 1);
+    assert_eq!(state.cursor_position().row(), 1);
 
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().0, 2);
+    assert_eq!(state.cursor_position().row(), 2);
 
     sim.execute_command(CMD_MOVE_UP).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().0, 1);
+    assert_eq!(state.cursor_position().row(), 1);
 }
 
 // ============================================================================
@@ -73,12 +73,12 @@ fn test_word_movement() {
     // 'w' extends selection from current position to start of next word
     // helix-core: anchor=0, head=6 (start of "world")
     // state() returns head position for cursor
-    assert_eq!(state.cursor_position().1, 6); // Start of "world"
+    assert_eq!(state.cursor_position().col(), 6); // Start of "world"
 
     // Move to next word again
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().1, 12); // Start of "foo"
+    assert_eq!(state.cursor_position().col(), 12); // Start of "foo"
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn test_move_word_boundary() {
     sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
     let state = sim.display();
     // Should move to first non-space character of next word
-    assert!(state.cursor_position().1 > 0);
+    assert!(state.cursor_position().col() > 0);
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn test_move_word_end() {
     sim.execute_command(CMD_MOVE_WORD_END).unwrap();
     let state = sim.display();
     // Should be at end of "hello"
-    assert!(state.cursor_position().1 >= 4 && state.cursor_position().1 <= 5);
+    assert!(state.cursor_position().col() >= 4 && state.cursor_position().col() <= 5);
 }
 
 #[test]
@@ -112,7 +112,7 @@ fn test_move_prev_word() {
 
     let state = sim.display();
     // Should have moved to start of "foo" (col 12)
-    assert_eq!(state.cursor_position().1, 12);
+    assert_eq!(state.cursor_position().col(), 12);
 }
 
 // ============================================================================
@@ -129,12 +129,12 @@ fn test_move_line_start() {
     sim.execute_command(CMD_GOTO_LINE_END).unwrap();
     let state = sim.display();
     // Cursor at end of "world" - which is position 4 or 5
-    assert!(state.cursor_position().1 >= 4);
+    assert!(state.cursor_position().col() >= 4);
 
     // Move to start of line (use 'gh' in Helix, not '0')
     sim.execute_command(CMD_GOTO_LINE_START).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().1, 0);
+    assert_eq!(state.cursor_position().col(), 0);
 }
 
 #[test]
@@ -146,13 +146,13 @@ fn test_goto_first_nonwhitespace() {
     for _ in 0..10 {
         sim.execute_command(CMD_MOVE_RIGHT).unwrap();
     }
-    assert_eq!(sim.display().cursor_position().1, 10);
+    assert_eq!(sim.display().cursor_position().col(), 10);
 
     // Execute gs command
     sim.execute_command(CMD_GOTO_FIRST_NONWHITESPACE).unwrap();
     let state = sim.display();
     // Should be at position 4 (first 'f' in "fn")
-    assert_eq!(state.cursor_position().1, 4);
+    assert_eq!(state.cursor_position().col(), 4);
 }
 
 // ============================================================================
@@ -166,13 +166,13 @@ fn test_document_start() {
     // Move somewhere else
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().0, 1);
+    assert_eq!(state.cursor_position().row(), 1);
 
     // Go back to start
     sim.execute_command(CMD_GOTO_FILE_START).unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position().0, 0);
-    assert_eq!(state.cursor_position().1, 0);
+    assert_eq!(state.cursor_position().row(), 0);
+    assert_eq!(state.cursor_position().col(), 0);
 }
 
 #[test]
@@ -182,8 +182,8 @@ fn test_goto_last_line_ge_command() {
 
     // Cursor starts at (0, 0)
     let state = sim.display();
-    assert_eq!(state.cursor_position().0, 0);
-    assert_eq!(state.cursor_position().1, 0);
+    assert_eq!(state.cursor_position().row(), 0);
+    assert_eq!(state.cursor_position().col(), 0);
 
     // Execute 'ge' to go to last line
     let result = sim.execute_command(CMD_GOTO_LAST_LINE);
@@ -191,12 +191,12 @@ fn test_goto_last_line_ge_command() {
 
     let state = sim.display();
     assert_eq!(
-        state.cursor_position().0,
+        state.cursor_position().row(),
         3,
         "Should be on last line (row 3)"
     );
     assert_eq!(
-        state.cursor_position().1,
+        state.cursor_position().col(),
         0,
         "Cursor should be at start of line"
     );

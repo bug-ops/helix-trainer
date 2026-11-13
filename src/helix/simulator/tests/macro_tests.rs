@@ -141,21 +141,85 @@ fn test_q_while_insert_mode_does_not_stop_recording() {
 fn test_dot_repeat_while_recording_captures_expansion_not_literal_dot() {
     let mut sim = AnyModeSimulator::new("aaaa".to_string());
 
-    // Prime the repeat buffer with a delete-char action, outside recording.
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    assert_eq!(sim.display().content(), "aaa");
+    // Prime the repeat buffer with an Insert session, outside recording.
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command("Z").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
+    assert_eq!(sim.display().content(), "Zaaaa");
 
-    // Record a macro consisting of just "." (repeat last action).
+    // Record a macro consisting of just "." (repeat last insert).
     sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
-    sim.execute_command(CMD_REPEAT).unwrap(); // expands to another delete
+    sim.execute_command(CMD_REPEAT).unwrap(); // expands to another insert
     sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
 
-    assert_eq!(sim.display().content(), "aa");
+    assert_eq!(sim.display().content(), "ZZaaaa");
 
-    // Replaying the macro deletes again, proving the *expansion* was
+    // Replaying the macro inserts again, proving the *expansion* was
     // captured rather than a literal '.' (which would be a no-op replay
     // target here, since CMD_REPEAT itself never reaches the macro-recording
     // tap - it early-returns before it).
     sim.execute_command(CMD_REPLAY_MACRO).unwrap();
+    assert_eq!(sim.display().content(), "ZZZaaaa");
+}
+
+#[test]
+fn test_macro_longer_than_one_hundred_commands_is_stored_whole() {
+    const EXTRA_X: usize = 120;
+    let mut sim = AnyModeSimulator::new(String::new());
+
+    sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
+    sim.execute_command(CMD_INSERT).unwrap();
+    for _ in 0..EXTRA_X {
+        sim.execute_command("x").unwrap();
+    }
+    sim.execute_command(CMD_ESCAPE).unwrap();
+    sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
+    assert!(!sim.is_insert_mode());
+
+    sim.execute_command(CMD_REPLAY_MACRO).unwrap();
+
+    assert!(!sim.is_insert_mode());
+    assert_eq!(sim.display().content().len(), 2 * EXTRA_X);
+}
+
+/// FR-128: a command that fails is reported to the caller and not recorded,
+/// and recording continues without dropping any later command.
+#[test]
+fn test_macro_recorder_reports_a_failed_command_and_drops_no_other() {
+    let mut sim = AnyModeSimulator::new("abc".to_string());
+
+    sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
+    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
+    assert!(sim.execute_command("not-a-command").is_err());
+    assert!(sim.is_recording_macro());
+    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
+    sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
+    assert_eq!(sim.display().content(), "ac");
+
+    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
+    sim.execute_command(CMD_REPLAY_MACRO).unwrap();
     assert_eq!(sim.display().content(), "a");
+}
+
+/// FR-129: a recording that goes through Insert mode is closed by its
+/// `Escape` whatever its length, so replay never leaves Insert mode behind.
+#[test]
+fn test_stored_macro_is_closed_in_normal_mode_for_any_length() {
+    for typed in [0, 1, 99, 100, 101, 500] {
+        let mut sim = AnyModeSimulator::new(String::new());
+
+        sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
+        sim.execute_command(CMD_INSERT).unwrap();
+        for _ in 0..typed {
+            sim.execute_command("x").unwrap();
+        }
+        sim.execute_command(CMD_ESCAPE).unwrap();
+        sim.execute_command(CMD_TOGGLE_MACRO_RECORDING).unwrap();
+        assert!(!sim.is_recording_macro(), "{typed} typed");
+
+        sim.execute_command(CMD_REPLAY_MACRO).unwrap();
+
+        assert!(!sim.is_insert_mode(), "{typed} typed");
+        assert_eq!(sim.display().content().len(), 2 * typed, "{typed} typed");
+    }
 }

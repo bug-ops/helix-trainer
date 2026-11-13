@@ -32,7 +32,7 @@ use crate::helix::error::SimulatorError;
 use crate::helix::indent::IndentUnit;
 use crate::helix::language::{Language, LanguageRules};
 use crate::helix::macro_recorder::MacroRecorder;
-use crate::helix::repeat::RepeatBuffer;
+use crate::helix::repeat::{RecordedInsert, RepeatBuffer};
 
 use composed_changes::ComposedChanges;
 use helix_core::auto_pairs::AutoPairs;
@@ -394,19 +394,9 @@ impl HelixSimulator<NormalMode> {
         &self.search_state
     }
 
-    /// Get a mutable reference to the search state
-    pub fn search_state_mut(&mut self) -> &mut SearchState {
-        &mut self.search_state
-    }
-
     /// Get a reference to the view state
     pub fn view_state(&self) -> &ViewState {
         &self.view_state
-    }
-
-    /// Get a mutable reference to the view state
-    pub fn view_state_mut(&mut self) -> &mut ViewState {
-        &mut self.view_state
     }
 }
 
@@ -579,6 +569,22 @@ impl AnyModeSimulator {
         commands::execute_command_any_mode(self, cmd)
     }
 
+    /// Execute typed Insert-mode input, handling the transition back to Normal mode.
+    ///
+    /// The typed counterpart of [`AnyModeSimulator::execute_command`] for
+    /// callers that already know the input is Insert-mode text or a key. A
+    /// simulator in Normal mode takes the command the input's text names.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`SimulatorError`] if the input fails.
+    pub fn execute_insert(
+        &mut self,
+        input: &crate::helix::InsertInput,
+    ) -> Result<(), SimulatorError> {
+        commands::execute_insert_any_mode(self, input)
+    }
+
     /// Execute a parsed Normal-mode command, handling mode transitions.
     ///
     /// The typed counterpart of [`AnyModeSimulator::execute_command`]: a
@@ -684,19 +690,18 @@ impl AnyModeSimulator {
 
     /// Execute repeat (internal implementation with depth/state tracking)
     fn execute_repeat_impl(&mut self) -> Result<(), SimulatorError> {
-        // Get the last action (if any)
-        let action = match self {
+        let session = match self {
             Self::Normal(sim) => {
                 // Check recursion depth
                 if sim.repeat_depth >= MAX_REPEAT_DEPTH {
                     return Ok(());
                 }
-                sim.repeat_buffer.last_action().cloned()
+                sim.repeat_buffer.last_insert().cloned()
             }
             Self::Insert(_) => return Ok(()), // Can't repeat in insert mode
         };
 
-        let Some(action) = action else {
+        let Some(session) = session else {
             return Ok(());
         };
 
@@ -714,51 +719,7 @@ impl AnyModeSimulator {
             Self::Insert(_) => unreachable!("Insert mode returns Ok(()) above"),
         };
 
-        // Execute action
-        let result = match &action {
-            crate::helix::repeat::RepeatableAction::Command {
-                keys,
-                expected_mode,
-            } => {
-                // Validate mode
-                if expected_mode == &Mode::Normal {
-                    // Execute each command in sequence
-                    // This handles compound actions like x+d (select line + delete)
-                    execute_key_sequence(self, keys)
-                } else {
-                    Ok(()) // No-op: requires Normal mode
-                }
-            }
-            crate::helix::repeat::RepeatableAction::InsertSequence {
-                entry_command,
-                text,
-                keys,
-            } => {
-                // Execute insert sequence through wrapper
-                use crate::grammar::commands::{CMD_ESCAPE, CMD_INSERT};
-
-                // Enter insert mode with the same command that was used originally
-                let insert_cmd = entry_command.as_deref().unwrap_or(CMD_INSERT);
-                commands::execute_command_any_mode(self, insert_cmd)?;
-
-                // Insert text character by character, replaying non-text keys
-                // at the position they were originally pressed
-                let mut pending_keys = keys.iter().peekable();
-                for (typed, ch) in text.chars().enumerate() {
-                    while let Some(key) = pending_keys.next_if(|k| k.after_chars <= typed) {
-                        commands::execute_command_any_mode(self, key.action.command())?;
-                    }
-                    commands::execute_command_any_mode(self, &ch.to_string())?;
-                }
-                for key in pending_keys {
-                    commands::execute_command_any_mode(self, key.action.command())?;
-                }
-
-                // Exit insert mode
-                commands::execute_command_any_mode(self, CMD_ESCAPE)?;
-                Ok(())
-            }
-        };
+        let result = replay_insert_session(self, &session);
 
         // Restore the repeating flag and depth unconditionally, on whichever
         // mode replay ended in - unlike `.`, a macro replay containing an
@@ -819,97 +780,27 @@ impl AnyModeSimulator {
     }
 }
 
-/// Execute a sequence of `KeyEvents` as commands
-///
-/// This handles both simple commands and compound actions (e.g., x+d for select line + delete).
-/// Commands are parsed and executed in order, with multi-key sequences (gg, rx) handled properly.
-#[expect(
-    clippy::match_same_arms,
-    reason = "arms stay apart to document each case"
-)]
-fn execute_key_sequence(
+/// Replay one recorded Insert session through the live dispatch path:
+/// entry command, typed text interleaved with its non-text keys, `Escape`.
+fn replay_insert_session(
     sim: &mut AnyModeSimulator,
-    keys: &[crossterm::event::KeyEvent],
+    session: &RecordedInsert,
 ) -> Result<(), SimulatorError> {
-    use crate::grammar::commands::{
-        CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP, CMD_BACKSPACE, CMD_ESCAPE,
-        CMD_GOTO_FILE_START, CMD_SELECT_REGISTER,
-    };
-    use crossterm::event::KeyCode;
+    use crate::grammar::commands::{CMD_ESCAPE, CMD_INSERT};
 
-    if keys.is_empty() {
-        return Ok(());
-    }
+    let insert_cmd = session.entry_command.as_deref().unwrap_or(CMD_INSERT);
+    commands::execute_command_any_mode(sim, insert_cmd)?;
 
-    let mut i = 0;
-    while i < keys.len() {
-        let key = &keys[i];
-
-        // Named register prefix ("<reg><op>, e.g. `"_d`, `"ay`) is a 3-key
-        // sequence, so it must be checked before the 2-key patterns below -
-        // otherwise the leading '"' would be consumed alone as a bare
-        // (invalid) single-key command.
-        let register_cmd = if i + 2 < keys.len()
-            && key.code == KeyCode::Char('"')
-            && let (KeyCode::Char(register), KeyCode::Char(op)) =
-                (keys[i + 1].code, keys[i + 2].code)
-        {
-            i += 3;
-            Some(format!("{CMD_SELECT_REGISTER}{register}{op}"))
-        } else {
-            None
-        };
-
-        // Check for multi-key command patterns
-        let cmd = if register_cmd.is_some() {
-            register_cmd
-        } else if i + 1 < keys.len() {
-            if let (KeyCode::Char(ch1), KeyCode::Char(ch2)) = (key.code, keys[i + 1].code) {
-                match (ch1, ch2) {
-                    ('g', 'g') => {
-                        i += 2;
-                        Some(CMD_GOTO_FILE_START.to_string())
-                    }
-                    ('r', _) => {
-                        i += 2;
-                        Some(format!("r{ch2}"))
-                    }
-                    ('f' | 'F' | 't' | 'T', _) => {
-                        i += 2;
-                        Some(format!("{ch1}{ch2}"))
-                    }
-                    ('g', 'h' | 'l' | 's' | 'e') => {
-                        i += 2;
-                        Some(format!("{ch1}{ch2}"))
-                    }
-                    _ => None, // Not a multi-key sequence, try single
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // If no multi-key match, process as single key
-        let cmd = cmd.unwrap_or_else(|| {
-            i += 1;
-            match key.code {
-                KeyCode::Char(ch) => ch.to_string(),
-                KeyCode::Esc => CMD_ESCAPE.to_string(),
-                KeyCode::Backspace => CMD_BACKSPACE.to_string(),
-                KeyCode::Left => CMD_ARROW_LEFT.to_string(),
-                KeyCode::Right => CMD_ARROW_RIGHT.to_string(),
-                KeyCode::Up => CMD_ARROW_UP.to_string(),
-                KeyCode::Down => CMD_ARROW_DOWN.to_string(),
-                _ => String::new(), // Unknown - skip
-            }
-        });
-
-        if !cmd.is_empty() {
-            commands::execute_command_any_mode(sim, &cmd)?;
+    let mut pending_keys = session.keys.iter().peekable();
+    for (typed, ch) in session.text.chars().enumerate() {
+        while let Some(key) = pending_keys.next_if(|k| k.after_chars <= typed) {
+            commands::execute_command_any_mode(sim, key.action.command())?;
         }
+        commands::execute_command_any_mode(sim, &ch.to_string())?;
+    }
+    for key in pending_keys {
+        commands::execute_command_any_mode(sim, key.action.command())?;
     }
 
-    Ok(())
+    commands::execute_command_any_mode(sim, CMD_ESCAPE)
 }

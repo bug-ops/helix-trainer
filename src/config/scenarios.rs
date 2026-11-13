@@ -19,7 +19,8 @@ use std::path::{Path, PathBuf};
 
 mod cursor;
 
-pub use cursor::{BoundError, Bounded, CursorField, CursorRange, CursorSpec, Pos};
+pub use crate::helix::{CursorRange, Pos};
+pub use cursor::{BoundError, Bounded, CursorField, CursorSpec};
 
 /// Why a scenario's cursor setup or target was rejected.
 ///
@@ -80,6 +81,26 @@ pub enum ScenarioValidationError {
         /// Observed count.
         actual: usize,
     },
+
+    /// `scoring.optimal_count` differs from the number of solution commands.
+    #[error(
+        "scenario '{id}': scoring.optimal_count is {optimal} but the solution has {commands} commands"
+    )]
+    OptimalCountMismatch {
+        /// The offending scenario.
+        id: ScenarioId,
+        /// The configured optimal count.
+        optimal: usize,
+        /// The number of solution commands.
+        commands: usize,
+    },
+
+    /// An `after_taught_commands` scenario names no taught command.
+    #[error("scenario '{id}': completion after_taught_commands needs a non-empty commands_taught")]
+    NoTaughtCommands {
+        /// The offending scenario.
+        id: ScenarioId,
+    },
 }
 
 fn join_fields(fields: &[CursorField]) -> String {
@@ -117,8 +138,9 @@ pub enum CompletionRule {
 /// The just-executed action as seen by [`CompletionRule::is_satisfied`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LastAction<'a> {
-    /// The command string as typed (may carry a count prefix).
-    pub command: &'a str,
+    /// The review-card id of the action, `None` for one that is no command
+    /// (typed Insert-mode text, `Escape`).
+    pub command: Option<&'a CommandId>,
     /// Whether the editor already matched the target before this action ran.
     pub target_held_before: bool,
 }
@@ -128,7 +150,7 @@ impl CompletionRule {
     ///
     /// `target_reached` is the editor-versus-target comparison and
     /// `last_action` the just-executed action. Commands are compared as review
-    /// card ids, so a count prefix is ignored (`2u` matches `u`). An action
+    /// card ids, so a count prefix is ignored (`2u` is the id `u`). An action
     /// that found the target already satisfied (a no-op such as `U` on an empty
     /// redo stack) never completes an [`CompletionRule::AfterTaughtCommands`]
     /// scenario.
@@ -137,23 +159,25 @@ impl CompletionRule {
     ///
     /// ```
     /// use helix_trainer::config::{CompletionRule, LastAction};
-    /// use helix_trainer::ids::NormalizedCommand;
+    /// use helix_trainer::ids::CommandId;
     ///
-    /// let taught = [NormalizedCommand::from_raw("u").unwrap()];
+    /// let id = |raw| CommandId::from_action(raw).unwrap();
+    /// let taught = [id("u")];
     /// let rule = CompletionRule::AfterTaughtCommands;
+    /// let (undo, delete) = (id("2u"), id("d"));
     /// let action = |command, target_held_before| {
-    ///     Some(LastAction { command, target_held_before })
+    ///     Some(LastAction { command: Some(command), target_held_before })
     /// };
-    /// assert!(rule.is_satisfied(true, &taught, action("2u", false)));
-    /// assert!(!rule.is_satisfied(true, &taught, action("2u", true)));
-    /// assert!(!rule.is_satisfied(true, &taught, action("d", false)));
-    /// assert!(CompletionRule::TargetState.is_satisfied(true, &taught, action("d", true)));
+    /// assert!(rule.is_satisfied(true, &taught, action(&undo, false)));
+    /// assert!(!rule.is_satisfied(true, &taught, action(&undo, true)));
+    /// assert!(!rule.is_satisfied(true, &taught, action(&delete, false)));
+    /// assert!(CompletionRule::TargetState.is_satisfied(true, &taught, action(&delete, true)));
     /// ```
     #[must_use]
     pub fn is_satisfied(
         self,
         target_reached: bool,
-        commands_taught: &[NormalizedCommand],
+        commands_taught: &[CommandId],
         last_action: Option<LastAction<'_>>,
     ) -> bool {
         if !target_reached {
@@ -165,15 +189,39 @@ impl CompletionRule {
                 let Some(last_action) = last_action.filter(|a| !a.target_held_before) else {
                     return false;
                 };
-                let Some(last) = CommandId::from_action(last_action.command) else {
+                let Some(last) = last_action.command else {
                     return false;
                 };
-                commands_taught
-                    .iter()
-                    .filter_map(|taught| CommandId::from_action(taught.as_str()))
-                    .any(|taught| taught == last)
+                commands_taught.contains(last)
             }
         }
+    }
+}
+
+/// A free-form scenario tag (`delete`, `motion`), compared as written.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::config::ScenarioTag;
+///
+/// assert_eq!(ScenarioTag::new("motion").as_str(), "motion");
+/// ```
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(transparent)]
+pub struct ScenarioTag(String);
+
+impl ScenarioTag {
+    /// A tag with the given text.
+    #[must_use]
+    pub fn new(tag: impl Into<String>) -> Self {
+        Self(tag.into())
+    }
+
+    /// The tag text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -195,7 +243,7 @@ pub struct ScenarioMetadata {
 
     /// Tags for flexible filtering (e.g., `["delete", "motion", "word"]`)
     #[serde(default)]
-    pub tags: Vec<String>,
+    pub tags: Vec<ScenarioTag>,
 
     /// Commands taught in this scenario (e.g., `["d", "w"]`)
     #[serde(default)]
@@ -204,6 +252,18 @@ pub struct ScenarioMetadata {
     /// Prerequisite scenario IDs that should be completed first
     #[serde(default)]
     pub prerequisites: Vec<ScenarioId>,
+}
+
+impl ScenarioMetadata {
+    /// The taught commands as card ids; a command too long to be an id is skipped.
+    ///
+    /// The one derivation shared by validation and play, so a scenario that loads
+    /// always has the commands its completion rule waits for.
+    pub fn taught_command_ids(&self) -> impl Iterator<Item = CommandId> + '_ {
+        self.commands_taught
+            .iter()
+            .filter_map(|taught| CommandId::from_action(taught.as_str()))
+    }
 }
 
 /// Scenario category for organization and filtering
@@ -309,32 +369,11 @@ pub struct Scenario {
     pub metadata: ScenarioMetadata,
 }
 
-impl Scenario {
-    /// Whether the scenario is finished, given the editor-versus-target
-    /// comparison and the just-executed action.
-    ///
-    /// Both training and arcade completion go through this, so they cannot
-    /// diverge. See [`CompletionRule`].
-    #[must_use]
-    pub fn is_completed_by(
-        &self,
-        target_reached: bool,
-        last_action: Option<LastAction<'_>>,
-    ) -> bool {
-        self.metadata.completion.is_satisfied(
-            target_reached,
-            &self.metadata.commands_taught,
-            last_action,
-        )
-    }
-}
-
 /// Effective content language used when a scenario's [`Setup::language`] is `None`.
 ///
 /// Matches the syntax highlighter's original hardcoded behavior (see FR-002 in
-/// `specs/language-aware-syntax-highlighting/spec.md`). Shared by
-/// `PlayableScenario::language`'s default implementation and its `GameSession`/
-/// `ActiveMiniScenario` overrides so the fallback exists in exactly one place.
+/// `specs/language-aware-syntax-highlighting/spec.md`). Applied only by
+/// [`Setup::language_or_default`], so the fallback exists in exactly one place.
 pub const DEFAULT_LANGUAGE: Language = Language::Rs;
 
 /// Initial editor setup
@@ -353,6 +392,14 @@ pub struct Setup {
     /// Cursor and selection placement at the start.
     #[serde(flatten)]
     pub cursor: CursorSpec,
+}
+
+impl Setup {
+    /// The content language, falling back to [`DEFAULT_LANGUAGE`].
+    #[must_use]
+    pub fn language_or_default(&self) -> Language {
+        self.language.unwrap_or(DEFAULT_LANGUAGE)
+    }
 }
 
 /// Target state to achieve
@@ -686,6 +733,30 @@ impl ScenarioLoader {
         // Validate command sequences
         Self::validate_command_sequence(&scenario.solution.commands)?;
 
+        Self::validate_scoring_invariants(scenario)?;
+
+        Ok(())
+    }
+
+    /// The optimal count is the solution's length, and a rule that completes on a taught
+    /// command has a command to complete on.
+    fn validate_scoring_invariants(scenario: &Scenario) -> Result<(), ScenarioValidationError> {
+        let optimal = scenario.scoring.optimal_count.get();
+        let commands = scenario.solution.commands.len();
+        if optimal != commands {
+            return Err(ScenarioValidationError::OptimalCountMismatch {
+                id: scenario.id.clone(),
+                optimal,
+                commands,
+            });
+        }
+        if scenario.metadata.completion == CompletionRule::AfterTaughtCommands
+            && scenario.metadata.taught_command_ids().next().is_none()
+        {
+            return Err(ScenarioValidationError::NoTaughtCommands {
+                id: scenario.id.clone(),
+            });
+        }
         Ok(())
     }
 }

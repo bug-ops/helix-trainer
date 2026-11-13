@@ -57,11 +57,11 @@ fn render_profile_content(frame: &mut Frame, state: &AppState, area: ratatui::la
 
     // Get profile data
     let profile = &state.progress.profile;
-    let level = profile.level;
-    let total_xp = profile.total_xp;
+    let level = profile.level();
+    let total_xp = profile.total_xp();
     let progress = profile.level_progress();
-    let scenarios_completed = profile.scenarios_completed;
-    let perfect_scenarios = profile.perfect_scenarios;
+    let scenarios_completed = profile.scenarios_completed();
+    let perfect_scenarios = profile.perfect_scenarios();
 
     // Split content into two sections
     let content_chunks = Layout::default()
@@ -185,9 +185,9 @@ fn render_stats_section(
 
     // Quest section
     let profile = &state.progress.profile;
-    let total_quests = profile.daily_quests.len();
+    let total_quests = profile.daily_quests().len();
     let completed_today = profile
-        .daily_quests
+        .daily_quests()
         .iter()
         .filter(|q| q.is_completed())
         .count();

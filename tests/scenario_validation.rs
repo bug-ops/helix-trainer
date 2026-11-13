@@ -44,7 +44,7 @@ fn test_all_scenarios_load_successfully() {
                             scenario.name, scenario.id, e
                         );
                         println!("    ✗ {error_msg}");
-                        failed_scenarios.push((scenario.id.clone(), error_msg));
+                        failed_scenarios.push((scenario.id, error_msg));
                     }
                 }
             }
@@ -223,15 +223,13 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
             continue;
         }
 
-        // Handle "s <pattern>" / "S <pattern>" regex-selection prompt
-        // invocations - assembled atomically by `RegexPromptPending` (also
-        // not resolved char-by-char through the KeyTrie), so validate by
-        // checking the pattern compiles as a regex directly instead.
-        let regex_pattern = cmd
-            .strip_prefix(CMD_SELECT_REGEX)
-            .and_then(|rest| rest.strip_prefix(' '))
-            .or_else(|| {
-                cmd.strip_prefix(CMD_SPLIT_SELECTION)
+        // Handle "<prompt-command> <pattern>" invocations (s, S, K, Alt-K, ?) - assembled
+        // atomically by `RegexPromptPending` (not resolved char-by-char through the
+        // KeyTrie), so validate by checking the pattern compiles as a regex directly.
+        let regex_pattern = [CMD_SELECT_REGEX, CMD_SPLIT_SELECTION, "K", "Alt-K", "?"]
+            .into_iter()
+            .find_map(|prompt| {
+                cmd.strip_prefix(prompt)
                     .and_then(|rest| rest.strip_prefix(' '))
             });
         if let Some(pattern) = regex_pattern {
@@ -380,10 +378,7 @@ fn test_all_scenarios_execute_solution() {
         let session = match GameSession::new(scenario.clone()) {
             Ok(s) => s,
             Err(e) => {
-                failed_scenarios.push((
-                    scenario.id.clone(),
-                    format!("Failed to create session: {e:?}"),
-                ));
+                failed_scenarios.push((scenario.id, format!("Failed to create session: {e:?}")));
                 continue;
             }
         };
@@ -464,7 +459,7 @@ fn test_all_scenarios_execute_solution() {
                 SessionAfterAction::StillActive(s) => {
                     if !s.check_completion() {
                         failed_scenarios.push((
-                            scenario.id.clone(),
+                            scenario.id,
                             format!(
                                 "Solution did not complete scenario.\n  Current: content='{}', cursor={:?}, selection={:?}\n  Target:  content='{}', cursor={:?}, selection={:?}",
                                 s.current_content(),
@@ -632,4 +627,121 @@ fn test_search_scenarios_need_the_word_selection_before_star() {
             "{id}: documented solution"
         );
     }
+}
+
+/// A deliberately untaught Helix-bound command: key, upstream name, reason.
+struct Untaught {
+    key: &'static str,
+    name: &'static str,
+    reason: &'static str,
+}
+
+/// Keys that no bundled scenario teaches yet. Sorted by key; the guard fails on a stale entry, so
+/// the list can only shrink as the coverage issues land.
+const UNTAUGHT: &[Untaught] = &[
+    Untaught {
+        key: "Alt-x",
+        name: "shrink_to_line_bounds",
+        reason: "tracked by #141",
+    },
+    Untaught {
+        key: "zb",
+        name: "align_view_bottom",
+        reason: "#646, view-only",
+    },
+    Untaught {
+        key: "zj",
+        name: "scroll_down",
+        reason: "#646",
+    },
+    Untaught {
+        key: "zk",
+        name: "scroll_up",
+        reason: "#646",
+    },
+    Untaught {
+        key: "zm",
+        name: "align_view_middle",
+        reason: "#646, view-only",
+    },
+    Untaught {
+        key: "zt",
+        name: "align_view_top",
+        reason: "#646, view-only",
+    },
+    Untaught {
+        key: "zz",
+        name: "align_view_center",
+        reason: "#646, view-only",
+    },
+];
+
+/// Keys that the bundled scenarios teach: a normalized `solution.commands` token with its count
+/// prefix stripped, or a `commands_taught` value.
+fn taught_keys() -> std::collections::BTreeSet<String> {
+    use helix_trainer::grammar::commands::normalize_command_id;
+    use helix_trainer::helix::registry::split_count_prefix;
+
+    let mut taught = std::collections::BTreeSet::new();
+    for scenario in ScenarioLoader::new()
+        .load_from_embedded("en")
+        .expect("Failed to load embedded scenarios")
+    {
+        for token in &scenario.solution.commands {
+            let normalized = normalize_command_id(token);
+            let (_, key) = split_count_prefix(&normalized);
+            taught.insert(key.to_owned());
+        }
+        for command in &scenario.metadata.commands_taught {
+            taught.insert(command.as_str().to_owned());
+        }
+    }
+    taught
+}
+
+/// FR-027 to FR-029: every `Binding::Helix` command of the normal registry is taught by a bundled
+/// scenario or is on the `UNTAUGHT` list, and the list holds no taught key.
+#[test]
+fn test_every_registered_helix_command_is_taught_or_listed() {
+    use helix_trainer::helix::registry::normal_registry;
+
+    let taught = taught_keys();
+    let mut untaught: Vec<(&str, &str)> = normal_registry()
+        .all_commands()
+        .filter_map(|meta| meta.name().map(|name| (meta.key(), name.as_str())))
+        .filter(|(key, _)| !taught.contains(*key))
+        .collect();
+    untaught.sort_unstable();
+
+    let listed: Vec<&str> = UNTAUGHT.iter().map(|entry| entry.key).collect();
+    assert!(
+        listed.is_sorted(),
+        "UNTAUGHT must be sorted by key: {listed:?}"
+    );
+    assert!(
+        UNTAUGHT.iter().all(|entry| !entry.reason.is_empty()),
+        "every UNTAUGHT entry needs a reason"
+    );
+
+    let missing: Vec<String> = untaught
+        .iter()
+        .filter(|(key, _)| !listed.contains(key))
+        .map(|(key, name)| format!("`{key}` ({name})"))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "registered Helix commands taught by no scenario and not on UNTAUGHT: {}",
+        missing.join(", ")
+    );
+
+    let stale: Vec<String> = UNTAUGHT
+        .iter()
+        .filter(|entry| taught.contains(entry.key))
+        .map(|entry| format!("`{}` ({})", entry.key, entry.name))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "UNTAUGHT lists commands that a scenario now teaches, remove them: {}",
+        stale.join(", ")
+    );
 }

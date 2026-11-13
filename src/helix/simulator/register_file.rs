@@ -1,44 +1,38 @@
-//! Named register storage for yank/paste/replace operations
+//! Register storage for yank/paste/replace operations
 //!
-//! Mirrors Helix's register model: every clipboard-affecting command reads
-//! and writes a named register, and the *unnamed* register (bound to `'"'`,
-//! matching Helix's own default) is what plain `y`/`p`/`P`/`R` use when no
-//! `"<reg>` prefix is given. Keeping a single storage type with one lookup
-//! key means `""y` and `y` are the same operation by construction, rather
-//! than two code paths that could drift.
+//! Mirrors Helix's register model for the registers that hold text: the
+//! unnamed register (what plain `y`/`p`/`P`/`R` use, and `""`) and the named
+//! ones. Callers address them with a [`Register`], so `""y` and `y` are the
+//! same operation by construction.
 
 use std::collections::HashMap;
 
-/// Register key used when no explicit register is selected.
-///
-/// Matches Helix, where the unnamed register is itself addressable as `"`
-/// (so `""y` and `y` are equivalent).
-pub(crate) const UNNAMED_REGISTER: char = '"';
+use crate::helix::register::{Register, WriteTarget};
 
-/// The blackhole register: writes addressed to it are discarded.
+/// Storage for every writable register, including the unnamed default.
 ///
-/// Matches Helix's `"_`, used to delete/change text without touching any
-/// register (e.g. `"_d`, `"_c`).
-pub(crate) const BLACKHOLE_REGISTER: char = '_';
-
-/// Storage for all named registers, including the unnamed default register.
+/// Read-only registers (`%`, `#`, `.`) are computed from the editor, not
+/// stored here, and the blackhole never holds anything: [`WriteTarget`] has no
+/// way to name a register that cannot be stored.
 ///
 /// # Examples
 ///
 /// ```
+/// use helix_trainer::helix::Register;
+/// use helix_trainer::helix::register::WriteTarget;
 /// use helix_trainer::helix::simulator::RegisterFile;
 ///
 /// let mut registers = RegisterFile::new();
-/// registers.set(None, "hello".to_string());
-/// registers.set(Some('a'), "world".to_string());
+/// registers.set(WriteTarget::Unnamed, "hello".to_string());
+/// registers.set(Register::from('a').write_target().unwrap(), "world".to_string());
 ///
-/// assert_eq!(registers.get(None), Some("hello"));
-/// assert_eq!(registers.get(Some('a')), Some("world"));
-/// assert_eq!(registers.get(Some('b')), None);
+/// assert_eq!(registers.get(Register::Unnamed), Some("hello"));
+/// assert_eq!(registers.get(Register::from('a')), Some("world"));
+/// assert_eq!(registers.get(Register::from('b')), None);
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct RegisterFile {
-    registers: HashMap<char, Vec<String>>,
+    registers: HashMap<Register, Vec<String>>,
 }
 
 impl RegisterFile {
@@ -49,49 +43,39 @@ impl RegisterFile {
         }
     }
 
-    /// Read the first value of a register.
+    /// Read the first stored value of a register.
     ///
-    /// `None` addresses the unnamed register. Callers that must honor every
-    /// selection range use [`Self::get_values`].
-    pub fn get(&self, register: Option<char>) -> Option<&str> {
+    /// Callers that must honor every selection range use [`Self::get_values`].
+    pub fn get(&self, register: Register) -> Option<&str> {
         self.get_values(register)
             .and_then(<[String]>::first)
             .map(String::as_str)
     }
 
-    /// Read every value of a register, one per yanked selection range.
+    /// Read every stored value of a register, one per yanked selection range.
     ///
-    /// `None` addresses the unnamed register, so `get_values(None)` is what
-    /// plain `p`/`P` read from.
-    pub fn get_values(&self, register: Option<char>) -> Option<&[String]> {
-        let key = register.unwrap_or(UNNAMED_REGISTER);
-        self.registers.get(&key).map(Vec::as_slice)
+    /// The blackhole and the read-only registers hold nothing here; the
+    /// simulator computes the latter on read.
+    pub fn get_values(&self, register: Register) -> Option<&[String]> {
+        self.registers.get(&register).map(Vec::as_slice)
     }
 
     /// Write a single value into a register, overwriting any previous content.
     ///
     /// See [`Self::set_values`].
-    pub fn set(&mut self, register: Option<char>, content: String) {
-        self.set_values(register, vec![content]);
+    pub fn set(&mut self, target: WriteTarget, content: String) {
+        self.set_values(target, vec![content]);
     }
 
     /// Write one value per yanked selection range, overwriting any previous
-    /// content.
-    ///
-    /// `None` addresses the unnamed register, so plain `y` writes there.
-    /// Writes to the blackhole register (`BLACKHOLE_REGISTER`) are silently
-    /// discarded, matching Helix's `"_`.
-    pub fn set_values(&mut self, register: Option<char>, values: Vec<String>) {
-        let key = register.unwrap_or(UNNAMED_REGISTER);
-        if key == BLACKHOLE_REGISTER {
-            return;
-        }
-        self.registers.insert(key, values);
-    }
-
-    /// Remove a register's content entirely.
-    pub fn clear(&mut self, register: char) {
-        self.registers.remove(&register);
+    /// content. A write to the blackhole is discarded.
+    pub fn set_values(&mut self, target: WriteTarget, values: Vec<String>) {
+        let register = match target {
+            WriteTarget::Unnamed => Register::Unnamed,
+            WriteTarget::Named(named) => Register::Named(named),
+            WriteTarget::Blackhole => return,
+        };
+        self.registers.insert(register, values);
     }
 }
 
@@ -99,72 +83,70 @@ impl RegisterFile {
 mod tests {
     use super::*;
 
+    fn target(name: char) -> WriteTarget {
+        Register::from(name)
+            .write_target()
+            .expect("writable register")
+    }
+
     #[test]
     fn unnamed_register_roundtrip() {
         let mut registers = RegisterFile::new();
-        registers.set(None, "foo".to_string());
-        assert_eq!(registers.get(None), Some("foo"));
+        registers.set(WriteTarget::Unnamed, "foo".to_string());
+        assert_eq!(registers.get(Register::Unnamed), Some("foo"));
     }
 
     #[test]
     fn named_register_is_independent_of_unnamed() {
         let mut registers = RegisterFile::new();
-        registers.set(None, "default".to_string());
-        registers.set(Some('a'), "named".to_string());
+        registers.set(WriteTarget::Unnamed, "default".to_string());
+        registers.set(target('a'), "named".to_string());
 
-        assert_eq!(registers.get(None), Some("default"));
-        assert_eq!(registers.get(Some('a')), Some("named"));
+        assert_eq!(registers.get(Register::Unnamed), Some("default"));
+        assert_eq!(registers.get(Register::from('a')), Some("named"));
     }
 
     #[test]
-    fn explicit_unnamed_key_matches_none() {
+    fn typed_quote_is_the_unnamed_register() {
         let mut registers = RegisterFile::new();
-        registers.set(Some(UNNAMED_REGISTER), "via-explicit-key".to_string());
-        assert_eq!(registers.get(None), Some("via-explicit-key"));
+        registers.set(target('"'), "via-explicit-key".to_string());
+        assert_eq!(registers.get(Register::Unnamed), Some("via-explicit-key"));
     }
 
     #[test]
     fn unset_register_is_none() {
         let registers = RegisterFile::new();
-        assert_eq!(registers.get(Some('z')), None);
-        assert_eq!(registers.get(None), None);
+        assert_eq!(registers.get(Register::from('z')), None);
+        assert_eq!(registers.get(Register::Unnamed), None);
     }
 
     #[test]
     fn multi_value_register_keeps_each_value_separate() {
         let mut registers = RegisterFile::new();
-        registers.set_values(None, vec!["a".to_string(), "b".to_string()]);
+        registers.set_values(WriteTarget::Unnamed, vec!["a".to_string(), "b".to_string()]);
         assert_eq!(
-            registers.get_values(None),
+            registers.get_values(Register::Unnamed),
             Some(["a".to_string(), "b".to_string()].as_slice())
         );
-        assert_eq!(registers.get(None), Some("a"));
+        assert_eq!(registers.get(Register::Unnamed), Some("a"));
     }
 
     #[test]
-    fn clear_removes_register_content() {
+    fn blackhole_discards_writes_and_reads_nothing() {
         let mut registers = RegisterFile::new();
-        registers.set(Some('a'), "content".to_string());
-        registers.clear('a');
-        assert_eq!(registers.get(Some('a')), None);
+        registers.set(WriteTarget::Blackhole, "discarded".to_string());
+        assert_eq!(registers.get(Register::Blackhole), None);
     }
 
     #[test]
-    fn blackhole_register_discards_writes() {
+    fn blackhole_write_does_not_disturb_other_registers() {
         let mut registers = RegisterFile::new();
-        registers.set(Some(BLACKHOLE_REGISTER), "discarded".to_string());
-        assert_eq!(registers.get(Some(BLACKHOLE_REGISTER)), None);
-    }
+        registers.set(WriteTarget::Unnamed, "unnamed".to_string());
+        registers.set(target('a'), "named".to_string());
+        registers.set(WriteTarget::Blackhole, "discarded".to_string());
 
-    #[test]
-    fn blackhole_register_does_not_affect_other_registers() {
-        let mut registers = RegisterFile::new();
-        registers.set(None, "unnamed".to_string());
-        registers.set(Some('a'), "named".to_string());
-        registers.set(Some(BLACKHOLE_REGISTER), "discarded".to_string());
-
-        assert_eq!(registers.get(None), Some("unnamed"));
-        assert_eq!(registers.get(Some('a')), Some("named"));
-        assert_eq!(registers.get(Some(BLACKHOLE_REGISTER)), None);
+        assert_eq!(registers.get(Register::Unnamed), Some("unnamed"));
+        assert_eq!(registers.get(Register::from('a')), Some("named"));
+        assert_eq!(registers.get(Register::Blackhole), None);
     }
 }

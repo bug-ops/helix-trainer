@@ -1,37 +1,23 @@
 //! Repeat command (`.`) implementation
 //!
-//! Allows users to repeat the last editing action. This module provides
-//! infrastructure for recording and replaying commands and insert mode sequences.
+//! Models Helix 25.07.1 `repeat_last_insert`: `.` replays only the last
+//! Insert session (entry command, typed keys, closing `Escape`). Selections,
+//! operators, `>`, `J`, `p` and every other edit are never recorded, and `.`
+//! with no recorded Insert session does nothing.
 //!
 //! # Architecture
 //!
-//! - `RepeatBuffer`: Stores the last repeatable action with compound action support
-//! - `RepeatableAction`: Enum representing different types of repeatable actions
+//! - `RepeatBuffer`: Stores the last Insert session
+//! - `RecordedInsert`: The entry command, typed text and non-text keys of one session
 //! - `InsertModeRecorder`: Records insert mode sequences for replay
-//! - `is_selection_command()`: Identifies selection commands that start compound actions
-//! - `is_operator_command()`: Identifies operator commands that complete compound actions
-//!
-//! # Compound Actions
-//!
-//! In Helix, selection + operator combinations (like `xd` for select line then delete)
-//! should be recorded as a single compound action. When `.` is pressed, both the
-//! selection and the operator are replayed together.
 //!
 //! # Security
 //!
-//! - Pending key sequences limited to 10 keys
 //! - Insert sessions are recorded in full: a cap would silently truncate the
 //!   replayed text and leave later keys with a stale `after_chars`
 
-use crossterm::event::{KeyCode, KeyEvent};
-
-// Re-export Mode from simulator to avoid duplication
 use super::simulator::InsertCommand;
-pub use super::simulator::Mode;
 use crate::grammar::commands::{CMD_ARROW_DOWN, CMD_ARROW_LEFT, CMD_ARROW_RIGHT, CMD_ARROW_UP};
-
-/// Maximum number of keys in a pending compound action (security limit)
-const MAX_PENDING_KEYS: usize = 10;
 
 /// Arrow key movement directions
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +42,18 @@ pub enum InsertAction {
 }
 
 impl InsertAction {
+    /// The key a command string names (arrows and the Insert-mode editing keys), if any.
+    #[must_use]
+    pub fn parse(cmd: &str) -> Option<Self> {
+        match cmd {
+            CMD_ARROW_LEFT => Some(Self::Move(Movement::Left)),
+            CMD_ARROW_RIGHT => Some(Self::Move(Movement::Right)),
+            CMD_ARROW_UP => Some(Self::Move(Movement::Up)),
+            CMD_ARROW_DOWN => Some(Self::Move(Movement::Down)),
+            _ => InsertCommand::parse(cmd).map(Self::Edit),
+        }
+    }
+
     /// The canonical command string that replays this key
     pub fn command(self) -> &'static str {
         match self {
@@ -80,72 +78,53 @@ pub struct InsertKey {
     pub action: InsertAction,
 }
 
-/// Represents a repeatable action that can be replayed
+/// One recorded Insert session: what `.` replays
+///
+/// Mirrors Helix `repeat_last_insert`: the entry command, the keys typed in
+/// Insert mode and the closing `Escape`. Nothing else is ever repeatable.
+///
+/// # Fields
+///
+/// - `entry_command`: The command used to enter insert mode (`i`, `a`, `A`, `I`, `o`, `O`, `c`, `Alt-c`, `"<reg>c`)
+/// - `text`: The text that was typed
+/// - `keys`: Arrow movements and editing keys (`Ctrl-w`, `Ctrl-u`, `Tab`, ...) in press order, interleaved with `text`
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RepeatableAction {
-    /// Single command or multi-key sequence (e.g., `x`, `gg`, `J`)
-    ///
-    /// # Fields
-    ///
-    /// - `keys`: The key sequence that was pressed
-    /// - `expected_mode`: The mode the editor should be in before replay
-    Command {
-        /// Key sequence replayed on repeat.
-        keys: Vec<KeyEvent>,
-        /// Mode the editor must be in for the replay to be valid.
-        expected_mode: Mode,
-    },
-
-    /// Insert mode sequence (text + non-text keys)
-    ///
-    /// # Fields
-    ///
-    /// - `entry_command`: The command used to enter insert mode (`i`, `a`, `A`, `I`, `o`, `O`, `c`, `Alt-c`, `"<reg>c`)
-    /// - `text`: The text that was typed
-    /// - `keys`: Arrow movements and editing keys (`Ctrl-w`, `Ctrl-u`, `Tab`, ...) in press order, interleaved with `text`
-    InsertSequence {
-        /// Command that entered Insert mode, if it was not a bare mode switch.
-        entry_command: Option<String>,
-        /// Literal text typed during the session.
-        text: String,
-        /// Non-text keys pressed during the session, in press order.
-        keys: Vec<InsertKey>,
-    },
+pub struct RecordedInsert {
+    /// Command that entered Insert mode, if it was not a bare mode switch.
+    pub entry_command: Option<String>,
+    /// Literal text typed during the session.
+    pub text: String,
+    /// Non-text keys pressed during the session, in press order.
+    pub keys: Vec<InsertKey>,
 }
 
-/// Stores the last repeatable action
+/// Stores the last Insert session for `.`
 ///
-/// This buffer maintains a history of one action that can be replayed
-/// with the `.` command. It also supports compound actions where a selection
-/// command (like `x`) is followed by an operator (like `d`).
+/// Only Insert sessions are recorded; selections, operators and every other
+/// edit leave the buffer untouched (FR-066).
 #[derive(Debug)]
 pub struct RepeatBuffer {
-    last_action: Option<RepeatableAction>,
+    last_insert: Option<RecordedInsert>,
     insert_recorder: InsertModeRecorder,
-    /// Pending keys for compound action (selection + operator)
-    /// When a selection command is executed, its keys are stored here.
-    /// When an operator follows, the pending keys are combined with the operator.
-    pending_keys: Vec<KeyEvent>,
 }
 
 impl RepeatBuffer {
     /// Create a new empty repeat buffer
     pub fn new() -> Self {
         Self {
-            last_action: None,
+            last_insert: None,
             insert_recorder: InsertModeRecorder::new(),
-            pending_keys: Vec::new(),
         }
     }
 
-    /// Check if the buffer is empty (no action to repeat)
+    /// Check if the buffer is empty (no Insert session to repeat)
     pub fn is_empty(&self) -> bool {
-        self.last_action.is_none()
+        self.last_insert.is_none()
     }
 
-    /// Get a reference to the last action (if any)
-    pub fn last_action(&self) -> Option<&RepeatableAction> {
-        self.last_action.as_ref()
+    /// The last recorded Insert session, if any
+    pub fn last_insert(&self) -> Option<&RecordedInsert> {
+        self.last_insert.as_ref()
     }
 
     /// Get a mutable reference to the insert mode recorder
@@ -162,92 +141,9 @@ impl RepeatBuffer {
         &self.insert_recorder
     }
 
-    /// Record a command action
-    ///
-    /// For selection commands: stores keys in pending buffer for compound action.
-    /// For operator commands: combines with pending selection (if any) and records.
-    /// For other commands: records directly and clears pending.
-    pub fn record_command(&mut self, keys: Vec<KeyEvent>, mode: Mode) {
-        // Check if this is a selection command that starts a compound action
-        let is_selection = keys.iter().all(is_selection_command);
-        // Check if this is an operator that completes a compound action
-        let is_operator = keys.iter().all(is_operator_command);
-
-        if is_selection {
-            // Start or extend compound action - add to pending
-            if self.pending_keys.len() < MAX_PENDING_KEYS {
-                self.pending_keys.extend(keys);
-            }
-            // Don't record yet - wait for operator
-        } else if is_operator && !self.pending_keys.is_empty() {
-            // Complete compound action: pending selection + operator
-            let mut compound_keys = std::mem::take(&mut self.pending_keys);
-            compound_keys.extend(keys);
-            self.last_action = Some(RepeatableAction::Command {
-                keys: compound_keys,
-                expected_mode: mode,
-            });
-        } else {
-            // Regular command - record directly and clear pending
-            self.pending_keys.clear();
-            self.last_action = Some(RepeatableAction::Command {
-                keys,
-                expected_mode: mode,
-            });
-        }
-    }
-
-    /// Record a selection command that may start a compound action
-    ///
-    /// Selection commands (`x`, `X`, `%`) are stored in pending and wait
-    /// for an operator to complete the compound action.
-    pub fn record_selection(&mut self, keys: Vec<KeyEvent>) {
-        if self.pending_keys.len() < MAX_PENDING_KEYS {
-            self.pending_keys.extend(keys);
-        }
-    }
-
-    /// Record an operator command, possibly completing a compound action
-    ///
-    /// If there are pending selection keys, combines them with the operator.
-    /// Otherwise records just the operator.
-    pub fn record_operator(&mut self, keys: Vec<KeyEvent>, mode: Mode) {
-        if self.pending_keys.is_empty() {
-            // Just the operator
-            self.last_action = Some(RepeatableAction::Command {
-                keys,
-                expected_mode: mode,
-            });
-        } else {
-            // Complete compound action
-            let mut compound_keys = std::mem::take(&mut self.pending_keys);
-            compound_keys.extend(keys);
-            self.last_action = Some(RepeatableAction::Command {
-                keys: compound_keys,
-                expected_mode: mode,
-            });
-        }
-    }
-
-    /// Clear pending keys without recording
-    ///
-    /// Called when a non-repeatable command breaks the compound action chain.
-    pub fn clear_pending(&mut self) {
-        self.pending_keys.clear();
-    }
-
-    /// Check if there are pending selection keys
-    pub fn has_pending(&self) -> bool {
-        !self.pending_keys.is_empty()
-    }
-
-    /// Set the last action directly
-    ///
-    /// Used primarily for storing insert mode sequences after recording.
-    /// Also clears pending keys.
-    pub fn set_last_action(&mut self, action: RepeatableAction) {
-        self.pending_keys.clear();
-        self.last_action = Some(action);
+    /// Store a finished Insert session as the one `.` replays
+    pub fn set_last_insert(&mut self, session: RecordedInsert) {
+        self.last_insert = Some(session);
     }
 }
 
@@ -341,24 +237,17 @@ impl InsertModeRecorder {
 
     /// Finish recording and return the recorded action
     ///
-    /// Stops recording and returns a `RepeatableAction::InsertSequence`
-    /// containing all recorded text, keys, and the entry command. Resets the recorder
-    /// to empty state.
-    pub fn finish(&mut self) -> RepeatableAction {
+    /// Stops recording and returns an [`RecordedInsert`] containing all
+    /// recorded text, keys, and the entry command. Resets the recorder to
+    /// empty state.
+    pub fn finish(&mut self) -> RecordedInsert {
         self.is_recording = false;
 
-        let action = RepeatableAction::InsertSequence {
-            entry_command: self.entry_command.clone(),
-            text: self.text.clone(),
-            keys: self.keys.clone(),
-        };
-
-        // Reset state
-        self.entry_command = None;
-        self.text.clear();
-        self.keys.clear();
-
-        action
+        RecordedInsert {
+            entry_command: self.entry_command.take(),
+            text: std::mem::take(&mut self.text),
+            keys: std::mem::take(&mut self.keys),
+        }
     }
 }
 
@@ -368,140 +257,17 @@ impl Default for InsertModeRecorder {
     }
 }
 
-/// Check if a key is a selection command that starts a compound action
-///
-/// Selection commands modify the selection without changing the document.
-/// They can be followed by an operator to form a compound action.
-///
-/// # Selection Commands
-/// - `x` - Select line (extend)
-/// - `X` - Extend to line bounds
-/// - `%` - Select all
-///
-/// Note: `;` (collapse selection) is NOT included as it doesn't expand selection
-pub(crate) fn is_selection_command(key: &KeyEvent) -> bool {
-    if let KeyCode::Char(ch) = key.code {
-        matches!(ch, 'x' | 'X' | '%')
-    } else {
-        false
-    }
-}
-
-/// Check if a key is an operator command that completes a compound action
-///
-/// Operators act on the current selection. When preceded by a selection
-/// command, they form a compound action that can be repeated together.
-///
-/// # Operator Commands
-/// - `d` - Delete selection
-/// - `c` - Change selection (delete and enter insert mode)
-/// - `y` - Yank (copy) selection
-/// - `>` - Indent selection
-/// - `<` - Dedent selection
-pub(crate) fn is_operator_command(key: &KeyEvent) -> bool {
-    if let KeyCode::Char(ch) = key.code {
-        matches!(ch, 'd' | 'c' | 'y' | '>' | '<')
-    } else {
-        false
-    }
-}
-
-/// Check if a command should be recorded for repeat
-///
-/// Returns `false` for:
-/// - `.` (repeat itself)
-/// - `u`, `U` (undo/redo)
-/// - `F1` (hint)
-/// - `Esc` (cancel)
-/// - Movement commands: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `$`, `g`, `G`
-///
-/// Note: `Q`/`q` (macro record toggle/replay) are deliberately *not*
-/// excluded here, even though they're never actually repeatable in
-/// practice. `execute_command_any_mode` intercepts both before dispatch
-/// ever reaches `record_command_if_needed_normal` (the sole caller of this
-/// function), so neither can appear as the *command* key in a recorded
-/// sequence. But this function is also applied to every *argument* char in
-/// a multi-key sequence (`key_events.iter().all(is_repeatable_command)`),
-/// and 'Q'/'q' are valid arguments to `r`/`f`/`t`/`F`/`T` (e.g. `rq`,
-/// `fq`) - excluding them here would make those combinations silently
-/// unrepeatable.
-///
-/// Returns `true` for all editing commands:
-/// - Character operations: `x`, `r`
-/// - Line operations: `d`, `J`
-/// - Insert commands: `i`, `a`, `I`, `A`, `o`, `O`
-/// - Change: `c`
-/// - Clipboard: `y`, `p`, `P`
-/// - Indent: `>`, `<`
-#[expect(
-    clippy::match_same_arms,
-    reason = "arms stay apart to document each case"
-)]
-pub fn is_repeatable_command(key: &KeyEvent) -> bool {
-    match key.code {
-        KeyCode::Char(ch) => match ch {
-            // Repeat itself - prevent infinite recursion
-            '.' => false,
-
-            // Undo/redo - stateful, should not repeat
-            'u' | 'U' => false,
-
-            // Movement commands - not editing actions
-            'h' | 'j' | 'k' | 'l' => false,
-            'w' | 'b' | 'e' => false,
-            '0' | '$' => false,
-            'g' | 'G' => false,
-
-            // Selection commands - start compound actions
-            'x' => true, // select line
-            // Operator commands - complete compound actions
-            'd' => true,       // delete line
-            'i' | 'a' => true, // insert/append
-            'I' | 'A' => true, // insert/append at bounds
-            'o' | 'O' => true, // open line
-            'r' => true,       // replace char
-            'c' => true,       // change
-            'J' => true,       // join lines
-            'y' => true,       // yank
-            'p' | 'P' => true, // paste
-            '>' | '<' => true, // indent/dedent
-
-            // All other printable characters are repeatable
-            // (they can be used as arguments to 'r' command, or in insert mode)
-            _ if ch.is_ascii_graphic() || ch == ' ' => true,
-
-            // Everything else is not repeatable
-            _ => false,
-        },
-
-        // Function keys
-        KeyCode::F(1) => false, // Hint key
-
-        // Special keys
-        KeyCode::Esc => false,
-
-        // All other keys are not repeatable
-        _ => false,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossterm::event::{KeyCode, KeyModifiers};
 
-    fn make_key(ch: char) -> KeyEvent {
-        KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE)
-    }
-
-    // RepeatBuffer tests
     #[test]
     fn test_repeat_buffer_default() {
         let buffer = RepeatBuffer::default();
         assert!(buffer.is_empty());
+        assert!(buffer.last_insert().is_none());
     }
 
-    // InsertModeRecorder tests
     #[test]
     fn test_insert_mode_recorder_default() {
         let recorder = InsertModeRecorder::default();
@@ -516,36 +282,18 @@ mod tests {
     }
 
     #[test]
-    #[expect(
-        clippy::assert_is_empty,
-        reason = "assert!(x.is_empty()) reads better than the machine fix"
-    )]
     fn test_insert_mode_recorder_record_char() {
         let mut recorder = InsertModeRecorder::new();
         recorder.start(Some("i".to_string()));
-
-        recorder.record_char('h');
-        recorder.record_char('e');
-        recorder.record_char('l');
-        recorder.record_char('l');
-        recorder.record_char('o');
-
-        let action = recorder.finish();
-        assert!(!recorder.is_recording());
-
-        match action {
-            RepeatableAction::InsertSequence {
-                entry_command,
-                text,
-                keys,
-                ..
-            } => {
-                assert_eq!(entry_command, Some("i".to_string()));
-                assert_eq!(text, "hello");
-                assert!(keys.is_empty());
-            }
-            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
+        for ch in "hello".chars() {
+            recorder.record_char(ch);
         }
+
+        let session = recorder.finish();
+        assert!(!recorder.is_recording());
+        assert_eq!(session.entry_command, Some("i".to_string()));
+        assert_eq!(session.text, "hello");
+        assert_eq!(session.keys, []);
     }
 
     #[test]
@@ -559,89 +307,47 @@ mod tests {
         recorder.record_movement(Movement::Left);
         recorder.record_char('!');
 
-        let action = recorder.finish();
-
-        match action {
-            RepeatableAction::InsertSequence {
-                entry_command,
-                text,
-                keys,
-                ..
-            } => {
-                assert_eq!(entry_command, Some("a".to_string()));
-                assert_eq!(text, "hi!");
-                let left = InsertAction::Move(Movement::Left);
-                assert_eq!(
-                    keys,
-                    vec![
-                        InsertKey {
-                            after_chars: 2,
-                            action: left
-                        },
-                        InsertKey {
-                            after_chars: 2,
-                            action: left
-                        },
-                    ]
-                );
-            }
-            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
-        }
+        let session = recorder.finish();
+        assert_eq!(session.entry_command, Some("a".to_string()));
+        assert_eq!(session.text, "hi!");
+        let left = InsertAction::Move(Movement::Left);
+        assert_eq!(
+            session.keys,
+            vec![
+                InsertKey {
+                    after_chars: 2,
+                    action: left
+                },
+                InsertKey {
+                    after_chars: 2,
+                    action: left
+                },
+            ]
+        );
     }
 
     #[test]
-    #[expect(
-        clippy::assert_is_empty,
-        reason = "assert!(x.is_empty()) reads better than the machine fix"
-    )]
     fn test_insert_mode_recorder_empty_recording() {
         let mut recorder = InsertModeRecorder::new();
         recorder.start(None);
 
-        let action = recorder.finish();
-
-        match action {
-            RepeatableAction::InsertSequence {
-                entry_command,
-                text,
-                keys,
-                ..
-            } => {
-                assert_eq!(entry_command, None);
-                assert!(text.is_empty());
-                assert!(keys.is_empty());
-            }
-            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
-        }
+        let session = recorder.finish();
+        assert_eq!(session.entry_command, None);
+        assert_eq!(session.text, "");
+        assert_eq!(session.keys, []);
     }
 
     #[test]
-    #[expect(
-        clippy::assert_is_empty,
-        reason = "assert!(x.is_empty()) reads better than the machine fix"
-    )]
     fn test_insert_mode_recorder_no_recording_without_start() {
         let mut recorder = InsertModeRecorder::new();
 
-        // Try to record without starting
         recorder.record_char('x');
         recorder.record_movement(Movement::Left);
 
-        let action = recorder.finish();
-
-        match action {
-            RepeatableAction::InsertSequence {
-                entry_command,
-                text,
-                keys,
-                ..
-            } => {
-                assert_eq!(entry_command, None);
-                assert!(text.is_empty());
-                assert!(keys.is_empty());
-            }
-            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
-        }
+        let session = recorder.finish();
+        assert_eq!(session.entry_command, None);
+        assert_eq!(session.text, "");
+        assert_eq!(session.keys, []);
     }
 
     #[test]
@@ -652,10 +358,7 @@ mod tests {
             recorder.record_char('x');
         }
 
-        match recorder.finish() {
-            RepeatableAction::InsertSequence { text, .. } => assert_eq!(text.len(), 5000),
-            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
-        }
+        assert_eq!(recorder.finish().text.len(), 5000);
     }
 
     #[test]
@@ -671,128 +374,27 @@ mod tests {
         recorder.record_char('b');
         recorder.record_movement(Movement::Right);
 
-        match recorder.finish() {
-            RepeatableAction::InsertSequence { text, keys, .. } => {
-                assert_eq!(text.len(), 1101);
-                assert_eq!(keys.len(), 151);
-                assert!(keys[..150].iter().all(|k| k.after_chars == 1100));
-                assert_eq!(keys[150].after_chars, 1101);
-                assert_eq!(keys[150].action, InsertAction::Move(Movement::Right));
-            }
-            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
-        }
+        let RecordedInsert { text, keys, .. } = recorder.finish();
+        assert_eq!(text.len(), 1101);
+        assert_eq!(keys.len(), 151);
+        assert!(keys[..150].iter().all(|k| k.after_chars == 1100));
+        assert_eq!(keys[150].after_chars, 1101);
+        assert_eq!(keys[150].action, InsertAction::Move(Movement::Right));
     }
 
     #[test]
     fn test_insert_mode_recorder_resets_after_finish() {
         let mut recorder = InsertModeRecorder::new();
 
-        // First recording
         recorder.start(Some("a".to_string()));
         recorder.record_char('a');
         let _ = recorder.finish();
 
-        // Second recording should start fresh
         recorder.start(Some("i".to_string()));
         recorder.record_char('b');
-        let action = recorder.finish();
+        let session = recorder.finish();
 
-        match action {
-            RepeatableAction::InsertSequence {
-                entry_command,
-                text,
-                ..
-            } => {
-                assert_eq!(entry_command, Some("i".to_string()));
-                assert_eq!(text, "b"); // Should only have 'b', not 'ab'
-            }
-            RepeatableAction::Command { .. } => panic!("Expected InsertSequence"),
-        }
-    }
-
-    // is_repeatable_command tests
-    #[test]
-    fn test_is_repeatable_movement_commands() {
-        // All movement commands should NOT be repeatable
-        assert!(!is_repeatable_command(&make_key('h')));
-        assert!(!is_repeatable_command(&make_key('j')));
-        assert!(!is_repeatable_command(&make_key('k')));
-        assert!(!is_repeatable_command(&make_key('l')));
-        assert!(!is_repeatable_command(&make_key('w')));
-        assert!(!is_repeatable_command(&make_key('b')));
-        assert!(!is_repeatable_command(&make_key('e')));
-        assert!(!is_repeatable_command(&make_key('0')));
-        assert!(!is_repeatable_command(&make_key('$')));
-        assert!(!is_repeatable_command(&make_key('g')));
-        assert!(!is_repeatable_command(&make_key('G')));
-    }
-
-    #[test]
-    fn test_is_repeatable_editing_commands() {
-        // All editing commands SHOULD be repeatable
-        assert!(is_repeatable_command(&make_key('x'))); // delete char
-        assert!(is_repeatable_command(&make_key('d'))); // delete selection
-        assert!(is_repeatable_command(&make_key('i'))); // insert
-        assert!(is_repeatable_command(&make_key('a'))); // append
-        assert!(is_repeatable_command(&make_key('I'))); // insert at start
-        assert!(is_repeatable_command(&make_key('A'))); // append at end
-        assert!(is_repeatable_command(&make_key('o'))); // open below
-        assert!(is_repeatable_command(&make_key('O'))); // open above
-        assert!(is_repeatable_command(&make_key('r'))); // replace
-        assert!(is_repeatable_command(&make_key('c'))); // change
-        assert!(is_repeatable_command(&make_key('J'))); // join
-        assert!(is_repeatable_command(&make_key('y'))); // yank
-        assert!(is_repeatable_command(&make_key('p'))); // paste after
-        assert!(is_repeatable_command(&make_key('P'))); // paste before
-        assert!(is_repeatable_command(&make_key('>'))); // indent
-        assert!(is_repeatable_command(&make_key('<'))); // dedent
-    }
-
-    #[test]
-    fn test_is_repeatable_special_commands() {
-        // These should NOT be repeatable
-        assert!(!is_repeatable_command(&make_key('.'))); // repeat itself
-        assert!(!is_repeatable_command(&make_key('u'))); // undo
-        assert!(!is_repeatable_command(&make_key('U'))); // redo
-
-        // Hint keys
-        let f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE);
-        assert!(!is_repeatable_command(&f1)); // hint (F1)
-
-        // Esc key
-        let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
-        assert!(!is_repeatable_command(&esc));
-    }
-
-    #[test]
-    fn test_is_repeatable_printable_characters() {
-        // Printable ASCII characters ARE repeatable (used with 'r' command or in insert mode)
-        assert!(is_repeatable_command(&make_key('q')));
-        assert!(is_repeatable_command(&make_key('z')));
-        assert!(is_repeatable_command(&make_key('1')));
-        assert!(is_repeatable_command(&make_key('!')));
-        assert!(is_repeatable_command(&make_key('_')));
-        assert!(is_repeatable_command(&make_key(' ')));
-
-        // But special non-printable keys are not
-        assert!(!is_repeatable_command(&KeyEvent::new(
-            KeyCode::Tab,
-            KeyModifiers::NONE
-        )));
-    }
-
-    /// Regression test: `Q`/`q` as the *argument* char to `r`/`f`/`t`/`F`/`T`
-    /// (not as the standalone macro-toggle/replay command) must remain
-    /// `.`-repeatable. An earlier revision excluded `'Q' | 'q'` unconditionally
-    /// from `is_repeatable_command`, which is applied per-key via
-    /// `key_events.iter().all(is_repeatable_command)`
-    /// (`simulator/commands/mod.rs`), so it silently broke `.`-repeating
-    /// `rq`, `fq`, `tq`, `Fq`, `Tq` - not just the standalone `Q`/`q` command,
-    /// which never reaches this function to begin with (see the module doc
-    /// on `is_repeatable_command`).
-    #[test]
-    fn test_q_and_shift_q_as_argument_chars_remain_repeatable() {
-        assert!(is_repeatable_command(&make_key('q')));
-        assert!(is_repeatable_command(&make_key('Q')));
+        assert_eq!(session.entry_command, Some("i".to_string()));
+        assert_eq!(session.text, "b");
     }
 }

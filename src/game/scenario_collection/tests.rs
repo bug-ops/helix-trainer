@@ -5,6 +5,53 @@ use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetStat
 use crate::testing::{ncmd, sid};
 use chrono::Utc;
 
+#[test]
+fn criterion_never_accepts_nothing_and_any_accepts_everything() {
+    let beginners = Criterion::one_of(Difficulty::Beginner, []);
+
+    assert!(beginners.admits(Some(&Difficulty::Beginner)));
+    assert!(!beginners.admits(Some(&Difficulty::Advanced)));
+    assert!(!beginners.admits(None));
+    assert!(Criterion::<Difficulty>::Any.admits(None));
+    assert!(NonEmptySet::<u8>::try_from(HashSet::new()).is_err());
+}
+
+#[test]
+fn criterion_toggle_helpers_keep_the_set_non_empty() {
+    let set = NonEmptySet::new(1u8, [2]);
+
+    let smaller = set.without(&1).expect("one value remains");
+
+    assert!(smaller.contains(&2));
+    assert!(smaller.without(&2).is_none());
+}
+
+#[test]
+fn prerequisite_filter_selects_by_presence_of_prerequisites() {
+    let mut with = create_scenario("with_prereq", "With", None, None, vec![]);
+    with.metadata.prerequisites = vec![sid("other")];
+    let without = create_scenario("no_prereq", "Without", None, None, vec![]);
+    let mut collection = ScenarioCollection::new(vec![with, without]);
+
+    collection.apply_filter(
+        &ScenarioFilter {
+            prerequisites: PrerequisiteFilter::WithPrerequisites,
+            ..Default::default()
+        },
+        None,
+    );
+    assert_eq!(collection.count(), 1);
+
+    collection.apply_filter(
+        &ScenarioFilter {
+            prerequisites: PrerequisiteFilter::WithoutPrerequisites,
+            ..Default::default()
+        },
+        None,
+    );
+    assert_eq!(collection.count(), 1);
+}
+
 /// Helper to create a test scenario with metadata
 #[expect(
     clippy::needless_pass_by_value,
@@ -105,7 +152,7 @@ fn test_filter_by_category() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Movement, []),
         ..Default::default()
     };
 
@@ -146,7 +193,7 @@ fn test_filter_by_difficulty() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        difficulties: Some([Difficulty::Beginner].iter().copied().collect()),
+        difficulties: Criterion::one_of(Difficulty::Beginner, []),
         ..Default::default()
     };
 
@@ -184,7 +231,7 @@ fn test_filter_by_command() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        commands: Some([ncmd("d")].into_iter().collect()),
+        commands: Criterion::one_of(ncmd("d"), []),
         ..Default::default()
     };
 
@@ -225,8 +272,8 @@ fn test_filter_multiple_criteria() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
-        difficulties: Some([Difficulty::Beginner].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Movement, []),
+        difficulties: Criterion::one_of(Difficulty::Beginner, []),
         ..Default::default()
     };
 
@@ -263,12 +310,18 @@ fn test_filter_by_completion_status() {
     ];
 
     let mut profile = UserProfile::new();
-    profile
-        .scenario_history
-        .record_completion(&sid("001"), 100, 50, Utc::now());
-    profile
-        .scenario_history
-        .record_completion(&sid("003"), 100, 50, Utc::now());
+    profile.scenario_history_mut().record_completion(
+        &sid("001"),
+        100,
+        50,
+        crate::time::Moment::local(Utc::now()),
+    );
+    profile.scenario_history_mut().record_completion(
+        &sid("003"),
+        100,
+        50,
+        crate::time::Moment::local(Utc::now()),
+    );
 
     let mut collection = ScenarioCollection::new(scenarios);
 
@@ -516,7 +569,7 @@ fn test_reset_filter() {
 
     // Apply filter
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Movement, []),
         ..Default::default()
     };
     collection.apply_filter(&filter, None);
@@ -635,7 +688,7 @@ fn test_filter_empty_result() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Editing].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Editing, []),
         ..Default::default()
     };
 
@@ -689,7 +742,7 @@ fn test_scenarios_without_metadata() {
 
     // Filtering by category should exclude scenario without metadata
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Movement, []),
         ..Default::default()
     };
 
@@ -717,14 +770,14 @@ fn test_active_filter_and_sort() {
 
     // Apply filter and sort
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Movement, []),
         ..Default::default()
     };
     collection.apply_filter(&filter, None);
     collection.sort(SortMode::ByName, None);
 
     // Check active filter and sort are tracked
-    assert!(collection.active_filter().categories.is_some());
+    assert!(collection.active_filter().categories.is_restricted());
     assert_eq!(collection.active_sort(), SortMode::ByName);
 }
 
@@ -808,21 +861,30 @@ mod curriculum_stats_tests {
     /// Regression guard for S1: a scenario completed multiple times, only
     /// perfect on some of those runs, must contribute exactly 1 to `completed`
     /// and `perfected` - never derived from the replay-inclusive event
-    /// counters (`profile.scenarios_completed`/`perfect_scenarios`).
+    /// counters (`profile.scenarios_completed()`/`perfect_scenarios`).
     #[test]
     fn test_curriculum_stats_replay_heavy_scenario_counts_once() {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
         // Three attempts on "001": two perfect, one not.
-        profile
-            .scenario_history
-            .record_completion(&sid("001"), 100, 50, Utc::now());
-        profile
-            .scenario_history
-            .record_completion(&sid("001"), 80, 40, Utc::now());
-        profile
-            .scenario_history
-            .record_completion(&sid("001"), 100, 50, Utc::now());
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            80,
+            40,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         let stats = collection.curriculum_stats(&profile);
 
@@ -857,12 +919,18 @@ mod curriculum_stats_tests {
         ];
         let collection = ScenarioCollection::new(scenarios);
         let mut profile = UserProfile::new();
-        profile
-            .scenario_history
-            .record_completion(&sid("001"), 100, 50, Utc::now());
-        profile
-            .scenario_history
-            .record_completion(&sid("002"), 50, 25, Utc::now());
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("002"),
+            50,
+            25,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         let stats = collection.curriculum_stats(&profile);
 
@@ -910,9 +978,12 @@ mod curriculum_stats_tests {
     fn test_completed_count_matches_curriculum_stats_completed() {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
-        profile
-            .scenario_history
-            .record_completion(&sid("001"), 100, 50, Utc::now());
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         assert_eq!(
             collection.completed_count(&profile),
@@ -931,12 +1002,18 @@ mod curriculum_stats_tests {
     fn test_is_curriculum_complete_all_but_one_is_false() {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
-        profile
-            .scenario_history
-            .record_completion(&sid("001"), 100, 50, Utc::now());
-        profile
-            .scenario_history
-            .record_completion(&sid("002"), 100, 50, Utc::now());
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("002"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         assert!(!collection.is_curriculum_complete(&profile));
     }
@@ -945,15 +1022,24 @@ mod curriculum_stats_tests {
     fn test_is_curriculum_complete_all_completed_is_true() {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
-        profile
-            .scenario_history
-            .record_completion(&sid("001"), 100, 50, Utc::now());
-        profile
-            .scenario_history
-            .record_completion(&sid("002"), 100, 50, Utc::now());
-        profile
-            .scenario_history
-            .record_completion(&sid("003"), 100, 50, Utc::now());
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("002"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("003"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         assert!(collection.is_curriculum_complete(&profile));
     }

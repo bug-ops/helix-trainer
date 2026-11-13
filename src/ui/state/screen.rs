@@ -14,7 +14,6 @@ use crate::ids::ScenarioId;
 use crate::input::typestate::InputStateMachine;
 use crate::learning::{ReviewSession, ScenarioMastery};
 use crate::minigame::MiniGameSession;
-use crate::security::SecurityError;
 use crate::ui::state::{QuestProgressChange, XPBreakdown};
 use std::collections::VecDeque;
 use std::time::Instant;
@@ -261,17 +260,13 @@ pub struct CompletedTask {
 
 impl CompletedTask {
     /// Derive the feedback of a completed session and stamp the completion time `now`
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SecurityError`] when the scenario's scoring cannot score the run.
-    pub fn new(session: GameSession<Completed>, now: Instant) -> Result<Self, SecurityError> {
-        let feedback = session.feedback()?;
-        Ok(Self {
+    pub fn new(session: GameSession<Completed>, now: Instant) -> Self {
+        let feedback = session.feedback();
+        Self {
             session,
             feedback,
             completed_at: now,
-        })
+        }
     }
 }
 
@@ -331,19 +326,16 @@ impl TaskSession {
 
     /// Resolve the state after an action was applied: an active session whose editor now matches
     /// the target becomes a completed task stamped with `now`, everything else is unchanged
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SecurityError`] when the completed run cannot be scored.
-    pub fn finish_action(self, now: Instant) -> Result<Self, SecurityError> {
+    #[must_use]
+    pub fn finish_action(self, now: Instant) -> Self {
         match self {
             Self::Active(session) => match session.finish_action() {
-                SessionAfterAction::StillActive(session) => Ok(Self::Active(session)),
+                SessionAfterAction::StillActive(session) => Self::Active(session),
                 SessionAfterAction::Completed(session) => {
-                    CompletedTask::new(session, now).map(Self::Completed)
+                    Self::Completed(CompletedTask::new(session, now))
                 }
             },
-            completed @ Self::Completed(_) => Ok(completed),
+            completed @ Self::Completed(_) => completed,
         }
     }
 }
@@ -407,15 +399,12 @@ impl TaskData {
     }
 
     /// Resolve the session state after an action: see [`TaskSession::finish_action`]
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SecurityError`] when the completed run cannot be scored.
-    pub fn finish_action(self, now: Instant) -> Result<Self, SecurityError> {
-        Ok(Self {
-            session: self.session.finish_action(now)?,
+    #[must_use]
+    pub fn finish_action(self, now: Instant) -> Self {
+        Self {
+            session: self.session.finish_action(now),
             ..self
-        })
+        }
     }
 
     /// Add a key to the history (keeps last 5)
@@ -713,7 +702,7 @@ impl MiniGameModeKind {
     }
 
     /// The default configuration of this mode; the challenge is seeded from `today`
-    pub fn mode(self, today: chrono::NaiveDate) -> crate::minigame::MiniGameMode {
+    pub fn mode(self, today: crate::time::PlayerDay) -> crate::minigame::MiniGameMode {
         use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
 
         match self {
@@ -764,13 +753,13 @@ impl MiniGameModeSelection {
     /// sync. Name/description text comes from `MiniGameMode`'s own exhaustive
     /// match.
     pub(crate) fn all_modes(
-        today: chrono::NaiveDate,
+        today: crate::time::PlayerDay,
     ) -> [crate::minigame::MiniGameMode; Self::MODE_COUNT] {
         MiniGameModeKind::ALL.map(|kind| kind.mode(today))
     }
 
     /// Get the selected mode configuration
-    pub fn selected_mode(&self, today: chrono::NaiveDate) -> crate::minigame::MiniGameMode {
+    pub fn selected_mode(&self, today: crate::time::PlayerDay) -> crate::minigame::MiniGameMode {
         self.selected.mode(today)
     }
 }
@@ -1090,7 +1079,7 @@ mod tests {
 
     #[test]
     fn test_minigame_mode_selection_valid_modes() {
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         let mut selection = MiniGameModeSelection::new();
         assert!(selection.selected_mode(today).is_arcade());
 
@@ -1104,7 +1093,7 @@ mod tests {
     /// `all_modes` must stay in lockstep with `MiniGameModeKind::ALL`.
     #[test]
     fn test_all_modes_follow_the_kind_order() {
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         let modes = MiniGameModeSelection::all_modes(today);
 
         for (kind, mode) in MiniGameModeKind::ALL.into_iter().zip(&modes) {
@@ -1119,7 +1108,7 @@ mod tests {
     /// variant must appear exactly once in `all_modes`.
     #[test]
     fn test_all_modes_covers_every_known_variant_exactly_once() {
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         let modes = MiniGameModeSelection::all_modes(today);
         assert_eq!(modes.len(), MiniGameModeSelection::MODE_COUNT);
 

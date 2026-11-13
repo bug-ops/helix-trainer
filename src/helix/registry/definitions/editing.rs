@@ -297,8 +297,8 @@ pub fn register(registry: &mut CommandRegistry<NormalMode>) {
     // the upstream keymap, so this has no real Helix command name.
     registry.register(Command::new(
         CommandMetadata::new(Binding::TrainerAlias, CMD_REPEAT, Category::Editing)
-            .with_summary("Repeat last action")
-            .with_help("Repeat the last editing action.")
+            .with_summary("Repeat last insert")
+            .with_help("Repeat the last Insert session.")
             .with_count_behavior(CountBehavior::Ignore),
         |_sim| Ok(()), // Handled specially by execute_command_any_mode
     ));

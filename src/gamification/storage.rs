@@ -243,14 +243,14 @@ impl ProfileStorage {
     ///
     /// let storage = ProfileStorage::with_path("profile.json");
     /// let profile = storage.load().unwrap();
-    /// println!("Level: {}", profile.level);
+    /// println!("Level: {}", profile.level());
     /// ```
     pub fn load(&self) -> Result<UserProfile, StorageError> {
         let loaded = self.store.load_with_source();
         let mut held = self.held_last_valid();
         match loaded {
             Ok(Some((mut data, text))) => {
-                data.profile.recompute_level();
+                data.profile.finish_load();
                 *held = Some(text.into());
                 Ok(data.profile)
             }
@@ -280,7 +280,7 @@ impl ProfileStorage {
         let store = JsonStore::<ProfileData>::new(&path, Document::Profile, MAX_PROFILE_FILE_SIZE);
         match store.load_with_source()? {
             Some((mut data, text)) => {
-                data.profile.recompute_level();
+                data.profile.finish_load();
                 Ok((data.profile, text))
             }
             None => Err(StorageError::Read {
@@ -337,8 +337,8 @@ impl ProfileStorage {
     /// std::fs::write(storage.path(), "{broken").unwrap();
     ///
     /// let restored = storage.restore_previous().unwrap();
-    /// assert_eq!(restored.total_xp, 500);
-    /// assert_eq!(storage.load().unwrap().total_xp, 500);
+    /// assert_eq!(restored.total_xp(), 500);
+    /// assert_eq!(storage.load().unwrap().total_xp(), 500);
     /// ```
     pub fn restore_previous(&self) -> Result<UserProfile, StorageError> {
         if let QuarantineOutcome::Failed(source) = self.quarantine() {
@@ -486,8 +486,8 @@ impl ProfileStorage {
     /// let storage = ProfileStorage::with_path(&path);
     /// assert!(storage.load().is_err());
     /// let fresh = storage.start_fresh().unwrap();
-    /// assert_eq!(fresh.level, 1);
-    /// assert_eq!(storage.load().unwrap().level, 1);
+    /// assert_eq!(fresh.level(), 1);
+    /// assert_eq!(storage.load().unwrap().level(), 1);
     /// ```
     pub fn start_fresh(&self) -> Result<UserProfile, StorageError> {
         if let QuarantineOutcome::Failed(source) = self.quarantine() {
@@ -702,7 +702,7 @@ mod tests {
 
         // Load
         let loaded = storage.load().unwrap();
-        assert_eq!(loaded.level, profile.level);
+        assert_eq!(loaded.level(), profile.level());
         assert_eq!(loaded.total_xp, profile.total_xp);
         assert_eq!(loaded.current_streak, profile.current_streak);
     }
@@ -780,7 +780,7 @@ mod tests {
         let storage = ProfileStorage::with_path(&file_path);
 
         let profile = storage.load().unwrap();
-        assert_eq!(profile.level, 1);
+        assert_eq!(profile.level(), 1);
         assert_eq!(profile.total_xp, 0);
     }
 
@@ -840,7 +840,10 @@ mod tests {
         // Read raw JSON
         let json = fs::read_to_string(&file_path).unwrap();
         assert!(json.contains("\"profile\""));
-        assert!(json.contains("\"level\""));
+        assert!(
+            !json.contains("\"level\""),
+            "the level is derived and never written"
+        );
         assert!(json.contains("\"total_xp\""));
     }
 
@@ -993,13 +996,13 @@ mod tests {
         let mut json = saved_profile_json(&storage, &UserProfile::new());
         json["profile"]["level"] = serde_json::json!(50);
         fs::write(storage.path(), json.to_string()).unwrap();
-        assert_eq!(storage.load().unwrap().level, 1);
+        assert_eq!(storage.load().unwrap().level(), 1);
 
         json["profile"]["level"] = serde_json::json!(1);
         json["profile"]["total_xp"] = serde_json::json!(1_000_000u64);
         fs::write(storage.path(), json.to_string()).unwrap();
         assert_eq!(
-            storage.load().unwrap().level,
+            storage.load().unwrap().level(),
             crate::gamification::XPCalculator::level_from_xp(1_000_000)
         );
     }
@@ -1104,7 +1107,7 @@ mod tests {
 
         let fresh = storage.start_fresh().unwrap();
 
-        assert_eq!(fresh.level, 1);
+        assert_eq!(fresh.level(), 1);
         assert_eq!(storage.load().unwrap().total_xp, 0);
         let backups = backups_in(dir.path());
         assert_eq!(backups.len(), 1);
@@ -1352,7 +1355,7 @@ mod tests {
         assert_eq!(backed_up_path(storage.quarantine()), legacy);
         let fresh = storage.start_fresh().unwrap();
 
-        assert_eq!(fresh.level, 1);
+        assert_eq!(fresh.level(), 1);
         assert_eq!(storage.load().unwrap().total_xp, 0);
         assert_eq!(fs::read(&legacy).unwrap(), before);
     }
@@ -1374,7 +1377,7 @@ mod tests {
         assert_eq!(fs::read_to_string(backup).unwrap(), "{garbage");
 
         storage.start_fresh().unwrap();
-        assert_eq!(storage.load().unwrap().level, 1);
+        assert_eq!(storage.load().unwrap().level(), 1);
         assert_eq!(fs::read_to_string(&legacy).unwrap(), "{garbage");
     }
 

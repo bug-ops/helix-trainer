@@ -415,7 +415,7 @@ The former note on `Ctrl-d`/`Ctrl-u`/`Ctrl-f`/`Ctrl-b` (fixed page size, so Sele
 | `l C C C d d` (FR-061, #585) | the second `d` keeps the closing `}` | same (no cursor clamp in `delete_selection_impl`) | closed, #625 |
 | `Alt-;` on a multi-range selection | flips every range | same (`flip_selections` uses `Selection::transform`) | closed, #623 |
 | `/`, `s`, `S`, `K` and `Alt-K` with an all-lowercase pattern (FR-060) | smart-case: case-insensitive match | same (smart-case) | closed, #624 |
-| Macro length (FR-025) | a recorded macro keeps every command | the recorder silently stops accepting commands at `MAX_MACRO_LENGTH` (100), so a longer macro is truncated; NO parity is claimed | open, pre-existing defect, #635 |
+| Macro length (FR-025) | a recorded macro keeps every command | same (the `MAX_MACRO_LENGTH` cap is removed; the whole recording is stored, see [[regex-selection-and-macro-commands/spec#12. Bug-Fix: A Macro Recording Is Never Truncated (#635)\|regex-selection FR-127]]) | closed, #635 |
 | Named macro registers and a shared `.`/macro recorder (FR-025) | `"<reg>Q` records into a register; one recording mechanism | one unnamed macro slot; separate `.` and macro recorders | open, tracking only: #619 and #620 |
 | Long Insert sessions replayed with `.` (FR-053) | the full session replays | same (the caps are removed; the whole recorded session is replayed in order) | closed, #622 |
 

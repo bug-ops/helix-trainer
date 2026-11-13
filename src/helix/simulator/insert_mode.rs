@@ -16,6 +16,7 @@ use crate::helix::language::SmartTab;
 use crate::helix::newline_indent::{
     CommentContinuation, NewLineStart, NewlineIndent, leading_whitespace,
 };
+use crate::helix::register::Register;
 use crate::limits::MAX_REGEX_SELECTION_MATCHES;
 use helix_core::{
     Assoc, ChangeSet, Range, Selection, Transaction, auto_pairs,
@@ -639,20 +640,20 @@ impl HelixSimulator<NormalMode> {
     /// Never fails: always returns `Ok(())`. The `Result` keeps the signature uniform with the
     /// fallible commands that share the registry's function type.
     pub fn change_selection(&mut self) -> Result<(), SimulatorError> {
-        self.change_selection_from_register(None)
+        self.change_selection_from_register(Register::Unnamed)
     }
 
     /// Change selection, yanking to the given register (`"<reg>c`).
     ///
-    /// `register: None` addresses the unnamed register, matching plain
-    /// `c`. See [`Self::change_selection`].
+    /// [`Register::Unnamed`] is plain `c`. See [`Self::change_selection`].
     ///
     /// # Errors
     ///
-    /// Returns the error of yanking to `register`; the yank currently never fails.
+    /// [`SimulatorError::ReadOnlyRegister`] when `register` is `%`, `#` or `.`; the
+    /// document, selection and mode are left unchanged.
     pub fn change_selection_from_register(
         &mut self,
-        register: Option<char>,
+        register: Register,
     ) -> Result<(), SimulatorError> {
         yank_to_register(self, register)?;
         self.change_selection_impl();

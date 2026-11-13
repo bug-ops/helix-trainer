@@ -10,7 +10,10 @@ use helix_trainer::config::{
     CursorSpec, Difficulty, Pos, Scenario, ScenarioCategory, ScenarioMetadata, ScoringConfig,
     Setup, Solution, TargetState,
 };
-use helix_trainer::game::{CompletionFilter, ScenarioCollection, ScenarioFilter, SortMode};
+use helix_trainer::game::{
+    CompletionFilter, Criterion as FilterCriterion, NonEmptySet, ScenarioCollection,
+    ScenarioFilter, SortMode,
+};
 use helix_trainer::gamification::UserProfile;
 use helix_trainer::ids::{NormalizedCommand, ScenarioId};
 use std::collections::HashSet;
@@ -101,9 +104,12 @@ fn create_profile_with_completions(scenario_ids: &[ScenarioId]) -> UserProfile {
     for (idx, scenario_id) in scenario_ids.iter().enumerate() {
         if idx % 3 == 0 {
             // Complete ~33% of scenarios
-            profile
-                .scenario_history
-                .record_completion(scenario_id, 100, 50, chrono::Utc::now());
+            profile.scenario_history_mut().record_completion(
+                scenario_id,
+                100,
+                50,
+                helix_trainer::time::Moment::local(chrono::Utc::now()),
+            );
         }
     }
 
@@ -149,7 +155,9 @@ fn bench_filter_by_category(c: &mut Criterion) {
                     filter_categories.insert(ScenarioCategory::Editing);
 
                     let filter = ScenarioFilter {
-                        categories: Some(filter_categories),
+                        categories: FilterCriterion::OneOf(
+                            NonEmptySet::try_from(filter_categories).unwrap(),
+                        ),
                         ..Default::default()
                     };
 
@@ -181,7 +189,9 @@ fn bench_filter_by_difficulty(c: &mut Criterion) {
                     filter_difficulties.insert(Difficulty::Beginner);
 
                     let filter = ScenarioFilter {
-                        difficulties: Some(filter_difficulties),
+                        difficulties: FilterCriterion::OneOf(
+                            NonEmptySet::try_from(filter_difficulties).unwrap(),
+                        ),
                         ..Default::default()
                     };
 
@@ -254,8 +264,12 @@ fn bench_filter_multi_criteria(c: &mut Criterion) {
                     filter_difficulties.insert(Difficulty::Beginner);
 
                     let filter = ScenarioFilter {
-                        categories: Some(filter_categories),
-                        difficulties: Some(filter_difficulties),
+                        categories: FilterCriterion::OneOf(
+                            NonEmptySet::try_from(filter_categories).unwrap(),
+                        ),
+                        difficulties: FilterCriterion::OneOf(
+                            NonEmptySet::try_from(filter_difficulties).unwrap(),
+                        ),
                         completion: CompletionFilter::NotCompletedOnly,
                         ..Default::default()
                     };
@@ -460,7 +474,9 @@ fn bench_filter_no_matches(c: &mut Criterion) {
                 );
 
                 let filter = ScenarioFilter {
-                    commands: Some(filter_commands),
+                    commands: FilterCriterion::OneOf(
+                        NonEmptySet::try_from(filter_commands).unwrap(),
+                    ),
                     ..Default::default()
                 };
 
@@ -574,7 +590,7 @@ fn bench_menu_render_simulation(c: &mut Criterion) {
                     // Check completion status for each scenario (like menu does)
                     let mut count = 0;
                     for scenario in &filtered {
-                        let completed = profile.scenario_history.get(&scenario.id).is_some();
+                        let completed = profile.scenario_history().get(&scenario.id).is_some();
                         black_box(completed);
 
                         // Get difficulty indicator (like menu does)
@@ -612,7 +628,9 @@ fn bench_filter_sort_access_workflow(c: &mut Criterion) {
                 filter_categories.insert(ScenarioCategory::Movement);
 
                 let filter = ScenarioFilter {
-                    categories: Some(filter_categories),
+                    categories: FilterCriterion::OneOf(
+                        NonEmptySet::try_from(filter_categories).unwrap(),
+                    ),
                     completion: CompletionFilter::NotCompletedOnly,
                     ..Default::default()
                 };
@@ -660,7 +678,9 @@ fn bench_repeated_filter_changes(c: &mut Criterion) {
                     }
 
                     let filter = ScenarioFilter {
-                        categories: Some(filter_categories),
+                        categories: FilterCriterion::OneOf(
+                            NonEmptySet::try_from(filter_categories).unwrap(),
+                        ),
                         ..Default::default()
                     };
 

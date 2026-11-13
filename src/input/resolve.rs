@@ -7,12 +7,10 @@
 //! screens interpret keys identically; each screen keeps its own key-history
 //! and last-command bookkeeping around it.
 
-use std::borrow::Cow;
-
 use super::keymap::GameplayKey;
 use super::typestate::{HandlerResult, InputStateMachine};
-use crate::helix::ModeKind;
 use crate::helix::normal_command::NormalCommand;
+use crate::helix::{InsertInput, ModeKind};
 
 /// Where a resolved command came from, which screens use to pick what the key
 /// history shows.
@@ -31,7 +29,7 @@ pub(crate) enum ResolvedFrom {
 pub(crate) enum Resolution {
     /// Insert mode: the key is typed text or an Insert-mode key, never
     /// translated and never seen by the state machine.
-    Insert(Cow<'static, str>),
+    Insert(InsertInput),
     /// A command to run, with its count prefix still attached.
     Execute {
         /// The typed command.
@@ -60,8 +58,12 @@ pub(crate) fn resolve_keys(
     key: &GameplayKey,
 ) -> Resolution {
     let keys = match (mode, key) {
-        (ModeKind::Insert, GameplayKey::Typed(text)) => return Resolution::Insert(text.clone()),
-        (ModeKind::Insert, GameplayKey::Keys(keys)) => return Resolution::Insert(keys.to_cow()),
+        (ModeKind::Insert, GameplayKey::Typed(text)) => {
+            return Resolution::Insert(InsertInput::parse(text));
+        }
+        (ModeKind::Insert, GameplayKey::Keys(keys)) => {
+            return Resolution::Insert(InsertInput::parse(&keys.to_cow()));
+        }
         (_, GameplayKey::Typed(text)) => {
             tracing::debug!(%text, "typed text outside Insert mode; discarding");
             return Resolution::Discarded;
@@ -98,6 +100,7 @@ pub(crate) fn resolve_keys(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::borrow::Cow;
 
     fn resolve(input: &mut InputStateMachine, mode: ModeKind, keys: &'static str) -> Resolution {
         resolve_keys(input, mode, &GameplayKey::Keys(crate::testing::keys(keys)))
@@ -115,7 +118,7 @@ mod tests {
         let mut input = InputStateMachine::new();
         assert_eq!(
             resolve(&mut input, ModeKind::Insert, "g"),
-            Resolution::Insert(Cow::Borrowed("g"))
+            Resolution::Insert(InsertInput::parse("g"))
         );
         assert!(input.state().is_base());
     }
@@ -175,7 +178,7 @@ mod tests {
                     ModeKind::Insert,
                     &GameplayKey::Typed(Cow::Borrowed(text))
                 ),
-                Resolution::Insert(Cow::Borrowed(text))
+                Resolution::Insert(InsertInput::parse(text))
             );
         }
     }

@@ -310,12 +310,18 @@ fn test_filter_by_completion_status() {
     ];
 
     let mut profile = UserProfile::new();
-    profile
-        .scenario_history_mut()
-        .record_completion(&sid("001"), 100, 50, Utc::now());
-    profile
-        .scenario_history_mut()
-        .record_completion(&sid("003"), 100, 50, Utc::now());
+    profile.scenario_history_mut().record_completion(
+        &sid("001"),
+        100,
+        50,
+        crate::time::Moment::local(Utc::now()),
+    );
+    profile.scenario_history_mut().record_completion(
+        &sid("003"),
+        100,
+        50,
+        crate::time::Moment::local(Utc::now()),
+    );
 
     let mut collection = ScenarioCollection::new(scenarios);
 
@@ -861,15 +867,24 @@ mod curriculum_stats_tests {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
         // Three attempts on "001": two perfect, one not.
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("001"), 100, 50, Utc::now());
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("001"), 80, 40, Utc::now());
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("001"), 100, 50, Utc::now());
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            80,
+            40,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         let stats = collection.curriculum_stats(&profile);
 
@@ -904,12 +919,18 @@ mod curriculum_stats_tests {
         ];
         let collection = ScenarioCollection::new(scenarios);
         let mut profile = UserProfile::new();
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("001"), 100, 50, Utc::now());
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("002"), 50, 25, Utc::now());
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("002"),
+            50,
+            25,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         let stats = collection.curriculum_stats(&profile);
 
@@ -957,9 +978,12 @@ mod curriculum_stats_tests {
     fn test_completed_count_matches_curriculum_stats_completed() {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("001"), 100, 50, Utc::now());
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         assert_eq!(
             collection.completed_count(&profile),
@@ -978,12 +1002,18 @@ mod curriculum_stats_tests {
     fn test_is_curriculum_complete_all_but_one_is_false() {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("001"), 100, 50, Utc::now());
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("002"), 100, 50, Utc::now());
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("002"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         assert!(!collection.is_curriculum_complete(&profile));
     }
@@ -992,15 +1022,24 @@ mod curriculum_stats_tests {
     fn test_is_curriculum_complete_all_completed_is_true() {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("001"), 100, 50, Utc::now());
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("002"), 100, 50, Utc::now());
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("003"), 100, 50, Utc::now());
+        profile.scenario_history_mut().record_completion(
+            &sid("001"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("002"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("003"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         assert!(collection.is_curriculum_complete(&profile));
     }

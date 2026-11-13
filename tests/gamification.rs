@@ -48,7 +48,7 @@ fn test_complete_user_flow() {
     let mut quests = QuestGenerator::generate_quests(
         &profile,
         &registry,
-        helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
+        helix_trainer::time::Moment::local(chrono::Utc::now()).day(),
     )
     .quests;
     assert_eq!(quests.len(), 3); // Beginner gets 3 quests
@@ -78,7 +78,10 @@ fn test_complete_user_flow() {
     }
 
     // Update streak
-    let change = StreakManager::update_streak(&mut profile, chrono::Utc::now());
+    let change = StreakManager::update_streak(
+        &mut profile,
+        helix_trainer::time::Moment::local(chrono::Utc::now()),
+    );
     assert_matches!(
         change,
         StreakChange::Continued | StreakChange::Incremented { .. }
@@ -122,7 +125,7 @@ fn test_quest_generation_adapts_to_level() {
     let quests = QuestGenerator::generate_quests(
         &profile,
         &registry,
-        helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
+        helix_trainer::time::Moment::local(chrono::Utc::now()).day(),
     )
     .quests;
     assert_eq!(quests.len(), 3);
@@ -130,7 +133,7 @@ fn test_quest_generation_adapts_to_level() {
     let quests = QuestGenerator::generate_quests(
         &profile,
         &registry,
-        helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
+        helix_trainer::time::Moment::local(chrono::Utc::now()).day(),
     )
     .quests;
     assert_eq!(quests.len(), 4);
@@ -138,7 +141,7 @@ fn test_quest_generation_adapts_to_level() {
     let quests = QuestGenerator::generate_quests(
         &profile,
         &registry,
-        helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
+        helix_trainer::time::Moment::local(chrono::Utc::now()).day(),
     )
     .quests;
     assert_eq!(quests.len(), 4); // 1 medium + 2 hard + 1 exploration
@@ -167,11 +170,11 @@ fn test_quest_type_variations() {
     let registry = test_registry();
 
     // Generate multiple times and check variety
-    let today = helix_trainer::time::Moment::from(chrono::Utc::now()).day();
+    let today = helix_trainer::time::Moment::local(chrono::Utc::now()).day();
     let quests1 = QuestGenerator::generate_quests(&profile, &registry, today).quests;
     let quests2 = QuestGenerator::generate_quests(&profile, &registry, today).quests;
 
-    // Since they use the same date seed, they should be identical
+    // Since they use the same date seed), they should be identical
     assert_eq!(quests1.len(), quests2.len());
     for (q1, q2) in quests1.iter().zip(quests2.iter()) {
         assert_eq!(q1.id, q2.id);
@@ -221,7 +224,10 @@ fn test_streak_freeze_mechanics() {
     // Simulate missing a day
     clock.advance_days(2);
 
-    let change = StreakManager::update_streak(&mut profile, clock.now());
+    let change = StreakManager::update_streak(
+        &mut profile,
+        helix_trainer::time::Moment::local(clock.now()),
+    );
     assert_eq!(change, StreakChange::Protected);
     assert_eq!(profile.current_streak(), 10); // Preserved
     assert!(!profile.streak_freeze_available()); // Used up
@@ -495,14 +501,20 @@ fn test_longest_streak_tracking() {
     // Increment streak
     push_rewarded_quest(&mut profile, "test");
     clock.advance_days(1);
-    StreakManager::update_streak(&mut profile, clock.now());
+    StreakManager::update_streak(
+        &mut profile,
+        helix_trainer::time::Moment::local(clock.now()),
+    );
 
     assert_eq!(profile.current_streak(), 6);
     assert_eq!(profile.longest_streak(), 6);
 
     // Break streak
     clock.advance_days(2);
-    StreakManager::update_streak(&mut profile, clock.now());
+    StreakManager::update_streak(
+        &mut profile,
+        helix_trainer::time::Moment::local(clock.now()),
+    );
 
     assert_eq!(profile.current_streak(), 0);
     assert_eq!(profile.longest_streak(), 6); // Preserved

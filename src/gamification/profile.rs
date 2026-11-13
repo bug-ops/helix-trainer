@@ -19,6 +19,7 @@ use crate::learning::PerformanceData;
 use crate::learning::ScenarioHistory;
 use crate::numeric::{self, Rounding};
 use crate::sound::SoundConfig;
+use crate::time::Moment;
 
 /// An achievement id from disk that may be unknown to this build.
 #[derive(Deserialize)]
@@ -620,6 +621,27 @@ impl UserProfile {
         self.achievements_unlocked.insert(achievement)
     }
 
+    /// Clamps stored days implausibly far ahead of `now` back to today (FR-003 load clamp).
+    ///
+    /// A clock that ran far ahead and was then corrected would otherwise freeze quest
+    /// refresh, streak and challenge until real time caught up. Days within
+    /// [`crate::time::PlayerDay::MAX_AHEAD_DAYS`] stay forward-only.
+    pub fn clamp_future_days(&mut self, now: &Moment) {
+        let today = now.day();
+        let implausible = |instant: DateTime<Utc>| {
+            let day = now.day_of(instant);
+            day.clamp_ahead(today) != day
+        };
+        if implausible(self.last_quest_refresh) {
+            self.last_quest_refresh = now.instant();
+        }
+        if implausible(self.last_activity) {
+            self.last_activity = now.instant();
+        }
+        self.challenge_progress.clamp_future_day(today);
+        self.scenario_history.clamp_future_days(today);
+    }
+
     /// Reset daily quest state (called at midnight)
     ///
     /// The refresh instant only moves forward: a stored instant later than `now`
@@ -1066,6 +1088,65 @@ impl XPCalculator {
 mod tests {
     use super::*;
     use crate::testing::qid;
+
+    fn profile_with_every_day_ahead_by(days: i64, clock: &crate::time::FakeClock) -> UserProfile {
+        use crate::gamification::ChallengeDay;
+        use crate::time::Clock;
+
+        let ahead = clock.now() + chrono::Duration::days(days);
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.set_last_quest_refresh(ahead);
+        profile.set_last_activity(ahead);
+        profile
+            .challenge_progress_mut()
+            .set_last_challenge_date(ChallengeDay::On(clock.day_of(ahead)));
+        profile
+    }
+
+    /// FR-003: today + 2 stays forward-only, today + 3 is clamped to today.
+    #[test]
+    fn test_clamp_future_days_boundary() {
+        use crate::gamification::ChallengeDay;
+        use crate::time::Clock;
+
+        let clock = crate::time::FakeClock::at("2026-01-15T12:00:00Z");
+        let today = clock.player_day();
+
+        let mut kept = profile_with_every_day_ahead_by(2, &clock);
+        let before = (kept.last_quest_refresh(), kept.last_activity());
+        kept.clamp_future_days(&clock.moment());
+        assert_eq!((kept.last_quest_refresh(), kept.last_activity()), before);
+        assert_ne!(
+            kept.challenge_progress().last_challenge_date(),
+            ChallengeDay::On(today)
+        );
+
+        let mut clamped = profile_with_every_day_ahead_by(3, &clock);
+        clamped.clamp_future_days(&clock.moment());
+        assert_eq!(clamped.last_quest_refresh(), clock.now());
+        assert_eq!(clamped.last_activity(), clock.now());
+        assert_eq!(
+            clamped.challenge_progress().last_challenge_date(),
+            ChallengeDay::On(today)
+        );
+    }
+
+    /// FR-003: a clock that ran far ahead and was then corrected does not freeze the day rules.
+    #[test]
+    fn test_clock_ran_ahead_then_corrected() {
+        use crate::time::Clock;
+
+        let clock = crate::time::FakeClock::at("2026-01-15T12:00:00Z");
+        let mut profile = profile_with_every_day_ahead_by(30, &clock);
+
+        profile.clamp_future_days(&clock.moment());
+        clock.advance_days(1);
+        let tomorrow = clock.moment();
+
+        assert!(tomorrow.day() > tomorrow.day_of(profile.last_quest_refresh()));
+        assert!(tomorrow.day() > tomorrow.day_of(profile.last_activity()));
+        assert!(profile.challenge_progress().can_attempt(tomorrow.day()));
+    }
 
     #[test]
     fn profile_with_unknown_keymap_fingerprint_tag_loads_without_fingerprint() {

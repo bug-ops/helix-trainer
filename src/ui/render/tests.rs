@@ -1158,7 +1158,12 @@ mod results_tests {
             .progress
             .profile
             .scenario_history_mut()
-            .record_completion(&scenario.id, 100, 50, chrono::Utc::now());
+            .record_completion(
+                &scenario.id,
+                100,
+                50,
+                crate::time::Moment::local(chrono::Utc::now()),
+            );
 
         let results_data = create_abandoned_results_data(scenario);
         state.screen = TypedScreen::Results(results_data);
@@ -1205,12 +1210,22 @@ mod results_tests {
             .progress
             .profile
             .scenario_history_mut()
-            .record_completion(&scenario1.id, 100, 50, chrono::Utc::now());
+            .record_completion(
+                &scenario1.id,
+                100,
+                50,
+                crate::time::Moment::local(chrono::Utc::now()),
+            );
         state
             .progress
             .profile
             .scenario_history_mut()
-            .record_completion(&scenario2.id, 100, 50, chrono::Utc::now());
+            .record_completion(
+                &scenario2.id,
+                100,
+                50,
+                crate::time::Moment::local(chrono::Utc::now()),
+            );
 
         // scenario_index Some(0) out of 2 filtered scenarios - not the last one.
         let results_data = create_abandoned_results_data(scenario1);

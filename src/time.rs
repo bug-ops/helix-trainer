@@ -51,6 +51,31 @@ impl PlayerDay {
         self.0
     }
 
+    /// The widest honest gap between a stored day and today: UTC+14 to UTC-12 is two days.
+    pub const MAX_AHEAD_DAYS: i64 = 2;
+
+    /// `self`, or `today` when `self` lies more than [`Self::MAX_AHEAD_DAYS`] ahead of it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::time::PlayerDay;
+    ///
+    /// let today = PlayerDay::from_ymd(2026, 1, 15).unwrap();
+    /// let kept = PlayerDay::from_ymd(2026, 1, 17).unwrap();
+    /// let clamped = PlayerDay::from_ymd(2026, 1, 18).unwrap();
+    /// assert_eq!(kept.clamp_ahead(today), kept);
+    /// assert_eq!(clamped.clamp_ahead(today), today);
+    /// ```
+    #[must_use]
+    pub fn clamp_ahead(self, today: Self) -> Self {
+        if self.days_since(today) > Self::MAX_AHEAD_DAYS {
+            today
+        } else {
+            self
+        }
+    }
+
     /// Days from `earlier` to `self`; negative when `earlier` is later.
     #[must_use]
     pub fn days_since(self, earlier: Self) -> i64 {
@@ -89,7 +114,7 @@ impl Zone {
 /// An instant together with the zone the player's days are counted in.
 ///
 /// Daily rules take a `Moment` so that "today" and the day of a stored instant are read in
-/// one zone. A bare `DateTime<Utc>` converts in the system's local zone.
+/// one zone; the zone is always named explicitly (`Moment::local` for the system zone).
 ///
 /// # Examples
 ///
@@ -97,7 +122,7 @@ impl Zone {
 /// use chrono::Utc;
 /// use helix_trainer::time::Moment;
 ///
-/// let moment = Moment::from(Utc::now());
+/// let moment = Moment::local(Utc::now());
 /// assert_eq!(moment.day(), moment.day_of(moment.instant()));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,6 +136,12 @@ impl Moment {
     #[must_use]
     pub const fn new(instant: DateTime<Utc>, zone: Zone) -> Self {
         Self { instant, zone }
+    }
+
+    /// `instant` seen in the system's local zone.
+    #[must_use]
+    pub const fn local(instant: DateTime<Utc>) -> Self {
+        Self::new(instant, Zone::Local)
     }
 
     /// The UTC instant.
@@ -129,12 +160,6 @@ impl Moment {
     #[must_use]
     pub fn day_of(&self, instant: DateTime<Utc>) -> PlayerDay {
         self.zone.day_of(instant)
-    }
-}
-
-impl From<DateTime<Utc>> for Moment {
-    fn from(instant: DateTime<Utc>) -> Self {
-        Self::new(instant, Zone::Local)
     }
 }
 

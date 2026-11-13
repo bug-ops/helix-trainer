@@ -96,7 +96,7 @@ impl ScenarioCompletionService {
         scenario_id: &ScenarioId,
         score: u32,
         base_xp: u64,
-        now: impl Into<Moment>,
+        now: Moment,
     ) -> XPScalingResult {
         // Capture multipliers BEFORE recording (what will be applied)
         let (_pre_mastery_level, pre_mastery_factor, pre_repeat_penalty) = profile
@@ -458,7 +458,7 @@ mod tests {
             &sid("test_scenario"),
             100,
             50,
-            Utc::now(),
+            crate::time::Moment::local(Utc::now()),
         );
 
         // First completion gets full XP (no penalty)
@@ -480,7 +480,7 @@ mod tests {
                 &sid("test_scenario"),
                 100,
                 50,
-                Utc::now(),
+                crate::time::Moment::local(Utc::now()),
             );
         }
 

@@ -108,7 +108,7 @@ fn create_profile_with_completions(scenario_ids: &[ScenarioId]) -> UserProfile {
                 scenario_id,
                 100,
                 50,
-                chrono::Utc::now(),
+                helix_trainer::time::Moment::local(chrono::Utc::now()),
             );
         }
     }

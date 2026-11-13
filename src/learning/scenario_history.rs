@@ -150,18 +150,12 @@ impl ScenarioCompletion {
     /// use helix_trainer::learning::ScenarioCompletion;
     ///
     /// let id = ScenarioId::parse("delete_line_001")?;
-    /// let completion = ScenarioCompletion::new(id, 80, 40, Utc::now());
+    /// let completion = ScenarioCompletion::new(id, 80, 40, helix_trainer::time::Moment::local(Utc::now()));
     /// assert_eq!(completion.attempts, 1);
     /// assert_eq!(completion.best_score, 80);
     /// # Ok::<(), helix_trainer::ids::IdError>(())
     /// ```
-    pub fn new(
-        scenario_id: ScenarioId,
-        score: u32,
-        xp_earned: u64,
-        now: impl Into<Moment>,
-    ) -> Self {
-        let now = now.into();
+    pub fn new(scenario_id: ScenarioId, score: u32, xp_earned: u64, now: Moment) -> Self {
         let mut completion = Self {
             scenario_id,
             attempts: 0,
@@ -189,14 +183,13 @@ impl ScenarioCompletion {
     /// use helix_trainer::ids::ScenarioId;
     /// use helix_trainer::learning::ScenarioCompletion;
     ///
-    /// let mut completion = ScenarioCompletion::new(ScenarioId::parse("test")?, 80, 40, Utc::now());
-    /// completion.record_attempt(100, 50, Utc::now());
+    /// let mut completion = ScenarioCompletion::new(ScenarioId::parse("test")?, 80, 40, helix_trainer::time::Moment::local(Utc::now()));
+    /// completion.record_attempt(100, 50, helix_trainer::time::Moment::local(Utc::now()));
     /// assert_eq!(completion.attempts, 2);
     /// assert_eq!(completion.best_score, 100);
     /// # Ok::<(), helix_trainer::ids::IdError>(())
     /// ```
-    pub fn record_attempt(&mut self, score: u32, xp_earned: u64, now: impl Into<Moment>) {
-        let now = now.into();
+    pub fn record_attempt(&mut self, score: u32, xp_earned: u64, now: Moment) {
         // Prevent infinite recursion with depth protection
         if self.attempts >= MAX_REPEAT_DEPTH {
             return;
@@ -230,7 +223,7 @@ impl ScenarioCompletion {
     /// use helix_trainer::ids::ScenarioId;
     /// use helix_trainer::learning::ScenarioCompletion;
     ///
-    /// let completion = ScenarioCompletion::new(ScenarioId::parse("test")?, 50, 25, Utc::now());
+    /// let completion = ScenarioCompletion::new(ScenarioId::parse("test")?, 50, 25, helix_trainer::time::Moment::local(Utc::now()));
     /// assert_eq!(completion.xp_multiplier(), 0.7); // Second attempt today (after construction)
     /// # Ok::<(), helix_trainer::ids::IdError>(())
     /// ```
@@ -292,6 +285,13 @@ impl ScenarioHistory {
         }
     }
 
+    /// Clamps every stored attempt day implausibly far ahead of `today` back to `today`.
+    pub fn clamp_future_days(&mut self, today: PlayerDay) {
+        for completion in self.completions.values_mut() {
+            completion.last_attempt_date = completion.last_attempt_date.clamp_ahead(today);
+        }
+    }
+
     /// Get completion record for scenario (None if never attempted)
     ///
     /// # Examples
@@ -321,8 +321,8 @@ impl ScenarioHistory {
     /// use helix_trainer::learning::ScenarioHistory;
     ///
     /// let mut history = ScenarioHistory::new();
-    /// history.record_completion(&ScenarioId::parse("a")?, 100, 50, Utc::now());
-    /// history.record_completion(&ScenarioId::parse("b")?, 80, 40, Utc::now());
+    /// history.record_completion(&ScenarioId::parse("a")?, 100, 50, helix_trainer::time::Moment::local(Utc::now()));
+    /// history.record_completion(&ScenarioId::parse("b")?, 80, 40, helix_trainer::time::Moment::local(Utc::now()));
     /// assert_eq!(history.iter().count(), 2);
     /// # Ok::<(), helix_trainer::ids::IdError>(())
     /// ```
@@ -342,7 +342,7 @@ impl ScenarioHistory {
     /// use helix_trainer::learning::ScenarioHistory;
     ///
     /// let mut history = ScenarioHistory::new();
-    /// let xp = history.record_completion(&ScenarioId::parse("test")?, 100, 50, Utc::now());
+    /// let xp = history.record_completion(&ScenarioId::parse("test")?, 100, 50, helix_trainer::time::Moment::local(Utc::now()));
     /// assert_eq!(xp, 50); // First attempt, full XP
     /// # Ok::<(), helix_trainer::ids::IdError>(())
     /// ```
@@ -351,9 +351,8 @@ impl ScenarioHistory {
         scenario_id: &ScenarioId,
         score: u32,
         base_xp: u64,
-        now: impl Into<Moment>,
+        now: Moment,
     ) -> u64 {
-        let now = now.into();
         // Check if we're at the limit and this is a new scenario
         if !self.completions.contains_key(scenario_id)
             && self.completions.len() >= MAX_SCENARIOS_TRACKED
@@ -390,8 +389,8 @@ impl ScenarioHistory {
     /// use helix_trainer::learning::ScenarioHistory;
     ///
     /// let mut history = ScenarioHistory::new();
-    /// history.record_completion(&ScenarioId::parse("test1")?, 100, 50, Utc::now());
-    /// history.record_completion(&ScenarioId::parse("test2")?, 80, 40, Utc::now());
+    /// history.record_completion(&ScenarioId::parse("test1")?, 100, 50, helix_trainer::time::Moment::local(Utc::now()));
+    /// history.record_completion(&ScenarioId::parse("test2")?, 80, 40, helix_trainer::time::Moment::local(Utc::now()));
     ///
     /// let stats = history.mastery_stats();
     /// assert_eq!(stats.learning, 2);
@@ -434,7 +433,12 @@ mod tests {
 
     #[test]
     fn test_new_completion_initializes_correctly() {
-        let completion = ScenarioCompletion::new(sid("test_scenario"), 85, 42, Utc::now());
+        let completion = ScenarioCompletion::new(
+            sid("test_scenario"),
+            85,
+            42,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         assert_eq!(completion.scenario_id.as_str(), "test_scenario");
         assert_eq!(completion.attempts, 1);
@@ -447,15 +451,16 @@ mod tests {
 
     #[test]
     fn test_mastery_progression_to_proficient() {
-        let mut completion = ScenarioCompletion::new(sid("test"), 85, 40, Utc::now());
+        let mut completion =
+            ScenarioCompletion::new(sid("test"), 85, 40, crate::time::Moment::local(Utc::now()));
 
         // Need 3+ attempts AND 90+ score for proficient
         assert_eq!(completion.mastery_level, ScenarioMastery::Learning);
 
-        completion.record_attempt(92, 45, Utc::now());
+        completion.record_attempt(92, 45, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.mastery_level, ScenarioMastery::Learning); // Only 2 attempts
 
-        completion.record_attempt(95, 47, Utc::now());
+        completion.record_attempt(95, 47, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.mastery_level, ScenarioMastery::Proficient); // 3 attempts + 95 score
         assert_eq!(completion.attempts, 3);
         assert_eq!(completion.best_score, 95);
@@ -463,19 +468,21 @@ mod tests {
 
     #[test]
     fn test_mastery_progression_to_mastered() {
-        let mut completion = ScenarioCompletion::new(sid("test"), 100, 50, Utc::now());
+        let mut completion =
+            ScenarioCompletion::new(sid("test"), 100, 50, crate::time::Moment::local(Utc::now()));
 
         assert_eq!(completion.perfect_count, 1);
         assert_eq!(completion.mastery_level, ScenarioMastery::Learning); // Need 2 perfect
 
-        completion.record_attempt(100, 50, Utc::now());
+        completion.record_attempt(100, 50, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.perfect_count, 2);
         assert_eq!(completion.mastery_level, ScenarioMastery::Mastered);
     }
 
     #[test]
     fn test_xp_multiplier_learning_phase() {
-        let completion = ScenarioCompletion::new(sid("test"), 80, 40, Utc::now());
+        let completion =
+            ScenarioCompletion::new(sid("test"), 80, 40, crate::time::Moment::local(Utc::now()));
         // After new(), attempts_today = 1, so next call gets session penalty
         assert_eq!(completion.xp_multiplier(), 0.7); // Second attempt today (1.0 * 0.7)
     }
@@ -483,19 +490,20 @@ mod tests {
     #[test]
     fn test_xp_multiplier_session_penalty() {
         // Use scores < 90 to avoid triggering proficiency (needs 90+ AND 3+ attempts)
-        let mut completion = ScenarioCompletion::new(sid("test"), 80, 40, Utc::now());
+        let mut completion =
+            ScenarioCompletion::new(sid("test"), 80, 40, crate::time::Moment::local(Utc::now()));
 
         // First attempt already recorded in new(), attempts_today = 1
         assert_eq!(completion.attempts_today, 1);
         assert_eq!(completion.mastery_level, ScenarioMastery::Learning);
         assert_eq!(completion.xp_multiplier(), 0.7); // Second today (1.0 * 0.7)
 
-        completion.record_attempt(85, 35, Utc::now());
+        completion.record_attempt(85, 35, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.attempts_today, 2);
         assert_eq!(completion.mastery_level, ScenarioMastery::Learning);
         assert_eq!(completion.xp_multiplier(), 0.7); // Third today (1.0 * 0.7)
 
-        completion.record_attempt(88, 30, Utc::now()); // Keep < 90 to stay in learning
+        completion.record_attempt(88, 30, crate::time::Moment::local(Utc::now())); // Keep < 90 to stay in learning
         assert_eq!(completion.attempts_today, 3);
         assert_eq!(completion.mastery_level, ScenarioMastery::Learning);
         assert_eq!(completion.xp_multiplier(), 0.3); // Fourth today (1.0 * 0.3)
@@ -503,8 +511,9 @@ mod tests {
 
     #[test]
     fn test_xp_multiplier_mastered() {
-        let mut completion = ScenarioCompletion::new(sid("test"), 100, 50, Utc::now());
-        completion.record_attempt(100, 10, Utc::now()); // Now mastered (2 perfect)
+        let mut completion =
+            ScenarioCompletion::new(sid("test"), 100, 50, crate::time::Moment::local(Utc::now()));
+        completion.record_attempt(100, 10, crate::time::Moment::local(Utc::now())); // Now mastered (2 perfect)
 
         assert_eq!(completion.mastery_level, ScenarioMastery::Mastered);
         // attempts_today = 2, so session_mult = 0.7
@@ -518,7 +527,12 @@ mod tests {
     fn test_scenario_history_first_completion() {
         let mut history = ScenarioHistory::new();
 
-        let xp = history.record_completion(&sid("test"), 100, 50, Utc::now());
+        let xp = history.record_completion(
+            &sid("test"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
         assert_eq!(xp, 50); // First attempt, full XP
 
         let completion = history.get(&sid("test")).unwrap();
@@ -532,18 +546,33 @@ mod tests {
         let mut history = ScenarioHistory::new();
 
         // First attempt (creates new completion with attempts_today=1)
-        let xp1 = history.record_completion(&sid("test"), 100, 50, Utc::now());
+        let xp1 = history.record_completion(
+            &sid("test"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
         assert_eq!(xp1, 50); // Full XP (first attempt gets 1.0 multiplier)
 
         // Second attempt (attempts_today=1 before call, session_mult=0.7, still learning)
-        let xp2 = history.record_completion(&sid("test"), 100, 50, Utc::now());
+        let xp2 = history.record_completion(
+            &sid("test"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
         assert_eq!(xp2, 35); // 50 * 0.7 = 35 (session penalty)
 
         // Third attempt
         // After 2nd completion: perfect_count=2 (Mastered!), attempts_today=2
         // multiplier = mastery(0.2) * session(2->0.7) = 0.14
         // XP = 50 * 0.14 = 7.0 (rounded)
-        let xp3 = history.record_completion(&sid("test"), 100, 50, Utc::now());
+        let xp3 = history.record_completion(
+            &sid("test"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
         assert_eq!(xp3, 7);
     }
 
@@ -552,15 +581,50 @@ mod tests {
         let mut history = ScenarioHistory::new();
 
         // Create scenarios at different mastery levels
-        history.record_completion(&sid("learning1"), 80, 40, Utc::now());
-        history.record_completion(&sid("learning2"), 50, 25, Utc::now());
+        history.record_completion(
+            &sid("learning1"),
+            80,
+            40,
+            crate::time::Moment::local(Utc::now()),
+        );
+        history.record_completion(
+            &sid("learning2"),
+            50,
+            25,
+            crate::time::Moment::local(Utc::now()),
+        );
 
-        history.record_completion(&sid("proficient"), 90, 45, Utc::now());
-        history.record_completion(&sid("proficient"), 92, 23, Utc::now()); // 2nd attempt
-        history.record_completion(&sid("proficient"), 95, 24, Utc::now()); // 3rd attempt -> proficient
+        history.record_completion(
+            &sid("proficient"),
+            90,
+            45,
+            crate::time::Moment::local(Utc::now()),
+        );
+        history.record_completion(
+            &sid("proficient"),
+            92,
+            23,
+            crate::time::Moment::local(Utc::now()),
+        ); // 2nd attempt
+        history.record_completion(
+            &sid("proficient"),
+            95,
+            24,
+            crate::time::Moment::local(Utc::now()),
+        ); // 3rd attempt -> proficient
 
-        history.record_completion(&sid("mastered"), 100, 50, Utc::now());
-        history.record_completion(&sid("mastered"), 100, 10, Utc::now()); // 2nd perfect -> mastered
+        history.record_completion(
+            &sid("mastered"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
+        history.record_completion(
+            &sid("mastered"),
+            100,
+            10,
+            crate::time::Moment::local(Utc::now()),
+        ); // 2nd perfect -> mastered
 
         let stats = history.mastery_stats();
         assert_eq!(stats.learning, 2);
@@ -570,33 +634,39 @@ mod tests {
 
     #[test]
     fn test_saturating_arithmetic_prevents_overflow() {
-        let mut completion = ScenarioCompletion::new(sid("test"), 100, u64::MAX - 100, Utc::now());
+        let mut completion = ScenarioCompletion::new(
+            sid("test"),
+            100,
+            u64::MAX - 100,
+            crate::time::Moment::local(Utc::now()),
+        );
 
         // Should not panic on overflow (note: new() already added some XP)
-        completion.record_attempt(80, 1000, Utc::now()); // Use non-perfect to avoid mastery
+        completion.record_attempt(80, 1000, crate::time::Moment::local(Utc::now())); // Use non-perfect to avoid mastery
         assert_eq!(completion.total_xp_earned, u64::MAX);
 
         // Test attempts saturation (but MAX_REPEAT_DEPTH = 100 prevents this)
         // Once attempts >= 100, record_attempt returns early
         completion.attempts = 50;
-        completion.record_attempt(80, 100, Utc::now());
+        completion.record_attempt(80, 100, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.attempts, 51); // Increments normally
 
         completion.attempts = MAX_REPEAT_DEPTH - 1;
-        completion.record_attempt(80, 100, Utc::now());
+        completion.record_attempt(80, 100, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.attempts, MAX_REPEAT_DEPTH); // Reaches limit
 
-        completion.record_attempt(80, 100, Utc::now());
+        completion.record_attempt(80, 100, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.attempts, MAX_REPEAT_DEPTH); // Blocked by MAX_REPEAT_DEPTH
     }
 
     #[test]
     fn test_max_repeat_depth_protection() {
-        let mut completion = ScenarioCompletion::new(sid("test"), 100, 50, Utc::now());
+        let mut completion =
+            ScenarioCompletion::new(sid("test"), 100, 50, crate::time::Moment::local(Utc::now()));
         completion.attempts = MAX_REPEAT_DEPTH;
 
         // Should not increment beyond MAX_REPEAT_DEPTH
-        completion.record_attempt(100, 50, Utc::now());
+        completion.record_attempt(100, 50, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.attempts, MAX_REPEAT_DEPTH);
     }
 
@@ -617,28 +687,30 @@ mod tests {
 
     #[test]
     fn test_best_score_tracking() {
-        let mut completion = ScenarioCompletion::new(sid("test"), 70, 35, Utc::now());
+        let mut completion =
+            ScenarioCompletion::new(sid("test"), 70, 35, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.best_score, 70);
 
-        completion.record_attempt(85, 42, Utc::now());
+        completion.record_attempt(85, 42, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.best_score, 85);
 
-        completion.record_attempt(80, 40, Utc::now()); // Lower score
+        completion.record_attempt(80, 40, crate::time::Moment::local(Utc::now())); // Lower score
         assert_eq!(completion.best_score, 85); // Should stay at max
     }
 
     #[test]
     fn test_perfect_count_tracking() {
-        let mut completion = ScenarioCompletion::new(sid("test"), 95, 47, Utc::now());
+        let mut completion =
+            ScenarioCompletion::new(sid("test"), 95, 47, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.perfect_count, 0);
 
-        completion.record_attempt(100, 50, Utc::now());
+        completion.record_attempt(100, 50, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.perfect_count, 1);
 
-        completion.record_attempt(98, 49, Utc::now());
+        completion.record_attempt(98, 49, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.perfect_count, 1); // No change
 
-        completion.record_attempt(100, 10, Utc::now());
+        completion.record_attempt(100, 10, crate::time::Moment::local(Utc::now()));
         assert_eq!(completion.perfect_count, 2);
     }
 
@@ -663,18 +735,33 @@ mod tests {
 
         // Fill to just below limit
         for i in 0..MAX_SCENARIOS_TRACKED {
-            history.record_completion(&sid(&format!("scenario_{i}")), 100, 50, Utc::now());
+            history.record_completion(
+                &sid(&format!("scenario_{i}")),
+                100,
+                50,
+                crate::time::Moment::local(Utc::now()),
+            );
         }
 
         assert_eq!(history.completions.len(), MAX_SCENARIOS_TRACKED);
 
         // Try to add one more - should be rejected
-        let xp = history.record_completion(&sid("overflow_scenario"), 100, 50, Utc::now());
+        let xp = history.record_completion(
+            &sid("overflow_scenario"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
         assert_eq!(xp, 0); // Returns 0 when at capacity
         assert_eq!(history.completions.len(), MAX_SCENARIOS_TRACKED); // No growth
 
         // Existing scenarios should still update
-        let xp2 = history.record_completion(&sid("scenario_0"), 100, 50, Utc::now());
+        let xp2 = history.record_completion(
+            &sid("scenario_0"),
+            100,
+            50,
+            crate::time::Moment::local(Utc::now()),
+        );
         assert!(xp2 > 0); // Still gets XP for existing scenario
     }
 
@@ -685,16 +772,17 @@ mod tests {
             .with_timezone(&Utc);
         let day_two = day_one + chrono::Duration::days(1);
 
-        let mut completion = ScenarioCompletion::new(sid("test"), 80, 40, day_one);
+        let mut completion =
+            ScenarioCompletion::new(sid("test"), 80, 40, crate::time::Moment::local(day_one));
         assert_eq!(completion.attempts_today, 1);
 
-        completion.record_attempt(80, 40, day_one);
+        completion.record_attempt(80, 40, crate::time::Moment::local(day_one));
         assert_eq!(
             completion.attempts_today, 2,
             "same day must accumulate, not reset"
         );
 
-        completion.record_attempt(80, 40, day_two);
+        completion.record_attempt(80, 40, crate::time::Moment::local(day_two));
         assert_eq!(
             completion.attempts_today, 1,
             "crossing the injected day boundary must reset the daily counter"
@@ -734,17 +822,41 @@ mod tests {
         let now = DateTime::parse_from_rfc3339("2026-01-15T12:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
-        let mut completion = ScenarioCompletion::new(sid("test"), 80, 40, now);
+        let mut completion =
+            ScenarioCompletion::new(sid("test"), 80, 40, crate::time::Moment::local(now));
         let tomorrow = completion.last_attempt_date;
         completion.last_attempt_date = PlayerDay::from_ymd(2026, 1, 16).unwrap();
         assert!(completion.last_attempt_date > tomorrow);
 
-        completion.record_attempt(80, 40, now);
+        completion.record_attempt(80, 40, crate::time::Moment::local(now));
 
         assert_eq!(completion.attempts_today, 2);
         assert_eq!(
             completion.last_attempt_date,
             PlayerDay::from_ymd(2026, 1, 16).unwrap()
         );
+    }
+
+    /// FR-003: attempt days beyond today + 2 clamp to today; today + 2 is kept.
+    #[test]
+    fn test_clamp_future_days_boundary() {
+        use crate::time::{Clock, FakeClock};
+
+        let clock = FakeClock::at("2026-01-15T12:00:00Z");
+        let today = clock.player_day();
+        let mut history = ScenarioHistory::new();
+        for (id, ahead) in [("near", 2), ("far", 3)] {
+            let sid = crate::testing::sid(id);
+            let _ = history.record_completion(&sid, 100, 10, clock.moment());
+            let day = PlayerDay::from_date(today.date() + chrono::Days::new(ahead));
+            history.completions.get_mut(&sid).unwrap().last_attempt_date = day;
+        }
+
+        history.clamp_future_days(today);
+
+        let near = history.get(&crate::testing::sid("near")).unwrap();
+        let far = history.get(&crate::testing::sid("far")).unwrap();
+        assert_eq!(near.last_attempt_date.days_since(today), 2);
+        assert_eq!(far.last_attempt_date, today);
     }
 }

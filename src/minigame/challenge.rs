@@ -42,7 +42,7 @@ use super::ChallengeConfig;
 /// use helix_trainer::time::Moment;
 ///
 /// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
-/// let config = ChallengeConfig::for_date(Moment::from(Utc::now()).day());
+/// let config = ChallengeConfig::for_date(Moment::local(Utc::now()).day());
 /// let selected = select_challenge_scenarios(&scenarios, &config);
 /// assert_eq!(selected.len(), 10);
 /// # Ok::<(), helix_trainer::error::UserError>(())

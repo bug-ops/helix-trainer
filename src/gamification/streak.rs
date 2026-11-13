@@ -75,12 +75,11 @@ impl StreakManager {
     /// // Simulate next day activity
     /// let tomorrow = today + Duration::days(1);
     ///
-    /// let change = StreakManager::update_streak(&mut profile, tomorrow);
+    /// let change = StreakManager::update_streak(&mut profile, helix_trainer::time::Moment::local(tomorrow));
     /// assert_eq!(change, StreakChange::Incremented { new_streak: 6 });
     /// assert_eq!(profile.current_streak(), 6);
     /// ```
-    pub fn update_streak(profile: &mut UserProfile, now: impl Into<Moment>) -> StreakChange {
-        let now = now.into();
+    pub fn update_streak(profile: &mut UserProfile, now: Moment) -> StreakChange {
         let days_since_active = Self::days_between(&now, profile.last_activity);
 
         let change = match days_since_active {
@@ -250,7 +249,7 @@ mod tests {
         let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 5;
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(change, StreakChange::Continued);
         assert_eq!(profile.current_streak, 5);
     }
@@ -313,7 +312,7 @@ mod tests {
             .push(crate::testing::rewarded_quest("test_quest"));
         clock.advance_days(1);
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(change, StreakChange::Incremented { new_streak: 6 });
         assert_eq!(profile.current_streak, 6);
     }
@@ -328,7 +327,7 @@ mod tests {
             .push(crate::testing::rewarded_quest("test_quest"));
         clock.advance_days(1);
 
-        StreakManager::update_streak(&mut profile, clock.now());
+        StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(profile.current_streak, u32::MAX);
     }
 
@@ -340,7 +339,7 @@ mod tests {
         clock.advance_days(1);
         // No quest completed
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(change, StreakChange::Continued);
         assert_eq!(profile.current_streak, 5);
     }
@@ -352,7 +351,7 @@ mod tests {
         profile.current_streak = 10;
         clock.advance_days(2);
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(
             change,
             StreakChange::Broken {
@@ -371,7 +370,7 @@ mod tests {
         profile.streak_freeze_available = true;
         clock.advance_days(2);
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(change, StreakChange::Protected);
         assert_eq!(profile.current_streak, 10); // Streak preserved
         assert!(!profile.streak_freeze_available); // Freeze consumed
@@ -388,7 +387,7 @@ mod tests {
         profile.streak_freeze_available = true;
         clock.advance_days(STREAK_FREEZE_MAX_GAP_DAYS + 1);
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(
             change,
             StreakChange::Broken {
@@ -414,7 +413,7 @@ mod tests {
         profile.streak_freeze_available = true;
         clock.advance_days(STREAK_FREEZE_MAX_GAP_DAYS);
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(change, StreakChange::Protected);
         assert_eq!(profile.current_streak, 10);
         assert!(!profile.streak_freeze_available);
@@ -430,7 +429,7 @@ mod tests {
         profile.streak_freeze_available = false;
         clock.advance_days(STREAK_FREEZE_MAX_GAP_DAYS + 1);
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(
             change,
             StreakChange::Broken {
@@ -452,7 +451,7 @@ mod tests {
         profile.streak_freeze_available = true;
         clock.advance_days(STREAK_FREEZE_MAX_GAP_DAYS + 1);
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(
             change,
             StreakChange::Broken {
@@ -486,7 +485,7 @@ mod tests {
         let last_activity = clock.now() + Duration::days(1);
         profile.last_activity = last_activity;
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
 
         // FR-004 (#660): a negative gap counts as the same day.
         assert_eq!(change, StreakChange::Continued);
@@ -512,7 +511,7 @@ mod tests {
         profile.streak_freeze_available = true;
         clock.advance_days(2);
 
-        let change = StreakManager::update_streak(&mut profile, clock.now());
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(
             change,
             StreakChange::Broken {
@@ -538,7 +537,7 @@ mod tests {
             .push(crate::testing::rewarded_quest("test"));
         clock.advance_days(1);
 
-        StreakManager::update_streak(&mut profile, clock.now());
+        StreakManager::update_streak(&mut profile, clock.moment());
         assert_eq!(profile.longest_streak, 6);
     }
 
@@ -674,11 +673,12 @@ mod tests {
 
     #[test]
     fn test_days_between() {
-        let now = Utc::now();
+        let clock = FakeClock::at_offset("2026-03-29T12:00:00Z", 0);
+        let now = clock.now();
         let yesterday = now - Duration::days(1);
         let week_ago = now - Duration::days(7);
 
-        let moment = Moment::from(now);
+        let moment = clock.moment();
         assert_eq!(StreakManager::days_between(&moment, now), 0);
         assert_eq!(StreakManager::days_between(&moment, yesterday), 1);
         assert_eq!(StreakManager::days_between(&moment, week_ago), 7);

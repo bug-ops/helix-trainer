@@ -185,6 +185,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
 
             // Update streak and refresh quests if needed
             let mut updated_profile = profile;
+            updated_profile.clamp_future_days(&now);
             let streak_change = StreakManager::update_streak(&mut updated_profile, now);
             tracing::debug!("Streak status: {:?}", streak_change);
             match streak_change {
@@ -463,6 +464,25 @@ mod tests {
         let loaded_profile = &state.progress.profile;
         assert_eq!(loaded_profile.total_xp(), 500);
         assert_eq!(loaded_profile.level(), 3);
+    }
+
+    /// FR-003: a stored day far ahead (a clock that ran ahead, then was corrected) is
+    /// clamped on load, so the streak keeps counting instead of freezing.
+    #[test]
+    fn test_handle_profile_ready_clamps_days_far_ahead() {
+        let mut state = empty_test_app_state();
+        let mut profile = UserProfile::new();
+        profile.set_current_streak(4);
+        profile.set_last_activity(Utc::now() + chrono::Duration::days(30));
+        profile.set_last_quest_refresh(Utc::now() + chrono::Duration::days(30));
+
+        handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));
+
+        let now = state.progress.moment();
+        let loaded = &state.progress.profile;
+        assert_eq!(loaded.current_streak(), 4);
+        assert!(now.day_of(loaded.last_activity()) <= now.day());
+        assert!(now.day_of(loaded.last_quest_refresh()) <= now.day());
     }
 
     fn app_state_with_keymap_toml(toml: &str) -> AppState {

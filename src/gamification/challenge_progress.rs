@@ -270,6 +270,13 @@ impl ChallengeProgress {
         }
     }
 
+    /// Clamps a stored day implausibly far ahead of `today` back to `today`.
+    pub fn clamp_future_day(&mut self, today: PlayerDay) {
+        if let ChallengeDay::On(day) = self.last_challenge_date {
+            self.last_challenge_date = ChallengeDay::On(day.clamp_ahead(today));
+        }
+    }
+
     /// Counts a [`ChallengeDay::Unreadable`] day as `today`, keeping the used
     /// attempts and best-today score instead of refilling the allowance.
     pub fn settle_unreadable_day(&mut self, today: PlayerDay) {

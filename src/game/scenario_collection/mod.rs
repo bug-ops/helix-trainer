@@ -503,7 +503,7 @@ impl ScenarioCollection {
     /// let mut profile = UserProfile::new();
     /// assert_eq!(collection.completed_count(&profile), 0);
     ///
-    /// profile.scenario_history_mut().record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
+    /// profile.scenario_history_mut().record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, helix_trainer::time::Moment::local(Utc::now()));
     /// assert_eq!(collection.completed_count(&profile), 1);
     /// ```
     pub fn completed_count(&self, profile: &UserProfile) -> usize {
@@ -553,7 +553,7 @@ impl ScenarioCollection {
     /// let mut profile = UserProfile::new();
     /// assert!(!collection.is_curriculum_complete(&profile));
     ///
-    /// profile.scenario_history_mut().record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
+    /// profile.scenario_history_mut().record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, helix_trainer::time::Moment::local(Utc::now()));
     /// assert!(collection.is_curriculum_complete(&profile));
     ///
     /// // An empty collection is never complete, even with no scenarios to finish.
@@ -606,7 +606,7 @@ impl ScenarioCollection {
     ///
     /// let collection = ScenarioCollection::new(vec![scenario]);
     /// let mut profile = UserProfile::new();
-    /// profile.scenario_history_mut().record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
+    /// profile.scenario_history_mut().record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, helix_trainer::time::Moment::local(Utc::now()));
     ///
     /// let stats = collection.curriculum_stats(&profile);
     /// assert_eq!(stats.total, 1);

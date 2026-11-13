@@ -361,7 +361,8 @@ fn test_streak_increments_next_day_after_live_quest_completion() {
     clock.advance_days(1);
 
     let now = state.progress.now();
-    let change = StreakManager::update_streak(&mut state.progress.profile, now);
+    let change =
+        StreakManager::update_streak(&mut state.progress.profile, crate::time::Moment::local(now));
 
     assert_eq!(
         change,

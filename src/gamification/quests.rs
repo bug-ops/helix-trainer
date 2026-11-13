@@ -642,14 +642,14 @@ impl QuestGenerator {
     ///
     /// let profile = UserProfile::new(); // Level 1
     /// let registry = QuestTemplateRegistry::from_embedded("en").unwrap();
-    /// let generation = QuestGenerator::generate_quests(&profile, &registry, Moment::from(Utc::now()).day());
+    /// let generation = QuestGenerator::generate_quests(&profile, &registry, Moment::local(Utc::now()).day());
     /// assert_eq!(generation.quests.len(), 3); // Beginners get 3 quests
     /// assert_eq!(generation.unfilled_slots, 0);
     ///
     /// let empty = QuestGenerator::generate_quests(
     ///     &profile,
     ///     &QuestTemplateRegistry::new(),
-    ///     Moment::from(Utc::now()).day(),
+    ///     Moment::local(Utc::now()).day(),
     /// );
     /// assert!(empty.quests.is_empty());
     /// assert_eq!(empty.unfilled_slots, 3);

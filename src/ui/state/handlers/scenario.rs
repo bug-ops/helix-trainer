@@ -201,7 +201,7 @@ pub(crate) fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
     let is_first_today = ctx.progress.scenarios_completed_today == 0;
     let xp = ScenarioCompletionService::calculate_xp_components(&feedback, is_first_today);
 
-    let now = ctx.progress.now();
+    let now = ctx.progress.moment();
     let xp_scaling = ScenarioCompletionService::record_and_scale_xp(
         &mut ctx.progress.profile,
         &scenario_id,
@@ -1869,7 +1869,12 @@ mod tests {
                 .progress
                 .profile
                 .scenario_history_mut()
-                .record_completion(&sid(id), 100, 50, chrono::Utc::now());
+                .record_completion(
+                    &sid(id),
+                    100,
+                    50,
+                    crate::time::Moment::local(chrono::Utc::now()),
+                );
         }
         let results_data = create_results_data_with_index(Some(2));
 
@@ -1904,7 +1909,12 @@ mod tests {
                 .progress
                 .profile
                 .scenario_history_mut()
-                .record_completion(&sid(id), 100, 50, chrono::Utc::now());
+                .record_completion(
+                    &sid(id),
+                    100,
+                    50,
+                    crate::time::Moment::local(chrono::Utc::now()),
+                );
         }
         let results_data = create_results_data_with_index(Some(2));
 
@@ -2019,9 +2029,12 @@ mod tests {
     fn test_journey_days_same_day_is_zero() {
         let mut profile = crate::gamification::UserProfile::new();
         let now = chrono::Utc::now();
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("a"), 100, 50, now);
+        profile.scenario_history_mut().record_completion(
+            &sid("a"),
+            100,
+            50,
+            crate::time::Moment::local(now),
+        );
         assert_eq!(journey_days(&profile), 0);
     }
 
@@ -2037,13 +2050,19 @@ mod tests {
             .unwrap()
             .with_timezone(&chrono::Utc);
         let day_one = day_ten - chrono::Duration::days(9);
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("a"), 100, 50, day_ten);
+        profile.scenario_history_mut().record_completion(
+            &sid("a"),
+            100,
+            50,
+            crate::time::Moment::local(day_ten),
+        );
         // Clock jumped backwards for the second attempt on the same scenario.
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("a"), 100, 50, day_one);
+        profile.scenario_history_mut().record_completion(
+            &sid("a"),
+            100,
+            50,
+            crate::time::Moment::local(day_one),
+        );
         assert_eq!(journey_days(&profile), 0);
     }
 
@@ -2054,12 +2073,18 @@ mod tests {
             .unwrap()
             .with_timezone(&chrono::Utc);
         let day_four = day_one + chrono::Duration::days(3);
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("a"), 100, 50, day_one);
-        profile
-            .scenario_history_mut()
-            .record_completion(&sid("b"), 100, 50, day_four);
+        profile.scenario_history_mut().record_completion(
+            &sid("a"),
+            100,
+            50,
+            crate::time::Moment::local(day_one),
+        );
+        profile.scenario_history_mut().record_completion(
+            &sid("b"),
+            100,
+            50,
+            crate::time::Moment::local(day_four),
+        );
         assert_eq!(journey_days(&profile), 3);
     }
 }

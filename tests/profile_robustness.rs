@@ -30,7 +30,7 @@ fn base_profile() -> UserProfile {
         &ScenarioId::parse("delete_line_001").unwrap(),
         100,
         50,
-        now,
+        helix_trainer::time::Moment::local(now),
     );
     profile.unlock_achievement(AchievementId::FirstPerfect);
     profile.set_performance_data(serde_json::from_str(PERFORMANCE_FIXTURE).unwrap());
@@ -39,7 +39,7 @@ fn base_profile() -> UserProfile {
         QuestGenerator::generate_quests(
             &profile,
             &registry,
-            helix_trainer::time::Moment::from(now).day(),
+            helix_trainer::time::Moment::local(now).day(),
         )
         .quests,
     );
@@ -151,19 +151,25 @@ fn exercise_consumers(mut profile: UserProfile, clock_selector: usize) {
     );
 
     let id = ScenarioId::parse("delete_line_001").unwrap();
-    profile
-        .scenario_history_mut()
-        .record_completion(&id, u32::MAX, u64::MAX, now);
-    profile
-        .scenario_history_mut()
-        .record_completion(&id, 100, u64::MAX, now);
+    profile.scenario_history_mut().record_completion(
+        &id,
+        u32::MAX,
+        u64::MAX,
+        helix_trainer::time::Moment::local(now),
+    );
+    profile.scenario_history_mut().record_completion(
+        &id,
+        100,
+        u64::MAX,
+        helix_trainer::time::Moment::local(now),
+    );
 
-    StreakManager::update_streak(&mut profile, now);
+    StreakManager::update_streak(&mut profile, helix_trainer::time::Moment::local(now));
     AchievementEngine::check_and_unlock(&mut profile, &tracker);
     let generated = QuestGenerator::generate_quests(
         &profile,
         &registry,
-        helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
+        helix_trainer::time::Moment::local(chrono::Utc::now()).day(),
     );
     assert!(!generated.quests.is_empty());
     assert_eq!(

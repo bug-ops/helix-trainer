@@ -142,7 +142,7 @@ fn test_calculate_score_perfect() {
     // The session should automatically mark as completed when state matches
     match result {
         SessionAfterAction::Completed(completed) => {
-            let score = completed.score().unwrap();
+            let score = completed.score();
             assert_eq!(score, 100); // Perfect score (2 actions, optimal is 2)
         }
         SessionAfterAction::StillActive(_) => {
@@ -179,7 +179,7 @@ fn test_get_feedback_success() {
     // Should be automatically completed
     match result {
         SessionAfterAction::Completed(completed) => {
-            let feedback = completed.feedback().unwrap();
+            let feedback = completed.feedback();
             assert_eq!(feedback.outcome, FeedbackOutcome::Optimal);
             assert!(feedback.success());
             assert_eq!(feedback.score, 100);
@@ -240,7 +240,7 @@ fn test_get_feedback_with_hint() {
 
     match result {
         SessionAfterAction::Completed(completed) => {
-            let feedback = completed.feedback().unwrap();
+            let feedback = completed.feedback();
             assert_eq!(feedback.outcome, FeedbackOutcome::Completed);
             assert!(feedback.success());
             assert!(feedback.hint.is_some()); // Should provide hint
@@ -325,12 +325,12 @@ fn test_timer_fixed_on_completion() {
     match result {
         SessionAfterAction::Completed(completed) => {
             // Get feedback immediately after completion
-            let feedback1 = completed.feedback().unwrap();
+            let feedback1 = completed.feedback();
             let duration1 = feedback1.duration;
 
             clock.advance(Duration::from_millis(50));
 
-            let feedback2 = completed.feedback().unwrap();
+            let feedback2 = completed.feedback();
             assert_eq!(
                 feedback2.duration, duration1,
                 "Timer should be fixed after completion"

@@ -14,7 +14,6 @@ use crate::ids::ScenarioId;
 use crate::input::typestate::InputStateMachine;
 use crate::learning::{ReviewSession, ScenarioMastery};
 use crate::minigame::MiniGameSession;
-use crate::security::SecurityError;
 use crate::ui::state::{QuestProgressChange, XPBreakdown};
 use std::collections::VecDeque;
 use std::time::Instant;
@@ -261,17 +260,13 @@ pub struct CompletedTask {
 
 impl CompletedTask {
     /// Derive the feedback of a completed session and stamp the completion time `now`
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SecurityError`] when the scenario's scoring cannot score the run.
-    pub fn new(session: GameSession<Completed>, now: Instant) -> Result<Self, SecurityError> {
-        let feedback = session.feedback()?;
-        Ok(Self {
+    pub fn new(session: GameSession<Completed>, now: Instant) -> Self {
+        let feedback = session.feedback();
+        Self {
             session,
             feedback,
             completed_at: now,
-        })
+        }
     }
 }
 
@@ -331,19 +326,16 @@ impl TaskSession {
 
     /// Resolve the state after an action was applied: an active session whose editor now matches
     /// the target becomes a completed task stamped with `now`, everything else is unchanged
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SecurityError`] when the completed run cannot be scored.
-    pub fn finish_action(self, now: Instant) -> Result<Self, SecurityError> {
+    #[must_use]
+    pub fn finish_action(self, now: Instant) -> Self {
         match self {
             Self::Active(session) => match session.finish_action() {
-                SessionAfterAction::StillActive(session) => Ok(Self::Active(session)),
+                SessionAfterAction::StillActive(session) => Self::Active(session),
                 SessionAfterAction::Completed(session) => {
-                    CompletedTask::new(session, now).map(Self::Completed)
+                    Self::Completed(CompletedTask::new(session, now))
                 }
             },
-            completed @ Self::Completed(_) => Ok(completed),
+            completed @ Self::Completed(_) => completed,
         }
     }
 }
@@ -407,15 +399,12 @@ impl TaskData {
     }
 
     /// Resolve the session state after an action: see [`TaskSession::finish_action`]
-    ///
-    /// # Errors
-    ///
-    /// Returns [`SecurityError`] when the completed run cannot be scored.
-    pub fn finish_action(self, now: Instant) -> Result<Self, SecurityError> {
-        Ok(Self {
-            session: self.session.finish_action(now)?,
+    #[must_use]
+    pub fn finish_action(self, now: Instant) -> Self {
+        Self {
+            session: self.session.finish_action(now),
             ..self
-        })
+        }
     }
 
     /// Add a key to the history (keeps last 5)

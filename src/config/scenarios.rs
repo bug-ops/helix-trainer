@@ -81,6 +81,26 @@ pub enum ScenarioValidationError {
         /// Observed count.
         actual: usize,
     },
+
+    /// `scoring.optimal_count` differs from the number of solution commands.
+    #[error(
+        "scenario '{id}': scoring.optimal_count is {optimal} but the solution has {commands} commands"
+    )]
+    OptimalCountMismatch {
+        /// The offending scenario.
+        id: ScenarioId,
+        /// The configured optimal count.
+        optimal: usize,
+        /// The number of solution commands.
+        commands: usize,
+    },
+
+    /// An `after_taught_commands` scenario names no taught command.
+    #[error("scenario '{id}': completion after_taught_commands needs a non-empty commands_taught")]
+    NoTaughtCommands {
+        /// The offending scenario.
+        id: ScenarioId,
+    },
 }
 
 fn join_fields(fields: &[CursorField]) -> String {
@@ -693,6 +713,30 @@ impl ScenarioLoader {
         // Validate command sequences
         Self::validate_command_sequence(&scenario.solution.commands)?;
 
+        Self::validate_scoring_invariants(scenario)?;
+
+        Ok(())
+    }
+
+    /// The optimal count is the solution's length, and a rule that completes on a taught
+    /// command has a command to complete on.
+    fn validate_scoring_invariants(scenario: &Scenario) -> Result<(), ScenarioValidationError> {
+        let optimal = scenario.scoring.optimal_count.get();
+        let commands = scenario.solution.commands.len();
+        if optimal != commands {
+            return Err(ScenarioValidationError::OptimalCountMismatch {
+                id: scenario.id.clone(),
+                optimal,
+                commands,
+            });
+        }
+        if scenario.metadata.completion == CompletionRule::AfterTaughtCommands
+            && scenario.metadata.commands_taught.is_empty()
+        {
+            return Err(ScenarioValidationError::NoTaughtCommands {
+                id: scenario.id.clone(),
+            });
+        }
         Ok(())
     }
 }

@@ -533,7 +533,7 @@ mod tests {
         state: &mut AppState,
         completed: GameSession<crate::game::session::Completed>,
     ) {
-        let completed = CompletedTask::new(completed, state.progress.monotonic_now()).unwrap();
+        let completed = CompletedTask::new(completed, state.progress.monotonic_now());
         state.screen = TypedScreen::Task(TaskData {
             session: TaskSession::Completed(completed),
             ..TaskData::new(GameSession::new(create_test_scenario()).unwrap())
@@ -627,7 +627,7 @@ mod tests {
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        let feedback = completed.feedback().unwrap();
+        let feedback = completed.feedback();
         let results_data = ResultsData::from_completed(completed, feedback, None);
 
         let mut ctx = HandlerContext::new(
@@ -1024,7 +1024,7 @@ mod tests {
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        completed.feedback().unwrap()
+        completed.feedback()
     }
 
     /// `commands_executed` counts every recorded action; only FSRS cards are filtered
@@ -1710,7 +1710,7 @@ mod tests {
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        let feedback = completed.feedback().unwrap();
+        let feedback = completed.feedback();
         let results_data = ResultsData::from_completed(completed, feedback, Some(0));
 
         let mut ctx = HandlerContext::new(
@@ -1795,7 +1795,7 @@ mod tests {
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
         };
 
-        let feedback = completed.feedback().unwrap();
+        let feedback = completed.feedback();
         let results_data = ResultsData::from_completed(completed, feedback, Some(2));
 
         let mut ctx = HandlerContext::new(

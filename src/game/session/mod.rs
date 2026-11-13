@@ -19,7 +19,7 @@
 //!     match session.record_action(command)? {
 //!         SessionAfterAction::StillActive(next) => session = next,
 //!         SessionAfterAction::Completed(done) => {
-//!             let feedback = done.feedback()?;
+//!             let feedback = done.feedback();
 //!             assert!(feedback.success());
 //!             println!("{}", feedback.summary());
 //!             break;
@@ -38,6 +38,7 @@ use crate::security::SecurityError;
 use crate::time::{MonotonicClock, SystemMonotonicClock};
 use std::cell::Cell;
 use std::marker::PhantomData;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -507,7 +508,7 @@ impl GameSession<Active> {
     /// let SessionAfterAction::Completed(done) = session.record_action(last.clone())? else {
     ///     panic!("the solution completes the scenario");
     /// };
-    /// assert!(done.feedback()?.success());
+    /// assert!(done.feedback().success());
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn record_action(
@@ -740,10 +741,6 @@ impl GameSession<Completed> {
     /// Applies the scenario's scoring configuration to the actual
     /// number of actions taken. Guaranteed to be called on a completed session.
     ///
-    /// # Errors
-    ///
-    /// Returns `SecurityError` if score calculation fails (e.g., overflow).
-    ///
     /// # Examples
     ///
     /// ```
@@ -763,12 +760,14 @@ impl GameSession<Completed> {
     /// #     }
     /// # }
     /// # let session = completed.expect("the canonical solution completes the scenario");
-    /// let score = session.score()?;
+    /// let score = session.score();
     /// assert!(score > 0);
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
-    pub fn score(&self) -> Result<u32, SecurityError> {
-        Scorer::score_with_config(&self.live.scenario().scoring, self.live.action_count())
+    pub fn score(&self) -> u32 {
+        NonZeroUsize::new(self.live.action_count()).map_or(0, |actual| {
+            Scorer::score(&self.live.scenario().scoring, actual)
+        })
     }
 
     /// Get detailed feedback for the completed session
@@ -776,10 +775,6 @@ impl GameSession<Completed> {
     /// Generates comprehensive feedback including score, performance
     /// rating, hint if needed, and optimality assessment.
     ///
-    /// # Errors
-    ///
-    /// Returns `SecurityError` if feedback generation fails.
-    ///
     /// # Examples
     ///
     /// ```
@@ -799,7 +794,7 @@ impl GameSession<Completed> {
     /// #     }
     /// # }
     /// # let session = completed.expect("the canonical solution completes the scenario");
-    /// let feedback = session.feedback()?;
+    /// let feedback = session.feedback();
     /// assert!(feedback.success());
     /// println!("{}", feedback.summary());
     /// # Ok::<(), helix_trainer::error::UserError>(())
@@ -809,12 +804,12 @@ impl GameSession<Completed> {
     ///
     /// Panics if the session carries no completion time, which the typestate rules
     /// out for a completed session.
-    pub fn feedback(&self) -> Result<Feedback, SecurityError> {
+    pub fn feedback(&self) -> Feedback {
         let actions_taken = self.live.action_count();
         let optimal_actions = self.live.scenario().scoring.optimal_count.get();
         let max_points = self.live.scenario().scoring.max_points;
 
-        let score = self.score()?;
+        let score = self.score();
         let rating = Scorer::rating(score, max_points);
 
         let duration = self
@@ -839,7 +834,7 @@ impl GameSession<Completed> {
             FeedbackOutcome::Completed
         };
 
-        Ok(Feedback {
+        Feedback {
             scenario_id: self.live.scenario().id.clone(),
             score,
             max_points,
@@ -850,7 +845,7 @@ impl GameSession<Completed> {
             hint,
             outcome,
             user_actions: self.live.actions().to_vec(),
-        })
+        }
     }
 }
 

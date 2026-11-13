@@ -1622,6 +1622,44 @@ tolerance = 0
     )
 }
 
+/// FR-011: the file-system path enforces the optimal count of the solution length.
+#[test]
+fn test_loader_rejects_an_optimal_count_that_differs_from_the_solution_length() {
+    let toml = scenario_toml_with_cursors("cursor_position = [0, 0]", "cursor_position = [0, 0]")
+        .replace("optimal_count = 1", "optimal_count = 3");
+
+    let err = load_toml(&toml).unwrap_err();
+
+    assert_matches!(
+        err,
+        crate::config::ConfigError::Scenario(ScenarioValidationError::OptimalCountMismatch {
+            optimal: 3,
+            commands: 1,
+            ..
+        })
+    );
+    let message = err.to_string();
+    assert!(
+        message.contains("cursor_spec_001") && message.contains('3') && message.contains('1'),
+        "{message}"
+    );
+}
+
+/// FR-011: a rule that completes on a taught command needs one.
+#[test]
+fn test_loader_rejects_after_taught_commands_without_taught_commands() {
+    let toml = scenario_toml_with_cursors("cursor_position = [0, 0]", "cursor_position = [0, 0]")
+        + "\n[scenarios.metadata]\ncompletion = \"after_taught_commands\"\n";
+
+    let err = load_toml(&toml).unwrap_err();
+
+    assert_matches!(
+        err,
+        crate::config::ConfigError::Scenario(ScenarioValidationError::NoTaughtCommands { .. })
+    );
+    assert!(err.to_string().contains("cursor_spec_001"));
+}
+
 #[test]
 fn test_setup_with_two_cursor_fields_is_rejected_naming_both() {
     let toml =

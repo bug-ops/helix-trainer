@@ -63,6 +63,9 @@ pub(crate) const MAX_REQUIRED_CONDITIONS: usize = 20;
 /// Maximum number of cursors per scenario
 pub(crate) const MAX_CURSORS_PER_SCENARIO: usize = 100;
 
+/// Most actions one scenario run records, in training and arcade alike.
+pub(crate) const MAX_USER_ACTIONS: usize = 1_000_000;
+
 /// Maximum number of selections per scenario
 pub(crate) const MAX_SELECTIONS_PER_SCENARIO: usize = 100;
 

@@ -331,7 +331,7 @@ impl From<SecurityError> for UserError {
             },
 
             e @ (SecurityError::InvalidCursorPosition
-            | SecurityError::TooManyActions
+            | SecurityError::TooManyActions { .. }
             | SecurityError::ScoreOverflow
             | SecurityError::CommandSequenceTooLong { .. }
             | SecurityError::InvalidContent
@@ -496,7 +496,7 @@ mod tests {
         let user_err = UserError::from(err);
         assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
 
-        let err = SecurityError::TooManyActions;
+        let err = SecurityError::TooManyActions { max: 1_000_000 };
         let user_err = UserError::from(err);
         assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
     }
@@ -538,7 +538,7 @@ mod tests {
 
     #[test]
     fn user_error_keeps_typed_cause_for_logs() {
-        let user = UserError::from(SecurityError::TooManyActions);
+        let user = UserError::from(SecurityError::TooManyActions { max: 1_000_000 });
         assert_eq!(user.to_string(), "Operation failed. Please try again.");
         assert_eq!(
             error_chain(&user),
@@ -614,7 +614,9 @@ mod tests {
             UserError::CommandFailed { .. }
         );
         assert_matches!(
-            UserError::from(GameError::Security(SecurityError::TooManyActions)),
+            UserError::from(GameError::Security(SecurityError::TooManyActions {
+                max: 1_000_000
+            })),
             UserError::OperationFailed { .. }
         );
     }

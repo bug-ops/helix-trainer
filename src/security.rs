@@ -66,8 +66,11 @@ pub enum SecurityError {
     },
 
     /// A session recorded more actions than the cap.
-    #[error("Too many actions (max: 1000000)")]
-    TooManyActions,
+    #[error("Too many actions (max: {max})")]
+    TooManyActions {
+        /// The most actions a run may record.
+        max: usize,
+    },
 
     /// A score computation overflowed its integer type.
     #[error("Score calculation overflow")]
@@ -386,6 +389,7 @@ pub mod sanitizer {
 /// Safe arithmetic operations for scoring and calculations
 pub mod arithmetic {
     use super::SecurityError;
+    use crate::limits::MAX_USER_ACTIONS;
 
     /// Safely calculates score with overflow prevention
     ///
@@ -461,8 +465,10 @@ pub mod arithmetic {
     /// # Errors
     /// Returns `TooManyActions` if count exceeds maximum
     pub fn validate_action_count(count: usize) -> Result<(), SecurityError> {
-        if count > 1_000_000 {
-            return Err(SecurityError::TooManyActions);
+        if count > MAX_USER_ACTIONS {
+            return Err(SecurityError::TooManyActions {
+                max: MAX_USER_ACTIONS,
+            });
         }
         Ok(())
     }
@@ -636,13 +642,13 @@ mod tests {
 
     #[test]
     fn test_action_count_validation_boundary() {
-        let result = arithmetic::validate_action_count(1_000_000);
+        let result = arithmetic::validate_action_count(crate::limits::MAX_USER_ACTIONS);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_action_count_validation_exceeds() {
-        let result = arithmetic::validate_action_count(2_000_000);
+        let result = arithmetic::validate_action_count(crate::limits::MAX_USER_ACTIONS + 1);
         assert!(result.is_err());
     }
 
@@ -722,7 +728,7 @@ mod tests {
                 .contains("hints")
         );
         assert!(
-            SecurityError::TooManyActions
+            SecurityError::TooManyActions { max: 5 }
                 .to_string()
                 .contains("actions")
         );

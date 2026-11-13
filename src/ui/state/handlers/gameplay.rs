@@ -10,7 +10,6 @@ use crate::grammar::commands::CMD_ESCAPE;
 use crate::helix::InsertInput;
 use crate::ids::NormalizedCommand;
 use crate::input::resolve::{Resolution, resolve_keys};
-use crate::security::error_chain;
 use crate::ui::state::{
     AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, QuestEvent, TypedScreen,
     dispatch,
@@ -87,17 +86,7 @@ pub(crate) fn handle_execute_command(
         }
     };
 
-    // `ensure_scorable` ran while the session was still active, so finishing cannot fail
-    // for a scenario that reached here; should it, the placeholder screen stays and the
-    // error surfaces.
-    let task_data = match task_data.finish_action(state.progress.monotonic_now()) {
-        Ok(task_data) => task_data,
-        Err(e) => {
-            tracing::error!(error = %error_chain(&e), "Failed to build the scenario feedback");
-            return Err(UserError::from(e));
-        }
-    };
-    state.screen = TypedScreen::Task(task_data);
+    state.screen = TypedScreen::Task(task_data.finish_action(state.progress.monotonic_now()));
 
     // Update quest progress for executed command (after releasing session borrow)
     if let Some(executed) = executed {
@@ -156,16 +145,6 @@ fn execute_on_task(
     }
 }
 
-/// Check that a finished scenario with `action_count` actions can be scored.
-fn ensure_scorable(
-    scoring: &crate::config::ScoringConfig,
-    action_count: usize,
-) -> Result<(), UserError> {
-    crate::game::Scorer::score_with_config(scoring, action_count)
-        .map(drop)
-        .map_err(UserError::from)
-}
-
 /// Apply `input` to the Task screen's active session.
 ///
 /// The failing step borrows the session, so an error leaves it in place.
@@ -189,15 +168,7 @@ fn apply_with(
     let Some(session) = task_data.session.active_mut() else {
         return Ok(());
     };
-    apply(session)?;
-
-    // Everything that can fail when finishing a scenario (the score, hence the feedback) is
-    // checked while the session is still in place, so the transition to Completed cannot fail
-    // halfway and strand the player.
-    if session.check_completion() {
-        ensure_scorable(&session.scenario().scoring, session.action_count())?;
-    }
-    Ok(())
+    apply(session)
 }
 
 #[cfg(test)]
@@ -234,23 +205,6 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(task_data.session.playable().action_count(), 0);
-    }
-
-    /// Regression test for #525: a scenario that cannot be scored is rejected while the
-    /// session is still active, instead of after it was consumed by the Completed transition.
-    #[test]
-    fn test_ensure_scorable_rejects_unscorable_completion() {
-        use crate::config::ScoringConfig;
-        use std::num::NonZeroUsize;
-
-        let scoring = ScoringConfig {
-            optimal_count: NonZeroUsize::new(1 << 40).unwrap(),
-            max_points: u32::MAX,
-            tolerance: 0,
-        };
-
-        assert!(ensure_scorable(&scoring, (1 << 40) + 1).is_err());
-        assert!(ensure_scorable(&scoring, 1).is_ok());
     }
 
     #[test]

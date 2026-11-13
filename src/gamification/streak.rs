@@ -55,14 +55,21 @@ impl StreakManager {
     /// # Examples
     ///
     /// ```
-    /// use helix_trainer::gamification::{StreakManager, UserProfile, StreakChange};
+    /// use helix_trainer::gamification::{
+    ///     Quest, QuestDifficulty, QuestType, StreakChange, StreakManager, UserProfile,
+    /// };
     /// use helix_trainer::ids::QuestId;
     /// use chrono::{DateTime, Duration, Utc};
     ///
     /// let today: DateTime<Utc> = "2026-01-15T12:00:00Z".parse().unwrap();
     /// let mut profile = UserProfile::new_at(today);
     /// profile.current_streak = 5;
-    /// profile.complete_quest(QuestId::parse("test_quest").unwrap());
+    /// profile.daily_quests.push(Quest::new(
+    ///     QuestId::parse("test_quest").unwrap(),
+    ///     QuestType::ScenarioCompletion { target: 1, current: 0 },
+    ///     QuestDifficulty::Easy,
+    /// ));
+    /// profile.complete_quest(&QuestId::parse("test_quest").unwrap());
     ///
     /// // Simulate next day activity
     /// let tomorrow = today + Duration::days(1);
@@ -83,7 +90,7 @@ impl StreakManager {
             }
             1 => {
                 // Next day - increment if completed any quest today
-                if profile.completed_quests_today.is_empty() {
+                if profile.completed_quests_today().next().is_none() {
                     // Activity but no quest completion - don't increment
                     StreakChange::Continued
                 } else {
@@ -197,7 +204,7 @@ impl StreakManager {
     pub fn check_freeze_eligibility(profile: &UserProfile) -> bool {
         !profile.streak_freeze_available
             && !profile.daily_quests.is_empty()
-            && profile.completed_quests_today.len() >= profile.daily_quests.len()
+            && profile.completed_quests_today().count() >= profile.daily_quests.len()
     }
 
     /// Calculate days between two dates
@@ -254,7 +261,9 @@ mod tests {
         let clock = FakeClock::at("2026-01-15T12:00:00Z");
         let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 5;
-        profile.complete_quest(qid("test_quest"));
+        profile
+            .daily_quests
+            .push(crate::testing::rewarded_quest("test_quest"));
         clock.advance_days(1);
 
         let change = StreakManager::update_streak(&mut profile, clock.now());
@@ -267,7 +276,9 @@ mod tests {
         let clock = FakeClock::at("2026-01-15T12:00:00Z");
         let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = u32::MAX;
-        profile.complete_quest(qid("test_quest"));
+        profile
+            .daily_quests
+            .push(crate::testing::rewarded_quest("test_quest"));
         clock.advance_days(1);
 
         StreakManager::update_streak(&mut profile, clock.now());
@@ -474,7 +485,9 @@ mod tests {
         let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 5;
         profile.longest_streak = 5;
-        profile.complete_quest(qid("test"));
+        profile
+            .daily_quests
+            .push(crate::testing::rewarded_quest("test"));
         clock.advance_days(1);
 
         StreakManager::update_streak(&mut profile, clock.now());
@@ -584,7 +597,7 @@ mod tests {
         // Not eligible - already has freeze, even if all quests are completed
         profile.streak_freeze_available = true;
         for i in 0..3 {
-            profile.complete_quest(qid(&format!("quest_{i}")));
+            assert!(profile.complete_quest(&qid(&format!("quest_{i}"))));
         }
         assert!(!StreakManager::check_freeze_eligibility(&profile));
 

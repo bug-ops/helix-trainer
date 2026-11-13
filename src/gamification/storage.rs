@@ -250,7 +250,7 @@ impl ProfileStorage {
         let mut held = self.held_last_valid();
         match loaded {
             Ok(Some((mut data, text))) => {
-                data.profile.recompute_level();
+                data.profile.finish_load();
                 *held = Some(text.into());
                 Ok(data.profile)
             }
@@ -280,7 +280,7 @@ impl ProfileStorage {
         let store = JsonStore::<ProfileData>::new(&path, Document::Profile, MAX_PROFILE_FILE_SIZE);
         match store.load_with_source()? {
             Some((mut data, text)) => {
-                data.profile.recompute_level();
+                data.profile.finish_load();
                 Ok((data.profile, text))
             }
             None => Err(StorageError::Read {

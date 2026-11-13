@@ -386,7 +386,7 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
 
     // Get quest data
     let profile = &state.progress.profile;
-    let completed_today = profile.daily_quests.iter().filter(|q| q.completed).count();
+    let completed_today = profile.completed_quests_today().count();
 
     lines.push(Line::from(vec![
         Span::raw(t!("statistics.quests_completed").to_string()),

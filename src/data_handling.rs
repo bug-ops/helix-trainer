@@ -327,7 +327,7 @@ mod tests {
     use helix_trainer::config::json_store::{Document, StorageError};
     use helix_trainer::config::keymap::fingerprint::{KeymapFingerprint, StoredKeymapFingerprint};
     use helix_trainer::error::UserError;
-    use helix_trainer::gamification::PreviousCopy;
+    use helix_trainer::gamification::{PreviousCopy, Quest, QuestDifficulty, QuestType};
     use helix_trainer::ids::{QuestId, ScenarioId};
     use helix_trainer::{
         config::{
@@ -342,6 +342,12 @@ mod tests {
     // Binary crate tests cannot access the library's #[cfg(test)]-gated
     // `ProfileStorage::for_test()`, so we mirror it locally here: a unique file
     // under a process-lifetime temp dir, never the real user profile path.
+    fn profile_with_fingerprint(fingerprint: KeymapFingerprint) -> UserProfile {
+        let mut profile = UserProfile::new();
+        profile.keymap_fingerprint = Some(StoredKeymapFingerprint::Current(fingerprint));
+        profile
+    }
+
     fn test_profile_storage() -> ProfileStorage {
         use std::sync::OnceLock;
         use std::sync::atomic::{AtomicU64, Ordering};
@@ -637,10 +643,7 @@ mod tests {
 
         handle_data_message(
             &mut state,
-            DataLoadMessage::ProfileReady(UserProfile {
-                keymap_fingerprint: Some(StoredKeymapFingerprint::Current(custom_fingerprint)),
-                ..UserProfile::new()
-            }),
+            DataLoadMessage::ProfileReady(profile_with_fingerprint(custom_fingerprint)),
         );
 
         assert!(
@@ -675,10 +678,7 @@ mod tests {
         let stock_fingerprint = disabled_state.config.keymap.fingerprint();
         handle_data_message(
             &mut disabled_state,
-            DataLoadMessage::ProfileReady(UserProfile {
-                keymap_fingerprint: Some(StoredKeymapFingerprint::Current(custom_fingerprint)),
-                ..UserProfile::new()
-            }),
+            DataLoadMessage::ProfileReady(profile_with_fingerprint(custom_fingerprint)),
         );
         assert!(
             disabled_state
@@ -739,10 +739,7 @@ mod tests {
         let mut disabled_state = empty_test_app_state();
         handle_data_message(
             &mut disabled_state,
-            DataLoadMessage::ProfileReady(UserProfile {
-                keymap_fingerprint: Some(StoredKeymapFingerprint::Current(fingerprint_a)),
-                ..UserProfile::new()
-            }),
+            DataLoadMessage::ProfileReady(profile_with_fingerprint(fingerprint_a)),
         );
         let carried_over_profile = disabled_state.progress.profile;
 
@@ -792,9 +789,15 @@ mod tests {
 
         let mut profile = UserProfile::new_at(clock.now());
         profile.current_streak = 6;
-        profile
-            .completed_quests_today
-            .insert(QuestId::parse("quest_0").unwrap());
+        profile.daily_quests.push(Quest::new(
+            QuestId::parse("quest_0").unwrap(),
+            QuestType::ScenarioCompletion {
+                target: 1,
+                current: 1,
+            },
+            QuestDifficulty::Easy,
+        ));
+        assert!(profile.complete_quest(&QuestId::parse("quest_0").unwrap()));
         clock.advance_days(1);
 
         handle_data_message(&mut state, DataLoadMessage::ProfileReady(profile));

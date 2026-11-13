@@ -2,7 +2,7 @@
 //! FR-154, FR-155, SC-014). A profile written before the id newtypes existed must still load.
 
 use helix_trainer::config::keymap::fingerprint::{KeymapFingerprint, StoredKeymapFingerprint};
-use helix_trainer::gamification::{ProfileStorage, QuestType, UserProfile};
+use helix_trainer::gamification::{ProfileStorage, QuestStatus, QuestType, UserProfile};
 use helix_trainer::ids::{CommandId, NormalizedCommand, QuestId, ScenarioId};
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -26,7 +26,7 @@ fn legacy_profile_json() -> Value {
             "description": "Use x",
             "difficulty": "Easy",
             "xp_reward": 25,
-            "completed": false
+            "completed": true
         },
         {
             "id": "quest_explore_2",
@@ -91,6 +91,28 @@ fn legacy_profile_loads_with_strict_ids() {
             .get(&ScenarioId::parse("delete_line_001").unwrap())
             .is_some()
     );
+}
+
+/// FR-037: a legacy `completed` quest loads as completed, rewarded exactly when its id was in
+/// the legacy `completed_quests_today` set; the set itself is not written back.
+#[test]
+fn legacy_quest_completion_loads_into_the_quest_status() {
+    let profile = load_legacy_profile();
+
+    assert_eq!(
+        profile.daily_quests[0].status(),
+        QuestStatus::Completed { rewarded: true }
+    );
+    assert_eq!(profile.daily_quests[1].status(), QuestStatus::InProgress);
+    assert_eq!(
+        profile.daily_quests[2].status(),
+        QuestStatus::Completed { rewarded: false }
+    );
+    assert_eq!(profile.completed_quests_today().count(), 2);
+
+    let written = serde_json::to_value(&profile).unwrap();
+    assert!(written.get("completed_quests_today").is_none());
+    assert!(written["daily_quests"][0].get("completed").is_none());
 }
 
 #[test]
@@ -184,7 +206,23 @@ fn profile_json_shape_is_unchanged_by_the_id_types() {
     for quest in original["daily_quests"].as_array_mut().unwrap() {
         quest.as_object_mut().unwrap().remove("description");
     }
-    for field in ["completed_quests_today", "daily_quests", "scenario_history"] {
+    // Quest completion lives on the quests (#652): the legacy flag becomes `status` (a plain
+    // deserialize leaves it unrewarded; `ProfileStorage::load` settles it), and the legacy
+    // completed-quest set is read but never written.
+    for quest in original["daily_quests"].as_array_mut().unwrap() {
+        let quest = quest.as_object_mut().unwrap();
+        let completed = quest.remove("completed") == Some(json!(true));
+        quest.insert(
+            "status".to_string(),
+            if completed {
+                json!({ "Completed": { "rewarded": false } })
+            } else {
+                json!("InProgress")
+            },
+        );
+    }
+    assert!(rewritten.get("completed_quests_today").is_none());
+    for field in ["daily_quests", "scenario_history"] {
         let mut expected = original[field].clone();
         let mut actual = rewritten[field].clone();
         sort_string_sets(&mut expected);

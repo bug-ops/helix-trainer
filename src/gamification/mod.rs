@@ -23,7 +23,7 @@ pub use achievements::{Achievement, AchievementEngine, AchievementId, speed_time
 pub use challenge_progress::{ChallengeDay, ChallengeProgress};
 pub use profile::{LevelProgress, UserProfile, XPCalculator, XPComponents};
 pub use quests::{
-    Quest, QuestDifficulty, QuestGeneration, QuestGenerator, QuestRegistrySlot,
+    Quest, QuestDifficulty, QuestGeneration, QuestGenerator, QuestRegistrySlot, QuestStatus,
     QuestTemplateRegistry, QuestTracker, QuestType,
 };
 pub use storage::{LockStatus, PreviousCopy, ProfileStorage, QuarantineOutcome};

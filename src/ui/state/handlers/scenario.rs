@@ -432,7 +432,7 @@ fn next_steps(ctx: &HandlerContext<'_>, imperfect: usize) -> Vec<NextStep> {
         .profile
         .daily_quests
         .iter()
-        .filter(|q| !q.completed)
+        .filter(|q| !q.status().is_completed())
         .count();
 
     let mut steps = Vec::new();
@@ -488,7 +488,7 @@ mod tests {
     use super::*;
     use crate::config::{Difficulty, Scenario};
     use crate::game::GameSession;
-    use crate::gamification::{ProfileStorage, Quest, QuestDifficulty, QuestType, UserProfile};
+    use crate::gamification::{ProfileStorage, QuestType, UserProfile};
     use crate::learning::PerformanceTracker;
     use crate::testing::ScenarioBuilder;
     use crate::testing::{cid, qid, sid};
@@ -675,16 +675,14 @@ mod tests {
         use crate::game::SessionAfterAction;
 
         let mut state = create_test_state();
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("quest_scenario_completion"),
-            quest_type: QuestType::ScenarioCompletion {
+        state.progress.profile.daily_quests = vec![crate::testing::quest(
+            qid("quest_scenario_completion"),
+            QuestType::ScenarioCompletion {
                 target: 1,
                 current: 0,
             },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 100,
-            completed: false,
-        }];
+            100,
+        )];
 
         let scenario = create_test_scenario();
         let session = GameSession::new(scenario).unwrap();
@@ -724,15 +722,17 @@ mod tests {
         use crate::game::SessionAfterAction;
 
         let mut state = create_test_state();
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("quest_already_done"),
-            quest_type: QuestType::ScenarioCompletion {
-                target: 1,
-                current: 1,
-            },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 100,
-            completed: true,
+        state.progress.profile.daily_quests = vec![{
+            let mut quest = crate::testing::quest(
+                qid("quest_already_done"),
+                QuestType::ScenarioCompletion {
+                    target: 1,
+                    current: 1,
+                },
+                100,
+            );
+            quest.mark_completed();
+            quest
         }];
 
         let scenario = create_test_scenario();
@@ -1299,16 +1299,14 @@ mod tests {
         let xp_for_level_2 = XPCalculator::xp_for_level(2);
         state.progress.profile.total_xp = xp_for_level_2 - 1;
         state.progress.profile.level = 1;
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("quest_scenario_completion"),
-            quest_type: QuestType::ScenarioCompletion {
+        state.progress.profile.daily_quests = vec![crate::testing::quest(
+            qid("quest_scenario_completion"),
+            QuestType::ScenarioCompletion {
                 target: 1,
                 current: 0,
             },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 1,
-            completed: false,
-        }];
+            1,
+        )];
 
         show_completed_task(&mut state, finished_session());
 
@@ -1336,7 +1334,7 @@ mod tests {
     /// quest_xp`.
     #[test]
     fn test_handle_complete_scenario_awards_quest_xp_exactly_once() {
-        use crate::gamification::{ProfileStorage, Quest, QuestDifficulty, QuestType};
+        use crate::gamification::{ProfileStorage, QuestType};
         use tempfile::TempDir;
 
         // Baseline: identical completion, no in-progress quest - isolates `actual_xp`.
@@ -1355,16 +1353,14 @@ mod tests {
         let quest_dir = TempDir::new().unwrap();
         state.progress.storage = ProfileStorage::with_path(quest_dir.path().join("profile.json"));
         let quest_xp_reward = 100u32;
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("quest_scenario_completion"),
-            quest_type: QuestType::ScenarioCompletion {
+        state.progress.profile.daily_quests = vec![crate::testing::quest(
+            qid("quest_scenario_completion"),
+            QuestType::ScenarioCompletion {
                 target: 1,
                 current: 0,
             },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: quest_xp_reward,
-            completed: false,
-        }];
+            quest_xp_reward,
+        )];
         show_completed_task(&mut state, finished_session());
 
         let initial_xp = state.progress.profile.total_xp;
@@ -1372,7 +1368,9 @@ mod tests {
         let total_xp_gained = state.progress.profile.total_xp - initial_xp;
 
         assert!(
-            state.progress.profile.daily_quests[0].completed,
+            state.progress.profile.daily_quests[0]
+                .status()
+                .is_completed(),
             "quest should have completed on this scenario completion"
         );
         assert_eq!(
@@ -1930,7 +1928,7 @@ mod tests {
 
     #[test]
     fn test_next_steps_all_conditions_true_keeps_all_three_plus_arcade() {
-        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+        use crate::gamification::QuestType;
 
         let mut state = create_test_state();
         state.progress.performance_tracker.record_attempt(
@@ -1939,16 +1937,14 @@ mod tests {
             true,
             std::time::Duration::from_secs(1),
         );
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("quest_1"),
-            quest_type: QuestType::ScenarioCompletion {
+        state.progress.profile.daily_quests = vec![crate::testing::quest(
+            qid("quest_1"),
+            QuestType::ScenarioCompletion {
                 target: 1,
                 current: 0,
             },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 10,
-            completed: false,
-        }];
+            10,
+        )];
 
         let ctx = HandlerContext::new(
             &mut state.ui,

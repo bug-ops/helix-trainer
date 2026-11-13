@@ -83,8 +83,10 @@ pub struct UserProfile {
     /// Last time quests were refreshed
     pub last_quest_refresh: DateTime<Utc>,
 
-    /// Completed quest IDs today
-    pub completed_quests_today: HashSet<QuestId>,
+    /// The completed-quest set of profiles written before completion lived on the
+    /// quests; read once on load by [`UserProfile::finish_load`], never written.
+    #[serde(default, rename = "completed_quests_today", skip_serializing)]
+    legacy_rewarded_quests: HashSet<QuestId>,
 
     /// Streak freeze available (protects from one missed day)
     pub streak_freeze_available: bool,
@@ -205,7 +207,7 @@ impl UserProfile {
             achievements_unlocked: HashSet::new(),
             daily_quests: Vec::new(),
             last_quest_refresh: now,
-            completed_quests_today: HashSet::new(),
+            legacy_rewarded_quests: HashSet::new(),
             streak_freeze_available: false,
             scenarios_completed: 0,
             perfect_scenarios: 0,
@@ -305,14 +307,45 @@ impl UserProfile {
         self.level_progress().ratio()
     }
 
-    /// Check if quest is completed today
-    pub fn is_quest_completed(&self, quest_id: &QuestId) -> bool {
-        self.completed_quests_today.contains(quest_id)
+    /// The quests completed today, derived from the quests themselves.
+    pub fn completed_quests_today(&self) -> impl Iterator<Item = &Quest> {
+        self.daily_quests
+            .iter()
+            .filter(|quest| quest.status().is_completed())
     }
 
-    /// Mark quest as completed
-    pub fn complete_quest(&mut self, quest_id: QuestId) {
-        self.completed_quests_today.insert(quest_id);
+    /// Check if quest is completed today
+    pub fn is_quest_completed(&self, quest_id: &QuestId) -> bool {
+        self.completed_quests_today()
+            .any(|quest| quest.id == *quest_id)
+    }
+
+    /// Record that today's quest `quest_id` was completed and rewarded.
+    ///
+    /// Returns `false`, changing nothing, when no daily quest has that id.
+    pub fn complete_quest(&mut self, quest_id: &QuestId) -> bool {
+        let Some(quest) = self
+            .daily_quests
+            .iter_mut()
+            .find(|quest| quest.id == *quest_id)
+        else {
+            return false;
+        };
+        quest.mark_rewarded();
+        true
+    }
+
+    /// Bring a freshly deserialized profile to its invariants: the level follows
+    /// the total XP, and the legacy completed-quest set marks the quests whose
+    /// completion XP was already granted (no XP is granted retroactively).
+    pub(crate) fn finish_load(&mut self) {
+        self.recompute_level();
+        for quest in &mut self.daily_quests {
+            if quest.status().is_completed() && self.legacy_rewarded_quests.contains(&quest.id) {
+                quest.mark_rewarded();
+            }
+        }
+        self.legacy_rewarded_quests.clear();
     }
 
     /// Check if achievement is unlocked
@@ -329,7 +362,6 @@ impl UserProfile {
 
     /// Reset daily quest state (called at midnight)
     pub fn reset_daily_quests(&mut self, now: DateTime<Utc>) {
-        self.completed_quests_today.clear();
         self.daily_quests.clear();
         self.last_quest_refresh = now;
     }
@@ -858,9 +890,20 @@ mod tests {
         let mut profile = UserProfile::new();
 
         assert!(!profile.is_quest_completed(&qid("quest_1")));
+        assert!(!profile.complete_quest(&qid("quest_1")));
 
-        profile.complete_quest(qid("quest_1"));
+        profile.daily_quests.push(crate::testing::quest(
+            qid("quest_1"),
+            crate::gamification::QuestType::ScenarioCompletion {
+                target: 1,
+                current: 0,
+            },
+            25,
+        ));
+        assert!(!profile.is_quest_completed(&qid("quest_1")));
+        assert!(profile.complete_quest(&qid("quest_1")));
         assert!(profile.is_quest_completed(&qid("quest_1")));
+        assert_eq!(profile.completed_quests_today().count(), 1);
     }
 
     #[test]
@@ -871,7 +914,15 @@ mod tests {
     fn test_reset_daily_quests() {
         let mut profile = UserProfile::new();
 
-        profile.complete_quest(qid("quest_1"));
+        profile.daily_quests.push(crate::testing::quest(
+            qid("quest_1"),
+            crate::gamification::QuestType::ScenarioCompletion {
+                target: 1,
+                current: 0,
+            },
+            25,
+        ));
+        assert!(profile.complete_quest(&qid("quest_1")));
         assert!(profile.is_quest_completed(&qid("quest_1")));
 
         profile.reset_daily_quests(Utc::now());

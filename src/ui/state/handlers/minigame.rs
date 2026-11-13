@@ -587,20 +587,18 @@ mod tests {
     /// scenario here is deliberately unreachable via commands) must still grant XP.
     #[test]
     fn test_execute_minigame_command_awards_quest_xp_without_completing_scenario() {
-        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+        use crate::gamification::QuestType;
 
         let mut state = create_test_state();
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("cmd_h_easy"),
-            quest_type: QuestType::CommandPractice {
+        state.progress.profile.daily_quests = vec![crate::testing::quest(
+            qid("cmd_h_easy"),
+            QuestType::CommandPractice {
                 command: ncmd("h"),
                 target: 1,
                 current: 0,
             },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 50,
-            completed: false,
-        }];
+            50,
+        )];
 
         start_minigame(&mut state);
         if let Some(session) = state.minigame_session_mut() {
@@ -621,7 +619,9 @@ mod tests {
             assert!(!session.state().is_transition());
         }
         assert!(
-            state.progress.profile.daily_quests[0].completed,
+            state.progress.profile.daily_quests[0]
+                .status()
+                .is_completed(),
             "CommandPractice quest should complete after using 'h' once"
         );
         assert_eq!(
@@ -646,23 +646,21 @@ mod tests {
     /// `test_handle_complete_scenario_notifies_on_level_up_from_quest_xp_alone`.
     #[test]
     fn test_execute_minigame_command_notifies_on_level_up_from_quest_xp_alone() {
-        use crate::gamification::{Quest, QuestDifficulty, QuestType, XPCalculator};
+        use crate::gamification::{QuestType, XPCalculator};
 
         let mut state = create_test_state();
         let xp_for_level_2 = XPCalculator::xp_for_level(2);
         state.progress.profile.total_xp = xp_for_level_2 - 1;
         state.progress.profile.level = 1;
-        state.progress.profile.daily_quests = vec![Quest {
-            id: qid("cmd_h_easy"),
-            quest_type: QuestType::CommandPractice {
+        state.progress.profile.daily_quests = vec![crate::testing::quest(
+            qid("cmd_h_easy"),
+            QuestType::CommandPractice {
                 command: ncmd("h"),
                 target: 1,
                 current: 0,
             },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 1,
-            completed: false,
-        }];
+            1,
+        )];
 
         start_minigame(&mut state);
         if let Some(session) = state.minigame_session_mut() {
@@ -1049,24 +1047,22 @@ mod tests {
 
     #[test]
     fn test_minigame_updates_quest_progress() {
-        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+        use crate::gamification::QuestType;
 
         let mut state = create_test_state();
 
         // Initialize with sample quests
         {
             let profile = &mut state.progress.profile;
-            profile.daily_quests = vec![Quest {
-                id: qid("cmd_practice"),
-                quest_type: QuestType::CommandPractice {
+            profile.daily_quests = vec![crate::testing::quest(
+                qid("cmd_practice"),
+                QuestType::CommandPractice {
                     command: ncmd("j"),
                     target: 5,
                     current: 0,
                 },
-                difficulty: QuestDifficulty::Easy,
-                xp_reward: 100,
-                completed: false,
-            }];
+                100,
+            )];
         }
 
         // Check initial quest progress
@@ -1083,9 +1079,11 @@ mod tests {
 
         // Directly test that track_command_for_quests works
         // This function is from the quests module, imported in the parent module
-        crate::ui::state::handlers::quests::track_command_for_quests(
-            &mut state,
-            &crate::ids::NormalizedCommand::from_raw("j").unwrap(),
+        drop(
+            crate::ui::state::handlers::quests::track_command_for_quests(
+                &mut state,
+                &crate::ids::NormalizedCommand::from_raw("j").unwrap(),
+            ),
         );
 
         // Check that command quest was updated
@@ -1119,19 +1117,19 @@ mod tests {
     /// entered Insert mode still is.
     #[test]
     fn test_arcade_insert_text_is_not_command_practice() {
-        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+        use crate::gamification::QuestType;
 
         let mut state = create_test_state();
-        let practice = |id: &str, key: &str| Quest {
-            id: qid(id),
-            quest_type: QuestType::CommandPractice {
-                command: ncmd(key),
-                target: 5,
-                current: 0,
-            },
-            difficulty: QuestDifficulty::Easy,
-            xp_reward: 100,
-            completed: false,
+        let practice = |id: &str, key: &str| {
+            crate::testing::quest(
+                qid(id),
+                QuestType::CommandPractice {
+                    command: ncmd(key),
+                    target: 5,
+                    current: 0,
+                },
+                100,
+            )
         };
         state.progress.profile.daily_quests = vec![practice("q_i", "i"), practice("q_j", "j")];
         start_minigame(&mut state);

@@ -233,7 +233,7 @@ fn test_quest_template_to_quest_conversion() {
 
     let quest = crate::gamification::Quest::from(&template);
     assert_eq!(quest.id.as_str(), "test_quest");
-    assert!(!quest.completed);
+    assert!(!quest.status().is_completed());
 }
 
 #[test]
@@ -545,7 +545,10 @@ fn test_validate_all_quest_templates() {
         // 7. Validate template converts to runtime Quest
         let quest = crate::gamification::Quest::from(template);
         assert_eq!(quest.id, template.id);
-        assert!(!quest.completed, "New quest should not be completed");
+        assert!(
+            !quest.status().is_completed(),
+            "New quest should not be completed"
+        );
     }
 
     // 8. Validate referenced commands are valid Helix commands

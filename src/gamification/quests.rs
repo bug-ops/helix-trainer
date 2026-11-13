@@ -197,8 +197,42 @@ impl crate::learning::ProgressTracker for QuestType {
     }
 }
 
+/// Where a quest stands: the one place its completion is stored.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::gamification::QuestStatus;
+///
+/// assert!(!QuestStatus::InProgress.is_completed());
+/// assert!(QuestStatus::Completed { rewarded: false }.is_completed());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum QuestStatus {
+    /// The target has not been reached.
+    InProgress,
+    /// The target was reached.
+    Completed {
+        /// Whether the completion XP was granted.
+        rewarded: bool,
+    },
+}
+
+impl QuestStatus {
+    /// Whether the target was reached, rewarded or not.
+    #[must_use]
+    pub fn is_completed(self) -> bool {
+        matches!(self, Self::Completed { .. })
+    }
+}
+
 /// A daily quest
+///
+/// Reads the legacy `completed` flag of older profile files: `true` loads as
+/// `Completed { rewarded: false }`; the profile then settles `rewarded` from its
+/// legacy completed-quest set.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "QuestWire")]
 pub struct Quest {
     /// Unique quest identifier, stable across the day.
     pub id: QuestId,
@@ -208,8 +242,37 @@ pub struct Quest {
     pub difficulty: QuestDifficulty,
     /// XP granted on completion.
     pub xp_reward: u32,
-    /// Whether the reward has been earned.
-    pub completed: bool,
+    status: QuestStatus,
+}
+
+/// The persisted shape of a [`Quest`], including the pre-status `completed` flag.
+#[derive(Deserialize)]
+struct QuestWire {
+    id: QuestId,
+    quest_type: QuestType,
+    difficulty: QuestDifficulty,
+    xp_reward: u32,
+    #[serde(default)]
+    status: Option<QuestStatus>,
+    #[serde(default)]
+    completed: bool,
+}
+
+impl From<QuestWire> for Quest {
+    fn from(wire: QuestWire) -> Self {
+        let status = wire.status.unwrap_or(if wire.completed {
+            QuestStatus::Completed { rewarded: false }
+        } else {
+            QuestStatus::InProgress
+        });
+        Self {
+            id: wire.id,
+            quest_type: wire.quest_type,
+            difficulty: wire.difficulty,
+            xp_reward: wire.xp_reward,
+            status,
+        }
+    }
 }
 
 /// Instantiate a runtime quest from its template.
@@ -223,7 +286,7 @@ pub struct Quest {
 /// let templates = QuestLoader::new().load_from_embedded("en")?;
 /// let quest = Quest::from(&templates[0]);
 /// assert_eq!(quest.id, templates[0].id);
-/// assert!(!quest.completed);
+/// assert!(!quest.status().is_completed());
 /// # Ok::<(), helix_trainer::error::UserError>(())
 /// ```
 impl From<&QuestTemplate> for Quest {
@@ -272,13 +335,26 @@ impl Quest {
             quest_type,
             difficulty,
             xp_reward,
-            completed: false,
+            status: QuestStatus::InProgress,
         }
     }
 
-    /// Mark quest as completed
+    /// Where the quest stands.
+    #[must_use]
+    pub fn status(&self) -> QuestStatus {
+        self.status
+    }
+
+    /// Mark the quest completed, keeping an earlier reward mark.
     pub fn mark_completed(&mut self) {
-        self.completed = true;
+        if !self.status.is_completed() {
+            self.status = QuestStatus::Completed { rewarded: false };
+        }
+    }
+
+    /// Record that the completion XP was granted.
+    pub fn mark_rewarded(&mut self) {
+        self.status = QuestStatus::Completed { rewarded: true };
     }
 
     /// Check if quest is completed (convenience method)
@@ -297,7 +373,7 @@ impl Quest {
 impl crate::learning::ProgressTracker for Quest {
     fn progress(&self) -> f64 {
         use crate::learning::ProgressTracker;
-        if self.completed {
+        if self.status.is_completed() {
             1.0
         } else {
             ProgressTracker::progress(&self.quest_type)
@@ -306,7 +382,7 @@ impl crate::learning::ProgressTracker for Quest {
 
     fn current(&self) -> u64 {
         use crate::learning::ProgressTracker;
-        if self.completed {
+        if self.status.is_completed() {
             ProgressTracker::target(self)
         } else {
             ProgressTracker::current(&self.quest_type)
@@ -320,7 +396,7 @@ impl crate::learning::ProgressTracker for Quest {
 
     fn is_complete(&self) -> bool {
         use crate::learning::ProgressTracker;
-        self.completed || ProgressTracker::is_complete(&self.quest_type)
+        self.status.is_completed() || ProgressTracker::is_complete(&self.quest_type)
     }
 }
 
@@ -655,88 +731,90 @@ impl QuestGenerator {
 }
 
 /// Tracks quest progress and updates
+///
+/// Every update returns the ids of the quests it newly completed, so the caller
+/// awards exactly those; a quest already completed is never returned again.
 pub struct QuestTracker;
 
 impl QuestTracker {
     /// Update quest progress based on command execution
-    pub fn update_command_progress(quests: &mut [Quest], command: &NormalizedCommand) {
-        for quest in quests.iter_mut() {
-            if quest.completed {
-                continue;
+    #[must_use]
+    pub fn update_command_progress(
+        quests: &mut [Quest],
+        command: &NormalizedCommand,
+    ) -> Vec<QuestId> {
+        Self::advance(quests, |quest_type| match quest_type {
+            QuestType::CommandPractice {
+                command: cmd,
+                target,
+                current,
+            } if cmd == command => {
+                *current = current.saturating_add(1).min(*target);
+                *current >= *target
             }
-
-            match &mut quest.quest_type {
-                QuestType::CommandPractice {
-                    command: cmd,
-                    target,
-                    current,
-                } if cmd == command => {
-                    *current = current.saturating_add(1).min(*target);
-                    if *current >= *target {
-                        quest.completed = true;
-                    }
-                }
-                QuestType::Exploration {
-                    target_commands,
-                    commands_used,
-                } => {
-                    commands_used.insert(command.clone());
-                    if commands_used.len() >= *target_commands as usize {
-                        quest.completed = true;
-                    }
-                }
-                _ => {}
+            QuestType::Exploration {
+                target_commands,
+                commands_used,
+            } => {
+                commands_used.insert(command.clone());
+                commands_used.len() >= *target_commands as usize
             }
-        }
+            _ => false,
+        })
     }
 
     /// Update quest progress for scenario completion
+    #[must_use]
     pub fn update_scenario_progress(
         quests: &mut [Quest],
         scenario_id: &ScenarioId,
         duration: Duration,
-    ) {
-        for quest in quests.iter_mut() {
-            if quest.completed {
-                continue;
+    ) -> Vec<QuestId> {
+        Self::advance(quests, |quest_type| match quest_type {
+            QuestType::ScenarioCompletion { target, current } => {
+                *current = current.saturating_add(1).min(*target);
+                *current >= *target
             }
-
-            match &mut quest.quest_type {
-                QuestType::ScenarioCompletion { target, current } => {
-                    *current = current.saturating_add(1).min(*target);
-                    if *current >= *target {
-                        quest.completed = true;
-                    }
-                }
-                QuestType::SpeedRun {
-                    scenario_id: quest_scenario,
-                    time_limit,
-                } if quest_scenario == scenario_id && duration <= *time_limit => {
-                    quest.completed = true;
-                }
-                _ => {}
-            }
-        }
+            QuestType::SpeedRun {
+                scenario_id: quest_scenario,
+                time_limit,
+            } => quest_scenario == scenario_id && duration <= *time_limit,
+            _ => false,
+        })
     }
 
     /// Update quest progress for time invested
-    pub fn update_time_progress(quests: &mut [Quest], minutes: u32) {
-        for quest in quests.iter_mut() {
-            if quest.completed {
-                continue;
-            }
-
-            if let QuestType::TimeInvested {
+    #[must_use]
+    pub fn update_time_progress(quests: &mut [Quest], minutes: u32) -> Vec<QuestId> {
+        Self::advance(quests, |quest_type| match quest_type {
+            QuestType::TimeInvested {
                 target_minutes,
                 current_minutes,
-            } = &mut quest.quest_type
-            {
+            } => {
                 *current_minutes = current_minutes.saturating_add(minutes).min(*target_minutes);
-                if *current_minutes >= *target_minutes {
-                    quest.completed = true;
-                }
+                *current_minutes >= *target_minutes
+            }
+            _ => false,
+        })
+    }
+
+    /// Apply `advance` to every quest still in progress and complete those it
+    /// reports as having reached their target.
+    fn advance(
+        quests: &mut [Quest],
+        mut advance: impl FnMut(&mut QuestType) -> bool,
+    ) -> Vec<QuestId> {
+        let mut newly_completed = Vec::new();
+        for quest in quests
+            .iter_mut()
+            .filter(|quest| !quest.status.is_completed())
+        {
+            if advance(&mut quest.quest_type) {
+                quest.mark_completed();
+                newly_completed.push(quest.id.clone());
             }
         }
+        newly_completed
     }
 }
 
@@ -789,7 +867,49 @@ mod tests {
 
         assert_eq!(quest.id.as_str(), "test_quest");
         assert_eq!(quest.xp_reward, 25); // Easy command practice
-        assert!(!quest.completed);
+        assert_eq!(quest.status(), QuestStatus::InProgress);
+    }
+
+    #[test]
+    fn tracker_returns_each_newly_completed_quest_once() {
+        let quest = |id: &str| {
+            Quest::new(
+                qid(id),
+                QuestType::CommandPractice {
+                    command: ncmd(CMD_YANK),
+                    target: 1,
+                    current: 0,
+                },
+                QuestDifficulty::Easy,
+            )
+        };
+        let mut quests = vec![quest("a"), quest("b")];
+
+        let first = QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_YANK));
+        let again = QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_YANK));
+
+        assert_eq!(first, vec![qid("a"), qid("b")]);
+        assert_eq!(again, Vec::<QuestId>::new());
+        assert!(quests.iter().all(|quest| quest.status().is_completed()));
+    }
+
+    #[test]
+    fn legacy_completed_flag_reads_as_an_unrewarded_completion() {
+        let mut json = serde_json::to_value(Quest::new(
+            qid("legacy"),
+            QuestType::ScenarioCompletion {
+                target: 1,
+                current: 1,
+            },
+            QuestDifficulty::Easy,
+        ))
+        .unwrap();
+        json.as_object_mut().unwrap().remove("status");
+        json["completed"] = serde_json::json!(true);
+
+        let quest: Quest = serde_json::from_value(json).unwrap();
+
+        assert_eq!(quest.status(), QuestStatus::Completed { rewarded: false });
     }
 
     #[test]
@@ -896,11 +1016,20 @@ mod tests {
             QuestDifficulty::Easy,
         )];
 
-        QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_DELETE_SELECTION));
+        drop(QuestTracker::update_command_progress(
+            &mut quests,
+            &ncmd(CMD_DELETE_SELECTION),
+        ));
         assert!(!quests[0].is_completed());
 
-        QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_DELETE_SELECTION));
-        QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_DELETE_SELECTION));
+        drop(QuestTracker::update_command_progress(
+            &mut quests,
+            &ncmd(CMD_DELETE_SELECTION),
+        ));
+        drop(QuestTracker::update_command_progress(
+            &mut quests,
+            &ncmd(CMD_DELETE_SELECTION),
+        ));
         assert!(quests[0].is_completed());
     }
 
@@ -915,18 +1044,18 @@ mod tests {
             QuestDifficulty::Medium,
         )];
 
-        QuestTracker::update_scenario_progress(
+        drop(QuestTracker::update_scenario_progress(
             &mut quests,
             &sid("any_scenario"),
             Duration::from_secs(1),
-        );
+        ));
         assert!(!quests[0].is_completed());
 
-        QuestTracker::update_scenario_progress(
+        drop(QuestTracker::update_scenario_progress(
             &mut quests,
             &sid("any_scenario"),
             Duration::from_secs(1),
-        );
+        ));
         assert!(quests[0].is_completed());
     }
 
@@ -942,19 +1071,19 @@ mod tests {
         )];
 
         // Too slow
-        QuestTracker::update_scenario_progress(
+        drop(QuestTracker::update_scenario_progress(
             &mut quests,
             &sid("delete_line_001"),
             Duration::from_secs(10),
-        );
+        ));
         assert!(!quests[0].is_completed());
 
         // Fast enough
-        QuestTracker::update_scenario_progress(
+        drop(QuestTracker::update_scenario_progress(
             &mut quests,
             &sid("delete_line_001"),
             Duration::from_secs(3),
-        );
+        ));
         assert!(quests[0].is_completed());
     }
 
@@ -969,14 +1098,20 @@ mod tests {
             QuestDifficulty::Hard,
         )];
 
-        QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_DELETE_SELECTION));
-        QuestTracker::update_command_progress(&mut quests, &ncmd(CMD_YANK));
+        drop(QuestTracker::update_command_progress(
+            &mut quests,
+            &ncmd(CMD_DELETE_SELECTION),
+        ));
+        drop(QuestTracker::update_command_progress(
+            &mut quests,
+            &ncmd(CMD_YANK),
+        ));
         assert!(!quests[0].is_completed());
 
-        QuestTracker::update_command_progress(
+        drop(QuestTracker::update_command_progress(
             &mut quests,
             &ncmd(crate::grammar::commands::CMD_PASTE_AFTER),
-        );
+        ));
         assert!(quests[0].is_completed());
     }
 
@@ -991,10 +1126,10 @@ mod tests {
             QuestDifficulty::Medium,
         )];
 
-        QuestTracker::update_time_progress(&mut quests, 5);
+        drop(QuestTracker::update_time_progress(&mut quests, 5));
         assert!(!quests[0].is_completed());
 
-        QuestTracker::update_time_progress(&mut quests, 5);
+        drop(QuestTracker::update_time_progress(&mut quests, 5));
         assert!(quests[0].is_completed());
     }
 
@@ -1103,14 +1238,14 @@ mod tests {
                 },
                 QuestDifficulty::Easy,
             );
-            assert!(!quest.completed);
+            assert!(!quest.status().is_completed());
             assert!(!quest.is_completed());
             assert_eq!(ProgressTracker::current(&quest), 1);
             assert_eq!(ProgressTracker::target(&quest), 5);
 
             quest.mark_completed();
 
-            assert!(quest.completed);
+            assert!(quest.status().is_completed());
             assert!(quest.is_completed());
             assert!((quest.progress() - 1.0).abs() < f64::EPSILON);
             assert_eq!(ProgressTracker::current(&quest), 5);

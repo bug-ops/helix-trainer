@@ -62,6 +62,34 @@ fn pos(row: usize, col: usize) -> Pos {
     Pos::try_from([row, col]).expect("valid position fixture")
 }
 
+/// An easy quest with an explicit XP reward, for tests that assert exact XP.
+#[must_use]
+pub fn quest(
+    id: QuestId,
+    quest_type: crate::gamification::QuestType,
+    xp_reward: u32,
+) -> crate::gamification::Quest {
+    let mut quest =
+        crate::gamification::Quest::new(id, quest_type, crate::gamification::QuestDifficulty::Easy);
+    quest.xp_reward = xp_reward;
+    quest
+}
+
+/// A completed, rewarded quest, for tests that need a quest done today.
+#[must_use]
+pub fn rewarded_quest(id: &str) -> crate::gamification::Quest {
+    let mut quest = quest(
+        qid(id),
+        crate::gamification::QuestType::ScenarioCompletion {
+            target: 1,
+            current: 1,
+        },
+        25,
+    );
+    quest.mark_rewarded();
+    quest
+}
+
 /// Recorded actions for fixture strings: each is a Normal-mode command when it
 /// parses as one and typed Insert-mode input otherwise, all at time zero.
 #[must_use]

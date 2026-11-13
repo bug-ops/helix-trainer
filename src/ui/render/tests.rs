@@ -2672,7 +2672,7 @@ mod shared_definitions {
                 )
             })
             .collect();
-        state.progress.profile.daily_quests[0].completed = true;
+        state.progress.profile.daily_quests[0].mark_completed();
         let text = screen_text(&state);
         assert!(text.contains("Active Quests: 3/4"), "{text}");
     }

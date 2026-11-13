@@ -283,8 +283,8 @@ fn test_quest_progress_changes_tracking() {
 }
 
 /// Regression test for #267: completing a quest through the live message-passing
-/// flow must populate `completed_quests_today`, since `StreakManager::update_streak`
-/// gates next-day streak increments on that set being non-empty.
+/// flow must show in `completed_quests_today`, since `StreakManager::update_streak`
+/// gates next-day streak increments on it.
 #[test]
 fn test_quest_completion_populates_completed_quests_today() {
     let scenario = create_test_scenario();
@@ -303,7 +303,7 @@ fn test_quest_completion_populates_completed_quests_today() {
         ));
     }
 
-    assert!(state.progress.profile.completed_quests_today.is_empty());
+    assert_eq!(state.progress.profile.completed_quests_today().count(), 0);
 
     update(
         &mut state,
@@ -315,8 +315,7 @@ fn test_quest_completion_populates_completed_quests_today() {
         state
             .progress
             .profile
-            .completed_quests_today
-            .contains("test_quest")
+            .is_quest_completed(&qid("test_quest"))
     );
 }
 
@@ -477,4 +476,52 @@ fn test_scenario_completed_event_feeds_time_invested() {
             ..
         }
     ));
+}
+
+/// FR-036: two quests completed by one event are both awarded, once each, whatever
+/// their order in the list; a later event does not award them again.
+#[test]
+fn test_double_completion_is_awarded_once_each_regardless_of_order() {
+    for reversed in [false, true] {
+        let scenario = create_test_scenario();
+        let mut state = create_test_app_state(vec![scenario]);
+        let mut quests = vec![
+            crate::testing::quest(
+                qid("first"),
+                QuestType::CommandPractice {
+                    command: ncmd("x"),
+                    target: 1,
+                    current: 0,
+                },
+                40,
+            ),
+            crate::testing::quest(
+                qid("second"),
+                QuestType::Exploration {
+                    target_commands: 1,
+                    commands_used: HashSet::new(),
+                },
+                60,
+            ),
+        ];
+        if reversed {
+            quests.reverse();
+        }
+        state.progress.profile.daily_quests = quests;
+        let xp_before = state.progress.profile.total_xp;
+
+        let first = crate::ui::state::handlers::apply_quest_event(
+            &mut state,
+            QuestEvent::CommandExecuted(ncmd("x")),
+        );
+        assert_eq!(first.award.bonuses.len(), 2);
+        assert_eq!(state.progress.profile.total_xp, xp_before + 100);
+
+        let again = crate::ui::state::handlers::apply_quest_event(
+            &mut state,
+            QuestEvent::CommandExecuted(ncmd("x")),
+        );
+        assert_eq!(again.award.bonuses, vec![]);
+        assert_eq!(state.progress.profile.total_xp, xp_before + 100);
+    }
 }

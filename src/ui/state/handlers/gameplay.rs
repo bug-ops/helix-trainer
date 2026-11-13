@@ -2,16 +2,17 @@
 //!
 //! Handles command execution and hint display
 
-use std::time::Duration;
-
 use super::SessionInput;
 use super::key_history;
+use super::quests::quest_command;
 use crate::error::UserError;
 use crate::grammar::commands::CMD_ESCAPE;
+use crate::ids::NormalizedCommand;
 use crate::input::resolve::{Resolution, resolve_keys};
 use crate::security::error_chain;
 use crate::ui::state::{
-    AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, TypedScreen, dispatch,
+    AppState, HandlerOutcome, HintPanel, InputStateAccess, Message, QuestEvent, TypedScreen,
+    dispatch,
 };
 
 /// Handle `ShowHint` message
@@ -95,19 +96,13 @@ pub(crate) fn handle_execute_command(
             return Err(UserError::from(e));
         }
     };
-    let completed = task_data.session.completed().is_some();
     state.screen = TypedScreen::Task(task_data);
 
     // Update quest progress for executed command (after releasing session borrow)
     if let Some(executed) = executed {
         dispatch(
             state,
-            Message::UpdateQuestProgress {
-                command: Some(executed.command),
-                scenario_completed: completed,
-                scenario_id: None,
-                duration: Duration::from_secs(0),
-            },
+            Message::UpdateQuestProgress(QuestEvent::CommandExecuted(executed.command)),
         )?;
     }
 
@@ -116,7 +111,7 @@ pub(crate) fn handle_execute_command(
 
 /// A normal-mode command that was executed, for quest tracking.
 struct ExecutedCommand {
-    command: String,
+    command: NormalizedCommand,
 }
 
 /// Run one resolved key against the Task screen's session.
@@ -153,10 +148,9 @@ fn execute_on_task(
             apply_to_session(task_data, SessionInput::Command(&command))?;
 
             // Store last command for display only once the simulator accepted it
-            let command = command.to_string();
-            task_data.last_command = Some(command.clone());
+            task_data.last_command = Some(command.to_string());
 
-            Ok(Some(ExecutedCommand { command }))
+            Ok(quest_command(&command).map(|command| ExecutedCommand { command }))
         }
         Resolution::Pending | Resolution::Discarded => Ok(None),
     }

@@ -8,7 +8,7 @@ use super::common::{create_test_app_state, create_test_scenario};
 use crate::gamification::{Quest, QuestDifficulty, QuestType, StreakManager};
 use crate::testing::update_executing_effects as update;
 use crate::ui::notification::NotificationType;
-use crate::ui::state::Message;
+use crate::ui::state::{Message, QuestEvent};
 
 #[test]
 fn test_quest_progress_command_practice() {
@@ -32,23 +32,13 @@ fn test_quest_progress_command_practice() {
     // Execute "x" command twice
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
@@ -61,12 +51,7 @@ fn test_quest_progress_command_practice() {
     // Execute once more
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
@@ -103,12 +88,10 @@ fn test_quest_progress_scenario_completion() {
     // Simulate scenario completion
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: None,
-            scenario_completed: true,
-            scenario_id: Some(sid("test_scenario")),
+        Message::UpdateQuestProgress(QuestEvent::ScenarioCompleted {
+            id: sid("test_scenario"),
             duration: Duration::from_secs(5),
-        },
+        }),
     )
     .unwrap();
 
@@ -121,12 +104,10 @@ fn test_quest_progress_scenario_completion() {
     // Complete another scenario
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: None,
-            scenario_completed: true,
-            scenario_id: Some(sid("test_scenario")),
+        Message::UpdateQuestProgress(QuestEvent::ScenarioCompleted {
+            id: sid("test_scenario"),
             duration: Duration::from_secs(5),
-        },
+        }),
     )
     .unwrap();
 
@@ -166,12 +147,7 @@ fn test_quest_completion_awards_bonus_xp() {
     // Complete the quest
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
@@ -209,23 +185,13 @@ fn test_exploration_quest_tracking() {
     // Execute different commands
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("yy".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("yy"))),
     )
     .unwrap();
 
@@ -238,12 +204,7 @@ fn test_exploration_quest_tracking() {
     // Execute third unique command
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("p".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("p"))),
     )
     .unwrap();
 
@@ -265,35 +226,20 @@ fn test_commands_used_today_tracking() {
     // Execute some commands
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("yy".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("yy"))),
     )
     .unwrap();
 
     // Same command again (should not duplicate)
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
@@ -323,12 +269,9 @@ fn test_quest_progress_changes_tracking() {
     }
 
     // Execute command to trigger progress
-    let quest_update = crate::ui::state::handlers::apply_quest_progress(
+    let quest_update = crate::ui::state::handlers::apply_quest_event(
         &mut state,
-        Some("x"),
-        false,
-        None,
-        Duration::from_secs(0),
+        QuestEvent::CommandExecuted(ncmd("x")),
     );
 
     // Check that progress changes were returned
@@ -364,12 +307,7 @@ fn test_quest_completion_populates_completed_quests_today() {
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
@@ -415,12 +353,7 @@ fn test_streak_increments_next_day_after_live_quest_completion() {
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
@@ -463,12 +396,7 @@ fn test_streak_freeze_granted_after_all_daily_quests_completed_live() {
     for (i, id) in quest_ids.iter().enumerate() {
         update(
             &mut state,
-            Message::UpdateQuestProgress {
-                command: Some(id.to_string()),
-                scenario_completed: false,
-                scenario_id: None,
-                duration: Duration::from_secs(0),
-            },
+            Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd(id))),
         )
         .unwrap();
 
@@ -505,12 +433,7 @@ fn test_streak_freeze_not_granted_twice() {
 
     update(
         &mut state,
-        Message::UpdateQuestProgress {
-            command: Some("x".to_string()),
-            scenario_completed: false,
-            scenario_id: None,
-            duration: Duration::from_secs(0),
-        },
+        Message::UpdateQuestProgress(QuestEvent::CommandExecuted(ncmd("x"))),
     )
     .unwrap();
 
@@ -522,4 +445,36 @@ fn test_streak_freeze_not_granted_twice() {
             .visible()
             .any(|n| n.notification_type == NotificationType::StreakFreezeGranted)
     );
+}
+
+/// FR-031/FR-032: a completion's duration feeds time-invested quests.
+#[test]
+fn test_scenario_completed_event_feeds_time_invested() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    state.progress.profile.daily_quests = vec![Quest::new(
+        qid("time"),
+        QuestType::TimeInvested {
+            target_minutes: 5,
+            current_minutes: 0,
+        },
+        QuestDifficulty::Easy,
+    )];
+
+    update(
+        &mut state,
+        Message::UpdateQuestProgress(QuestEvent::ScenarioCompleted {
+            id: sid("test_scenario"),
+            duration: Duration::from_secs(90),
+        }),
+    )
+    .unwrap();
+
+    assert!(matches!(
+        state.progress.profile.daily_quests[0].quest_type,
+        QuestType::TimeInvested {
+            current_minutes: 1,
+            ..
+        }
+    ));
 }

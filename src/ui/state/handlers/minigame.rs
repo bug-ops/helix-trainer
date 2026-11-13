@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use super::SessionInput;
+use super::apply_quest_event;
 use super::key_history;
+use super::quests::{QuestXpAward, quest_command};
 use crate::config::Scenario;
 use crate::error::UserError;
 use crate::game::services::ScenarioCompletionService;
@@ -17,7 +19,7 @@ use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
 use crate::ui::state::{
     AppState, GameState, HandlerContext, HandlerOutcome, InputStateAccess, MiniGameData,
-    ModeSelectionData, TypedScreen,
+    ModeSelectionData, QuestEvent, TypedScreen,
 };
 
 /// Create and start a new mini-game session from available scenarios.
@@ -88,9 +90,6 @@ fn execute_minigame_command(
     state: &mut AppState,
     input: SessionInput<'_>,
 ) -> Result<(), UserError> {
-    // Snapshot quest completion status before updates
-    let was_completed = super::snapshot_quest_completion(state);
-
     let Some(session) = state.minigame_session_mut() else {
         return Ok(());
     };
@@ -100,8 +99,13 @@ fn execute_minigame_command(
         SessionInput::Text(text) => session.handle_command(text)?,
     }
 
-    // Update quest progress for command used (shared function)
-    super::track_command_for_quests(state, &input.text());
+    // Only a typed Normal-mode command counts as command practice; Insert-mode text does not.
+    let mut quest_award = QuestXpAward::default();
+    if let SessionInput::Command(command) = input
+        && let Some(normalized) = quest_command(command)
+    {
+        quest_award.absorb(apply_quest_event(state, QuestEvent::CommandExecuted(normalized)).award);
+    }
 
     // Re-borrow session after state modification
     let Some(session) = state
@@ -145,7 +149,16 @@ fn execute_minigame_command(
             // FirstPerfect/Perfect10.
             let is_perfect = actual_count <= optimal_count;
 
-            super::track_scenario_completion_for_quests(state, &scenario_id, duration);
+            quest_award.absorb(
+                apply_quest_event(
+                    state,
+                    QuestEvent::ScenarioCompleted {
+                        id: scenario_id,
+                        duration,
+                    },
+                )
+                .award,
+            );
 
             // Update mastery/perfect/completion counters the same way the training-mode
             // completion path (`record_scenario_completion`) does, so
@@ -203,14 +216,6 @@ fn execute_minigame_command(
         }
         // Transition state will be handled by timer
     }
-
-    // Award XP for any quests newly completed by this keystroke, from the single
-    // `was_completed` snapshot taken at the top of this function. Called exactly once
-    // per keystroke regardless of whether the scenario also completed here - unlike
-    // scenario-completion XP, a CommandPractice/Exploration quest can complete on a
-    // keystroke that doesn't finish the scenario, and this is the only place that
-    // awards it (this function adds XP internally).
-    let quest_award = super::award_quest_completion_xp(state, &was_completed);
 
     // Each `add_xp` call only reports whether *that* call crossed a level boundary, so
     // OR the scenario-completion and quest-completion outcomes together (mirrors the
@@ -607,7 +612,11 @@ mod tests {
         }
         let initial_xp = state.progress.profile.total_xp;
 
-        execute_minigame_command(&mut state, SessionInput::Text("h")).unwrap();
+        execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("h")),
+        )
+        .unwrap();
 
         // The scenario itself must not have completed - only the quest should have.
         if let Some(session) = state.minigame_session() {
@@ -664,7 +673,11 @@ mod tests {
             session.tick_countdown();
         }
 
-        execute_minigame_command(&mut state, SessionInput::Text("h")).unwrap();
+        execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("h")),
+        )
+        .unwrap();
 
         assert!(
             state.progress.profile.level >= 2,
@@ -692,7 +705,11 @@ mod tests {
             session.tick_countdown();
         }
 
-        execute_minigame_command(&mut state, SessionInput::Text("h")).unwrap();
+        execute_minigame_command(
+            &mut state,
+            SessionInput::Command(&crate::testing::normal("h")),
+        )
+        .unwrap();
 
         assert!(
             !state.ui.notifications.visible().any(|n| matches!(
@@ -1062,7 +1079,10 @@ mod tests {
 
         // Directly test that track_command_for_quests works
         // This function is from the quests module, imported in the parent module
-        crate::ui::state::handlers::quests::track_command_for_quests(&mut state, "j");
+        crate::ui::state::handlers::quests::track_command_for_quests(
+            &mut state,
+            &crate::ids::NormalizedCommand::from_raw("j").unwrap(),
+        );
 
         // Check that command quest was updated
         let cmd_progress_after = {
@@ -1089,6 +1109,45 @@ mod tests {
         // 1. The track_command_for_quests function correctly updates quest progress
         // 2. The tracking is integrated into minigame flow via execute_minigame_command
         // 3. Command usage is tracked for exploration quests
+    }
+
+    /// FR-033: text typed in Insert mode is not command practice; the command that
+    /// entered Insert mode still is.
+    #[test]
+    fn test_arcade_insert_text_is_not_command_practice() {
+        use crate::gamification::{Quest, QuestDifficulty, QuestType};
+
+        let mut state = create_test_state();
+        let practice = |id: &str, key: &str| Quest {
+            id: qid(id),
+            quest_type: QuestType::CommandPractice {
+                command: ncmd(key),
+                target: 5,
+                current: 0,
+            },
+            difficulty: QuestDifficulty::Easy,
+            xp_reward: 100,
+            completed: false,
+        };
+        state.progress.profile.daily_quests = vec![practice("q_i", "i"), practice("q_j", "j")];
+        start_minigame(&mut state);
+        if let Some(session) = state.minigame_session_mut() {
+            session.tick_countdown();
+            session.tick_countdown();
+            session.tick_countdown();
+        }
+
+        let enter_insert = crate::testing::normal("i");
+        execute_minigame_command(&mut state, SessionInput::Command(&enter_insert)).unwrap();
+        execute_minigame_command(&mut state, SessionInput::Text("j")).unwrap();
+
+        let progress = |index: usize| match &state.progress.profile.daily_quests[index].quest_type {
+            QuestType::CommandPractice { current, .. } => *current,
+            other => panic!("unexpected quest {other:?}"),
+        };
+        assert_eq!(progress(0), 1, "the Insert entry command counts");
+        assert_eq!(progress(1), 0, "typed text does not count");
+        assert!(!state.progress.commands_used_today.contains("j"));
     }
 
     #[test]

@@ -20,18 +20,13 @@ pub(super) use mode_selection::{
     handle_mode_selection_up, handle_select_arcade_mode,
 };
 pub(super) use navigation::{handle_back_to_menu, handle_navigate_to, handle_quit_app};
+pub(super) use notifications::handle_cleanup_notifications;
 pub(super) use profile::{
     handle_scroll_achievements, handle_show_achievements, handle_show_profile,
     handle_show_statistics,
 };
 pub(super) use quests::{
-    apply_quest_progress, format_quest_description, handle_update_quest_progress,
-};
-// Shared quest tracking functions for both training and arcade modes
-pub(super) use notifications::handle_cleanup_notifications;
-pub(super) use quests::{
-    award_quest_completion_xp, snapshot_quest_completion, track_command_for_quests,
-    track_scenario_completion_for_quests,
+    apply_quest_event, format_quest_description, handle_update_quest_progress,
 };
 pub(super) use review::{
     handle_abandon_review_session, handle_complete_review_command, handle_start_review_session,
@@ -49,16 +44,6 @@ pub(super) enum SessionInput<'a> {
     Text(&'a str),
     /// A parsed Normal-mode command, count included
     Command(&'a crate::helix::normal_command::NormalCommand),
-}
-
-impl SessionInput<'_> {
-    /// The input as the string quest tracking works with.
-    fn text(&self) -> std::borrow::Cow<'_, str> {
-        match self {
-            Self::Text(text) => std::borrow::Cow::Borrowed(text),
-            Self::Command(command) => std::borrow::Cow::Owned(command.to_string()),
-        }
-    }
 }
 
 mod category_filters;

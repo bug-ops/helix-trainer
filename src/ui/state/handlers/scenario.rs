@@ -2,7 +2,7 @@
 //!
 //! Handles starting, completing, retrying, and abandoning scenarios
 
-use super::apply_quest_progress;
+use super::apply_quest_event;
 use crate::config::Difficulty;
 use crate::error::UserError;
 use crate::game::GameSession;
@@ -14,7 +14,7 @@ use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
 use crate::ui::state::{
     AppState, CompletedTask, EndGameSummaryData, HandlerContext, HandlerOutcome, MenuData,
-    NextStep, ResultsData, TaskData, TaskSession, TypedScreen, XPBreakdown,
+    NextStep, QuestEvent, ResultsData, TaskData, TaskSession, TypedScreen, XPBreakdown,
 };
 use crate::ui::state::{CategoryProgress, MasteryInfo};
 use rust_i18n::t;
@@ -181,7 +181,13 @@ pub(crate) fn handle_complete_scenario(state: &mut AppState) -> HandlerOutcome {
     let duration = feedback.duration;
 
     // Update quest progress
-    let quest_update = apply_quest_progress(state, None, true, Some(scenario_id.clone()), duration);
+    let quest_update = apply_quest_event(
+        state,
+        QuestEvent::ScenarioCompleted {
+            id: scenario_id.clone(),
+            duration,
+        },
+    );
 
     // Create context for helper functions
     let mut ctx = HandlerContext::new(

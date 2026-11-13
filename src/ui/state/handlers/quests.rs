@@ -3,36 +3,40 @@
 //! Handles quest progress updates and tracking
 
 use crate::gamification::{QuestTracker, QuestType, StreakManager};
+use crate::helix::normal_command::NormalCommand;
 use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::QuestBonus;
-use crate::ui::state::{AppState, QuestProgressChange};
+use crate::ui::state::{AppState, QuestEvent, QuestProgressChange};
 use crate::ui::text;
 use std::collections::HashMap;
 use std::time::Duration;
+
+/// The quest form of an executed Normal-mode command, or `None` (logged) when it has none.
+pub(crate) fn quest_command(command: &NormalCommand) -> Option<NormalizedCommand> {
+    command
+        .normalized()
+        .inspect_err(|error| {
+            tracing::warn!(%error, %command, "Executed command has no quest form");
+        })
+        .ok()
+}
 
 /// Track command usage for quests
 ///
 /// Shared between training and arcade modes.
 /// Updates command practice and exploration quests.
 ///
-/// Normalizes register ops (`"ay` -> `"y`) and command-line invocations
-/// (`:g 3` -> `:goto`) before tracking, so quest matching (exact equality)
-/// and FSRS see the same command id for the same skill.
-pub(crate) fn track_command_for_quests(state: &mut AppState, command: &str) {
-    let Ok(normalized) = NormalizedCommand::from_raw(command) else {
-        return;
-    };
-
+/// The command is already normalized (register ops `"ay` -> `"y`, command lines
+/// `:g 3` -> `:goto`), so quest matching (exact equality) and FSRS see the same
+/// command id for the same skill.
+pub(crate) fn track_command_for_quests(state: &mut AppState, command: &NormalizedCommand) {
     // Track for exploration quests
-    state
-        .progress
-        .commands_used_today
-        .insert(normalized.clone());
+    state.progress.commands_used_today.insert(command.clone());
 
     // Update command progress in quests
     let profile = &mut state.progress.profile;
-    QuestTracker::update_command_progress(&mut profile.daily_quests, &normalized);
+    QuestTracker::update_command_progress(&mut profile.daily_quests, command);
 }
 
 /// Track scenario completion for quests
@@ -48,6 +52,17 @@ pub(crate) fn track_scenario_completion_for_quests(
     QuestTracker::update_scenario_progress(&mut profile.daily_quests, scenario_id, duration);
 }
 
+/// Track time invested for quests, in whole minutes
+fn track_time_for_quests(state: &mut AppState, duration: Duration) {
+    let minutes = duration.as_secs() / 60;
+    if minutes > 0 {
+        QuestTracker::update_time_progress(
+            &mut state.progress.profile.daily_quests,
+            u32::try_from(minutes).unwrap_or(u32::MAX),
+        );
+    }
+}
+
 /// Result of [`award_quest_completion_xp`]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct QuestXpAward {
@@ -58,6 +73,14 @@ pub(crate) struct QuestXpAward {
     /// (e.g. scenario completion) must OR this into their own level-up check, since
     /// each `add_xp` call only reports whether *that* call crossed a level boundary.
     pub leveled_up: bool,
+}
+
+impl QuestXpAward {
+    /// Fold the outcome of a later award into this one.
+    pub(crate) fn absorb(&mut self, other: Self) {
+        self.bonuses.extend(other.bonuses);
+        self.leveled_up |= other.leveled_up;
+    }
 }
 
 /// Check and award XP for newly completed quests
@@ -174,27 +197,15 @@ pub(crate) struct QuestUpdate {
 
 /// Handle `UpdateQuestProgress` message
 ///
-/// Updates quest progress after a command; the per-update outcome is only needed at
-/// scenario completion, which calls [`apply_quest_progress`] directly.
-pub(crate) fn handle_update_quest_progress(
-    state: &mut AppState,
-    command: Option<&str>,
-    scenario_completed: bool,
-    scenario_id: Option<ScenarioId>,
-    duration: Duration,
-) {
-    apply_quest_progress(state, command, scenario_completed, scenario_id, duration);
+/// Updates quest progress after a quest event; the per-update outcome is only needed at
+/// scenario completion, which calls [`apply_quest_event`] directly.
+pub(crate) fn handle_update_quest_progress(state: &mut AppState, event: QuestEvent) {
+    apply_quest_event(state, event);
 }
 
-/// Update quest progress based on commands, scenario completions, or time, and return what
-/// changed so callers can hand it on by value.
-pub(crate) fn apply_quest_progress(
-    state: &mut AppState,
-    command: Option<&str>,
-    scenario_completed: bool,
-    scenario_id: Option<ScenarioId>,
-    duration: Duration,
-) -> QuestUpdate {
+/// Update quest progress for one event and return what changed so callers can hand it
+/// on by value.
+pub(crate) fn apply_quest_event(state: &mut AppState, event: QuestEvent) -> QuestUpdate {
     let mut changes = Vec::new();
 
     // Snapshot progress BEFORE updates
@@ -210,24 +221,12 @@ pub(crate) fn apply_quest_progress(
     // Track which quests were already completed before this update
     let was_completed = snapshot_quest_completion(state);
 
-    // Update command practice quests and exploration quests
-    if let Some(cmd) = command {
-        track_command_for_quests(state, cmd);
-    }
-
-    // Update scenario completion quests and speed run quests
-    if scenario_completed && let Some(id) = scenario_id {
-        track_scenario_completion_for_quests(state, &id, duration);
-    }
-
-    // Update time invested quests
-    let minutes = duration.as_secs() / 60;
-    if minutes > 0 {
-        let profile = &mut state.progress.profile;
-        QuestTracker::update_time_progress(
-            &mut profile.daily_quests,
-            u32::try_from(minutes).unwrap_or(u32::MAX),
-        );
+    match event {
+        QuestEvent::CommandExecuted(command) => track_command_for_quests(state, &command),
+        QuestEvent::ScenarioCompleted { id, duration } => {
+            track_scenario_completion_for_quests(state, &id, duration);
+            track_time_for_quests(state, duration);
+        }
     }
 
     // Detect progress changes AFTER updates

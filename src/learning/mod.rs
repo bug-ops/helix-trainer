@@ -57,10 +57,6 @@ pub enum LearningError {
         successes: u32,
     },
 
-    /// No performance record exists for the command.
-    #[error("Command not found: {0}")]
-    CommandNotFound(String),
-
     /// The FSRS scheduler rejected an operation; the `fsrs` error is the source.
     #[error("FSRS scheduler rejected the update")]
     FsrsError(#[source] fsrs::FSRSError),

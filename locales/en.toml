@@ -670,7 +670,6 @@ scenario_load = "Failed to load scenario file. Please check the file path and fo
 scenario_too_complex = "The scenario file is too large or complex. Please use a smaller file."
 operation_failed = "Operation failed. Please try again."
 command_failed = "Command execution failed: %{detail}"
-command_not_found = "Command execution failed: Command not found in registry"
 storage = "Could not read or save your data. Please try again."
 
 [errors.simulator]

@@ -29,8 +29,6 @@ pub enum UserErrorKind {
     OperationFailed,
     /// The simulator rejected a command.
     Command(SimulatorErrorKind),
-    /// A command had no performance record.
-    CommandNotFound,
     /// Reading or writing the saved profile or configuration failed.
     Storage,
 }
@@ -167,10 +165,6 @@ pub enum CommandFailure {
     /// The simulator rejected the command.
     #[error(transparent)]
     Simulator(#[from] SimulatorError),
-
-    /// No performance record exists for the command.
-    #[error("Command not found in registry")]
-    CommandNotFound(#[source] crate::learning::LearningError),
 }
 
 /// Typed internal cause kept below a sanitized [`UserError`].
@@ -281,9 +275,6 @@ impl UserError {
             Self::CommandFailed {
                 failure: CommandFailure::Simulator(error),
             } => UserErrorKind::Command(error.into()),
-            Self::CommandFailed {
-                failure: CommandFailure::CommandNotFound(_),
-            } => UserErrorKind::CommandNotFound,
             Self::Storage(_) => UserErrorKind::Storage,
         }
     }
@@ -343,15 +334,9 @@ impl From<crate::gamification::GamificationError> for UserError {
         use crate::gamification::GamificationError;
 
         match err {
-            e @ GamificationError::InvalidLevel(_) => UserError::InvalidState {
-                message: "Invalid level".to_string(),
-                cause: Some(e.into()),
-            },
-            e @ (GamificationError::QuestNotFound(_)
-            | GamificationError::StreakFreezeUnavailable
+            e @ (GamificationError::StreakFreezeUnavailable
             | GamificationError::StreakFreezeNothingToProtect
-            | GamificationError::StreakFreezeGapOutOfRange { .. }
-            | GamificationError::AchievementAlreadyUnlocked(_)) => UserError::OperationFailed {
+            | GamificationError::StreakFreezeGapOutOfRange { .. }) => UserError::OperationFailed {
                 cause: Some(e.into()),
             },
         }
@@ -368,9 +353,6 @@ impl From<crate::learning::LearningError> for UserError {
             | LearningError::InvalidCounters { .. }) => UserError::InvalidState {
                 message: "Invalid learning parameters".to_string(),
                 cause: Some(e.into()),
-            },
-            e @ LearningError::CommandNotFound(_) => UserError::CommandFailed {
-                failure: CommandFailure::CommandNotFound(e),
             },
             e @ LearningError::FsrsError(_) => UserError::OperationFailed {
                 cause: Some(e.into()),

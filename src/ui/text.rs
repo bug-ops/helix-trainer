@@ -20,7 +20,6 @@ pub fn user_error(kind: &UserErrorKind) -> String {
         UserErrorKind::Command(simulator) => {
             t!("errors.command_failed", detail = simulator_error(simulator))
         }
-        UserErrorKind::CommandNotFound => t!("errors.command_not_found"),
         UserErrorKind::Storage => t!("errors.storage"),
     }
     .into_owned()
@@ -182,7 +181,6 @@ mod tests {
     #[test]
     fn every_other_user_error_keeps_its_english_text() {
         use crate::error::UserError;
-        use crate::learning::LearningError;
 
         let errors = [
             UserError::invalid_state("detail"),
@@ -190,7 +188,6 @@ mod tests {
             UserError::scenario_load_error(),
             UserError::scenario_too_complex(),
             UserError::operation_failed(),
-            UserError::from(LearningError::CommandNotFound("x".to_string())),
         ];
         for error in errors {
             assert_eq!(user_error(&error.kind()), error.to_string(), "{error:?}");

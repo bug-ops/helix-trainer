@@ -633,3 +633,195 @@ fn test_search_scenarios_need_the_word_selection_before_star() {
         );
     }
 }
+
+/// A deliberately untaught Helix-bound command: key, upstream name, reason.
+struct Untaught {
+    key: &'static str,
+    name: &'static str,
+    reason: &'static str,
+}
+
+/// Keys that no bundled scenario teaches yet. Sorted by key; the guard fails on a stale entry, so
+/// the list can only shrink as the coverage issues land.
+const UNTAUGHT: &[Untaught] = &[
+    Untaught {
+        key: "&",
+        name: "align_selections",
+        reason: "#643",
+    },
+    Untaught {
+        key: ";",
+        name: "collapse_selection",
+        reason: "#643",
+    },
+    Untaught {
+        key: "?",
+        name: "rsearch",
+        reason: "#644",
+    },
+    Untaught {
+        key: "Alt-*",
+        name: "search_selection",
+        reason: "#644",
+    },
+    Untaught {
+        key: "Alt-,",
+        name: "remove_primary_selection",
+        reason: "#643",
+    },
+    Untaught {
+        key: "Alt--",
+        name: "merge_selections",
+        reason: "#643",
+    },
+    Untaught {
+        key: "Alt-;",
+        name: "flip_selections",
+        reason: "#643",
+    },
+    Untaught {
+        key: "Alt-K",
+        name: "remove_selections",
+        reason: "#643",
+    },
+    Untaught {
+        key: "Alt-_",
+        name: "merge_consecutive_selections",
+        reason: "#643",
+    },
+    Untaught {
+        key: "Alt-`",
+        name: "switch_to_uppercase",
+        reason: "#645",
+    },
+    Untaught {
+        key: "Alt-c",
+        name: "change_selection_noyank",
+        reason: "#645",
+    },
+    Untaught {
+        key: "Alt-d",
+        name: "delete_selection_noyank",
+        reason: "#645",
+    },
+    Untaught {
+        key: "Alt-x",
+        name: "shrink_to_line_bounds",
+        reason: "tracked by #141",
+    },
+    Untaught {
+        key: "Ctrl-c",
+        name: "toggle_comments",
+        reason: "#645",
+    },
+    Untaught {
+        key: "K",
+        name: "keep_selections",
+        reason: "#643",
+    },
+    Untaught {
+        key: "v",
+        name: "select_mode",
+        reason: "#644",
+    },
+    Untaught {
+        key: "zb",
+        name: "align_view_bottom",
+        reason: "#646, view-only",
+    },
+    Untaught {
+        key: "zj",
+        name: "scroll_down",
+        reason: "#646",
+    },
+    Untaught {
+        key: "zk",
+        name: "scroll_up",
+        reason: "#646",
+    },
+    Untaught {
+        key: "zm",
+        name: "align_view_middle",
+        reason: "#646, view-only",
+    },
+    Untaught {
+        key: "zt",
+        name: "align_view_top",
+        reason: "#646, view-only",
+    },
+    Untaught {
+        key: "zz",
+        name: "align_view_center",
+        reason: "#646, view-only",
+    },
+];
+
+/// Keys that the bundled scenarios teach: a normalized `solution.commands` token with its count
+/// prefix stripped, or a `commands_taught` value.
+fn taught_keys() -> std::collections::BTreeSet<String> {
+    use helix_trainer::grammar::commands::normalize_command_id;
+    use helix_trainer::helix::registry::split_count_prefix;
+
+    let mut taught = std::collections::BTreeSet::new();
+    for scenario in ScenarioLoader::new()
+        .load_from_embedded("en")
+        .expect("Failed to load embedded scenarios")
+    {
+        for token in &scenario.solution.commands {
+            let normalized = normalize_command_id(token);
+            let (_, key) = split_count_prefix(&normalized);
+            taught.insert(key.to_owned());
+        }
+        for command in &scenario.metadata.commands_taught {
+            taught.insert(command.as_str().to_owned());
+        }
+    }
+    taught
+}
+
+/// FR-027 to FR-029: every `Binding::Helix` command of the normal registry is taught by a bundled
+/// scenario or is on the `UNTAUGHT` list, and the list holds no taught key.
+#[test]
+fn test_every_registered_helix_command_is_taught_or_listed() {
+    use helix_trainer::helix::registry::normal_registry;
+
+    let taught = taught_keys();
+    let mut untaught: Vec<(&str, &str)> = normal_registry()
+        .all_commands()
+        .filter_map(|meta| meta.name().map(|name| (meta.key(), name.as_str())))
+        .filter(|(key, _)| !taught.contains(*key))
+        .collect();
+    untaught.sort_unstable();
+
+    let listed: Vec<&str> = UNTAUGHT.iter().map(|entry| entry.key).collect();
+    assert!(
+        listed.is_sorted(),
+        "UNTAUGHT must be sorted by key: {listed:?}"
+    );
+    assert!(
+        UNTAUGHT.iter().all(|entry| !entry.reason.is_empty()),
+        "every UNTAUGHT entry needs a reason"
+    );
+
+    let missing: Vec<String> = untaught
+        .iter()
+        .filter(|(key, _)| !listed.contains(key))
+        .map(|(key, name)| format!("`{key}` ({name})"))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "registered Helix commands taught by no scenario and not on UNTAUGHT: {}",
+        missing.join(", ")
+    );
+
+    let stale: Vec<String> = UNTAUGHT
+        .iter()
+        .filter(|entry| taught.contains(entry.key))
+        .map(|entry| format!("`{}` ({})", entry.key, entry.name))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "UNTAUGHT lists commands that a scenario now teaches, remove them: {}",
+        stale.join(", ")
+    );
+}

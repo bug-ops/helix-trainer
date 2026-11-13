@@ -185,3 +185,36 @@ category = "movement"
 difficulty = "intermediate"
 tags = ["till", "backward", "navigation"]
 commands_taught = ["T"]
+
+[[scenarios]]
+id = "repeat_last_motion_001"
+name = "Repeat the last find"
+description = "Use 'Alt-.' to repeat the last f, F, t or T motion"
+
+hints = [
+    "After 'f' and a character, the same search can be repeated without retyping the character",
+    "'Alt-.' repeats the last find or till motion",
+]
+
+[scenarios.setup]
+file_content = """id,name,age,city"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """id,name,age,city"""
+selection = [0, 2, 0, 8]
+
+[scenarios.solution]
+commands = ["f,", "Alt-."]
+description = "Press 'f,' to find the first comma, then 'Alt-.' to find the next one"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["find", "repeat", "navigation"]
+commands_taught = ["Alt-."]

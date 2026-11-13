@@ -154,3 +154,82 @@ category = "movement"
 difficulty = "beginner"
 tags = ["goto", "document", "navigation"]
 commands_taught = ["ge"]
+
+[[scenarios]]
+id = "goto_line_count_001"
+name = "Go to a line by number"
+description = "Use a count with 'G' to jump straight to a line of a long file"
+
+hints = [
+    "Type the line number first, then 'G'",
+    "'12G' goes to line 12 in one action, far fewer than pressing 'j' eleven times",
+]
+
+[scenarios.setup]
+file_content = """fn item_01() {}
+fn item_02() {}
+fn item_03() {}
+fn item_04() {}
+fn item_05() {}
+fn item_06() {}
+fn item_07() {}
+fn item_08() {}
+fn item_09() {}
+fn item_10() {}
+fn item_11() {}
+fn item_12() {}
+fn item_13() {}
+fn item_14() {}
+fn item_15() {}
+fn item_16() {}
+fn item_17() {}
+fn item_18() {}
+fn item_19() {}
+fn item_20() {}
+fn item_21() {}
+fn item_22() {}
+fn item_23() {}
+fn item_24() {}"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """fn item_01() {}
+fn item_02() {}
+fn item_03() {}
+fn item_04() {}
+fn item_05() {}
+fn item_06() {}
+fn item_07() {}
+fn item_08() {}
+fn item_09() {}
+fn item_10() {}
+fn item_11() {}
+fn item_12() {}
+fn item_13() {}
+fn item_14() {}
+fn item_15() {}
+fn item_16() {}
+fn item_17() {}
+fn item_18() {}
+fn item_19() {}
+fn item_20() {}
+fn item_21() {}
+fn item_22() {}
+fn item_23() {}
+fn item_24() {}"""
+cursor_position = [11, 0]
+
+[scenarios.solution]
+commands = ["12G"]
+description = "Press '12G' to jump to line 12"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "movement"
+difficulty = "intermediate"
+tags = ["goto", "line", "count", "navigation"]
+commands_taught = ["G"]

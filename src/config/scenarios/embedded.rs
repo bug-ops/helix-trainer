@@ -45,6 +45,7 @@ const MOVEMENT_GOTO_COMMANDS: &str =
     include_str!("../../../scenarios/en/movement/goto-commands.toml");
 const MOVEMENT_LINE_NAVIGATION: &str =
     include_str!("../../../scenarios/en/movement/line-navigation.toml");
+const MOVEMENT_LONG_WORD: &str = include_str!("../../../scenarios/en/movement/long-word.toml");
 const MOVEMENT_LINE: &str = include_str!("../../../scenarios/en/movement/line.toml");
 const MOVEMENT_MATCH_BRACKETS: &str =
     include_str!("../../../scenarios/en/movement/match-brackets.toml");
@@ -134,6 +135,7 @@ const EN_SCENARIOS: &[&str] = &[
     MOVEMENT_GOTO_COMMANDS,
     MOVEMENT_LINE_NAVIGATION,
     MOVEMENT_LINE,
+    MOVEMENT_LONG_WORD,
     MOVEMENT_MATCH_BRACKETS,
     MOVEMENT_PARAGRAPH,
     MOVEMENT_PRECISION,
@@ -204,9 +206,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_embedded_scenarios_en() {
-        let scenarios = get_embedded_scenarios("en");
-        assert_eq!(scenarios.len(), 40, "Expected 40 scenario files");
+    fn every_english_scenario_file_is_embedded() {
+        let on_disk = walkdir::WalkDir::new(concat!(env!("CARGO_MANIFEST_DIR"), "/scenarios/en"))
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "toml"))
+            .count();
+        assert_eq!(
+            get_embedded_scenarios("en").len(),
+            on_disk,
+            "a scenario file under scenarios/en is not listed in EN_SCENARIOS"
+        );
     }
 
     #[test]

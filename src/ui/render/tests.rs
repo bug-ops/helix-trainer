@@ -185,13 +185,12 @@ mod helper_tests {
 // ==================== Editor Rendering Tests ====================
 
 mod editor_tests {
-    use crate::helix::SelectionBounds;
+    use crate::helix::{Pos, SelectionBounds};
     use crate::ui::render::editor::CursorInfo;
 
     fn primary_cursor(row: usize, col: usize) -> Vec<CursorInfo> {
         vec![CursorInfo {
-            row,
-            col,
+            pos: Pos::new(row, col),
             is_primary: true,
         }]
     }
@@ -273,7 +272,7 @@ mod editor_tests {
 
     #[test]
     fn test_render_editor_with_diff_selection_present() {
-        let selection = SelectionBounds::new(0, 0, 0, 5);
+        let selection = SelectionBounds::new(Pos::new(0, 0), Pos::new(0, 5));
         let lines = super::super::editor::render_editor_with_diff(
             "hello world\n",
             "hello world\n",

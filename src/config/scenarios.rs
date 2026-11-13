@@ -19,7 +19,8 @@ use std::path::{Path, PathBuf};
 
 mod cursor;
 
-pub use cursor::{BoundError, Bounded, CursorField, CursorRange, CursorSpec, Pos};
+pub use crate::helix::{CursorRange, Pos};
+pub use cursor::{BoundError, Bounded, CursorField, CursorSpec};
 
 /// Why a scenario's cursor setup or target was rejected.
 ///

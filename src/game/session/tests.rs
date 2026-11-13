@@ -1,7 +1,7 @@
 //! Tests for `GameSession`
 
 use super::*;
-use crate::helix::Language;
+use crate::helix::{Language, Pos};
 use crate::testing::ScenarioBuilder;
 use crate::testing::sid;
 use crate::time::FakeMonotonicClock;
@@ -428,13 +428,13 @@ fn test_completion_progress_not_100_while_in_insert_mode() {
     }
 }
 
-fn movement_scenario(target_cursor: (usize, usize)) -> Scenario {
+fn movement_scenario(target_cursor: Pos) -> Scenario {
     ScenarioBuilder::new()
         .id("progress_move_001")
         .setup_content("abcdefghij\nsecond line")
         .setup_cursor(0, 0)
         .target_content("abcdefghij\nsecond line")
-        .target_cursor(target_cursor.0, target_cursor.1)
+        .target_cursor(target_cursor.row(), target_cursor.col())
         .commands(vec!["l"])
         .optimal_count(1)
         .build()
@@ -449,13 +449,13 @@ fn step(session: GameSession<Active>, command: &str) -> GameSession<Active> {
 
 #[test]
 fn test_progress_below_100_when_only_cursor_differs_from_target() {
-    let session = GameSession::new(movement_scenario((0, 8))).unwrap();
+    let session = GameSession::new(movement_scenario(Pos::new(0, 8))).unwrap();
     assert!(session.completion_progress() < 100);
 }
 
 #[test]
 fn test_progress_increases_as_cursor_approaches_target() {
-    let mut session = GameSession::new(movement_scenario((0, 8))).unwrap();
+    let mut session = GameSession::new(movement_scenario(Pos::new(0, 8))).unwrap();
     let mut previous = session.completion_progress();
     for _ in 0..7 {
         session = step(session, "l");
@@ -478,7 +478,7 @@ fn test_progress_below_100_when_selection_differs_from_target() {
         .setup_cursor(0, 0)
         .target_content("hello world")
         .target_cursor(0, 4)
-        .target_selection((0, 0), (0, 4))
+        .target_selection(Pos::new(0, 0), Pos::new(0, 4))
         .commands(vec!["e"])
         .optimal_count(1)
         .build();

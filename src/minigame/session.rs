@@ -7,7 +7,7 @@ use crate::config::{Difficulty, LastAction, Scenario};
 use crate::constants::EXTRA_LIFE_SCORE_MILESTONE;
 use crate::game::CommandExecutor;
 use crate::game::GameError;
-use crate::helix::{AnyModeSimulator, EditorSnapshot};
+use crate::helix::{AnyModeSimulator, EditorSnapshot, Pos};
 use crate::learning::PerformanceTracker;
 use crate::minigame::{
     DifficultyController, DifficultyLevel, LevelChange, MiniGameMode, MiniGameState, MiniGameStats,
@@ -233,7 +233,7 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
         self.target_snapshot.content.clone()
     }
 
-    fn current_cursor(&self) -> (usize, usize) {
+    fn current_cursor(&self) -> Pos {
         self.simulator.display().cursor_position()
     }
 
@@ -241,7 +241,7 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
         clippy::redundant_closure_for_method_calls,
         reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
     )]
-    fn target_cursor(&self) -> (usize, usize) {
+    fn target_cursor(&self) -> Pos {
         with_target_display(&self.target_snapshot, |d| d.cursor_position())
     }
 
@@ -280,34 +280,28 @@ impl crate::game::PlayableScenario for ActiveMiniScenario {
             .unwrap_or(crate::config::DEFAULT_LANGUAGE)
     }
 
-    fn all_cursors(&self) -> Vec<(usize, usize)> {
+    fn all_cursors(&self) -> Vec<Pos> {
         self.simulator.display().all_cursor_positions()
     }
 
     fn all_selections(&self) -> Vec<crate::helix::SelectionBounds> {
-        self.simulator
-            .display()
-            .all_selection_bounds()
-            .into_iter()
-            .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
-            .collect()
+        self.simulator.display().all_selection_bounds()
     }
 
     #[expect(
         clippy::redundant_closure_for_method_calls,
         reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
     )]
-    fn all_target_cursors(&self) -> Vec<(usize, usize)> {
+    fn all_target_cursors(&self) -> Vec<Pos> {
         with_target_display(&self.target_snapshot, |d| d.all_cursor_positions())
     }
 
+    #[expect(
+        clippy::redundant_closure_for_method_calls,
+        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
+    )]
     fn all_target_selections(&self) -> Vec<crate::helix::SelectionBounds> {
-        with_target_display(&self.target_snapshot, |d| {
-            d.all_selection_bounds()
-                .into_iter()
-                .map(|((sr, sc), (er, ec))| crate::helix::SelectionBounds::new(sr, sc, er, ec))
-                .collect()
-        })
+        with_target_display(&self.target_snapshot, |d| d.all_selection_bounds())
     }
 }
 
@@ -1654,7 +1648,7 @@ mod tests {
 
         // Check that the cursor moved
         if let Some(scenario) = session.current_scenario() {
-            let (row, _col) = scenario.current_cursor();
+            let row = scenario.current_cursor().row();
             assert_eq!(row, 2, "Cursor should be on last line (row 2)");
         }
     }

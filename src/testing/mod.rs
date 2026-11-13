@@ -52,16 +52,10 @@ pub fn point(row: usize, col: usize) -> CursorSpec {
     CursorSpec::Point(pos(row, col))
 }
 
-/// A single-selection [`CursorSpec`] from `anchor` to `head`, panicking on an out-of-range fixture.
-///
-/// # Panics
-///
-/// Panics if a coordinate exceeds the scenario position limit.
+/// A single-selection [`CursorSpec`] from `anchor` to `head`.
 #[must_use]
-pub fn selection(anchor: (usize, usize), head: (usize, usize)) -> CursorSpec {
-    CursorSpec::Range(
-        CursorRange::try_from([anchor.0, anchor.1, head.0, head.1]).expect("valid range fixture"),
-    )
+pub fn selection(anchor: Pos, head: Pos) -> CursorSpec {
+    CursorSpec::Range(CursorRange::new(anchor, head))
 }
 
 fn pos(row: usize, col: usize) -> Pos {

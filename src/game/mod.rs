@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use crate::helix::{ModeKind, SelectionBounds};
+use crate::helix::{ModeKind, Pos, SelectionBounds};
 
 pub mod command_context;
 mod error;
@@ -43,7 +43,7 @@ pub use session::{
 ///
 /// fn render_editor<S: PlayableScenario>(session: &S) {
 ///     let current_content = session.current_content();
-///     let (cursor_row, cursor_col) = session.current_cursor();
+///     let cursor = session.current_cursor();
 ///     // ... render editor
 /// }
 /// ```
@@ -54,11 +54,11 @@ pub trait PlayableScenario {
     /// Get target editor content as string
     fn target_content(&self) -> String;
 
-    /// Get current cursor position as (row, col)
-    fn current_cursor(&self) -> (usize, usize);
+    /// Get current cursor position as a [`Pos`]
+    fn current_cursor(&self) -> Pos;
 
-    /// Get target cursor position as (row, col)
-    fn target_cursor(&self) -> (usize, usize);
+    /// Get target cursor position as a [`Pos`]
+    fn target_cursor(&self) -> Pos;
 
     /// Get current selection bounds (if any)
     fn current_selection(&self) -> Option<SelectionBounds>;
@@ -90,9 +90,9 @@ pub trait PlayableScenario {
 
     /// Get all cursor positions for multi-cursor scenarios.
     ///
-    /// Returns a vector of (row, col) pairs. The first cursor is the primary cursor.
+    /// Returns a vector of [`Pos`]. The first cursor is the primary cursor.
     /// Default implementation returns only the primary cursor.
-    fn all_cursors(&self) -> Vec<(usize, usize)> {
+    fn all_cursors(&self) -> Vec<Pos> {
         vec![self.current_cursor()]
     }
 
@@ -106,9 +106,9 @@ pub trait PlayableScenario {
 
     /// Get all target cursor positions for multi-cursor scenarios.
     ///
-    /// Returns a vector of (row, col) pairs. The first cursor is the primary cursor.
+    /// Returns a vector of [`Pos`]. The first cursor is the primary cursor.
     /// Default implementation returns only the primary target cursor.
-    fn all_target_cursors(&self) -> Vec<(usize, usize)> {
+    fn all_target_cursors(&self) -> Vec<Pos> {
         vec![self.target_cursor()]
     }
 

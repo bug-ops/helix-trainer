@@ -9,43 +9,24 @@ use std::fmt;
 use serde::Deserialize;
 
 use super::ScenarioValidationError;
+use crate::helix::{CursorRange, Pos};
 use crate::limits::{MAX_CURSORS_PER_SCENARIO, MAX_SELECTIONS_PER_SCENARIO};
 
 /// Largest accepted row or column of a scenario position.
 const MAX_COORDINATE: usize = 10_000;
 
-/// A zero-based `(row, col)` position inside a scenario document.
+/// Validates a `[row, col]` pair from a scenario file against the coordinate limit.
 ///
 /// # Examples
 ///
 /// ```
-/// use helix_trainer::config::Pos;
+/// use helix_trainer::helix::Pos;
 ///
 /// let pos = Pos::try_from([2, 5])?;
 /// assert_eq!((pos.row(), pos.col()), (2, 5));
 /// assert!(Pos::try_from([10_001, 0]).is_err());
 /// # Ok::<(), helix_trainer::config::scenarios::ScenarioValidationError>(())
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Pos {
-    row: usize,
-    col: usize,
-}
-
-impl Pos {
-    /// The zero-based row.
-    #[must_use]
-    pub fn row(self) -> usize {
-        self.row
-    }
-
-    /// The zero-based column.
-    #[must_use]
-    pub fn col(self) -> usize {
-        self.col
-    }
-}
-
 impl TryFrom<[usize; 2]> for Pos {
     type Error = ScenarioValidationError;
 
@@ -57,52 +38,32 @@ impl TryFrom<[usize; 2]> for Pos {
                 actual,
             });
         }
-        Ok(Self { row, col })
+        Ok(Self::new(row, col))
     }
 }
 
-/// A selection from `anchor` (fixed end) to `head` (the cursor end).
+/// Validates `[anchor_row, anchor_col, head_row, head_col]` from a scenario file.
 ///
 /// # Examples
 ///
 /// ```
-/// use helix_trainer::config::CursorRange;
+/// use helix_trainer::helix::CursorRange;
 ///
 /// let range = CursorRange::try_from([0, 1, 2, 3])?;
 /// assert_eq!(range.anchor().col(), 1);
 /// assert_eq!(range.head().row(), 2);
 /// # Ok::<(), helix_trainer::config::scenarios::ScenarioValidationError>(())
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CursorRange {
-    anchor: Pos,
-    head: Pos,
-}
-
-impl CursorRange {
-    /// The fixed end of the selection.
-    #[must_use]
-    pub fn anchor(self) -> Pos {
-        self.anchor
-    }
-
-    /// The moving end of the selection, where the cursor sits.
-    #[must_use]
-    pub fn head(self) -> Pos {
-        self.head
-    }
-}
-
 impl TryFrom<[usize; 4]> for CursorRange {
     type Error = ScenarioValidationError;
 
     fn try_from(
         [anchor_row, anchor_col, head_row, head_col]: [usize; 4],
     ) -> Result<Self, Self::Error> {
-        Ok(Self {
-            anchor: Pos::try_from([anchor_row, anchor_col])?,
-            head: Pos::try_from([head_row, head_col])?,
-        })
+        Ok(Self::new(
+            Pos::try_from([anchor_row, anchor_col])?,
+            Pos::try_from([head_row, head_col])?,
+        ))
     }
 }
 

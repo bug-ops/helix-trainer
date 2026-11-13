@@ -3,38 +3,15 @@
 //! Provides shared functionality for initializing scenario states,
 //! reducing code duplication between training and arcade modes.
 
-use crate::config::{CursorSpec, DEFAULT_LANGUAGE, Pos, Scenario};
+use crate::config::{CursorSpec, DEFAULT_LANGUAGE, Scenario};
 use crate::helix::{AnyModeSimulator, EditorSnapshot};
 
 fn snapshot_of(content: String, cursor: &CursorSpec) -> EditorSnapshot {
-    let point = |p: &Pos| [p.row(), p.col()];
     match cursor {
-        CursorSpec::Point(p) => EditorSnapshot::from_row_col(content, p.row(), p.col()),
-        CursorSpec::Range(r) => EditorSnapshot::from_row_col_selection(
-            content,
-            [
-                r.anchor().row(),
-                r.anchor().col(),
-                r.head().row(),
-                r.head().col(),
-            ],
-        ),
-        CursorSpec::Points(ps) => {
-            let points: Vec<[usize; 2]> = ps.as_slice().iter().map(point).collect();
-            EditorSnapshot::from_multi_cursor(content, &points)
-        }
-        CursorSpec::Ranges(rs) => {
-            let ranges: Vec<[usize; 4]> = rs
-                .as_slice()
-                .iter()
-                .map(|r| {
-                    let [ar, ac] = point(&r.anchor());
-                    let [hr, hc] = point(&r.head());
-                    [ar, ac, hr, hc]
-                })
-                .collect();
-            EditorSnapshot::from_multi_selection(content, &ranges)
-        }
+        CursorSpec::Point(p) => EditorSnapshot::from_row_col(content, *p),
+        CursorSpec::Range(r) => EditorSnapshot::from_row_col_selection(content, *r),
+        CursorSpec::Points(ps) => EditorSnapshot::from_multi_cursor(content, ps.as_slice()),
+        CursorSpec::Ranges(rs) => EditorSnapshot::from_multi_selection(content, rs.as_slice()),
     }
 }
 
@@ -110,7 +87,7 @@ impl ScenarioState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::CursorRange;
+    use crate::helix::{CursorRange, Pos};
     use crate::testing::{ScenarioBuilder, point, selection};
 
     fn create_test_scenario() -> Scenario {
@@ -190,7 +167,7 @@ mod tests {
     }
 
     fn pos(row: usize, col: usize) -> Pos {
-        Pos::try_from([row, col]).unwrap()
+        Pos::new(row, col)
     }
 
     #[test]
@@ -201,7 +178,10 @@ mod tests {
         assert_eq!(at.selections.len(), 1);
         assert_eq!(at.cursor_offset(), 2);
 
-        let range = snapshot_of(content.to_string(), &selection((0, 0), (0, 5)));
+        let range = snapshot_of(
+            content.to_string(),
+            &selection(Pos::new(0, 0), Pos::new(0, 5)),
+        );
         assert_eq!(
             (range.selections[0].anchor, range.selections[0].head),
             (0, 5)
@@ -214,8 +194,8 @@ mod tests {
 
         let ranges = CursorSpec::Ranges(
             vec![
-                CursorRange::try_from([0, 0, 0, 5]).unwrap(),
-                CursorRange::try_from([0, 6, 0, 11]).unwrap(),
+                CursorRange::new(pos(0, 0), pos(0, 5)),
+                CursorRange::new(pos(0, 6), pos(0, 11)),
             ]
             .try_into()
             .unwrap(),

@@ -6,7 +6,7 @@ use crate::config::{
     CursorSpec, Difficulty, Scenario, ScenarioCategory, ScenarioMetadata, ScoringConfig, Setup,
     Solution, TargetState,
 };
-use crate::helix::Language;
+use crate::helix::{Language, Pos};
 use crate::testing::{point, selection};
 use std::num::NonZeroUsize;
 
@@ -117,10 +117,10 @@ impl ScenarioBuilder {
     /// Set the initial selection range
     ///
     /// # Arguments
-    /// * `start` - Start position as (row, col)
-    /// * `end` - End position as (row, col)
+    /// * `start` - Start position
+    /// * `end` - End position
     #[must_use]
-    pub fn setup_selection(mut self, start: (usize, usize), end: (usize, usize)) -> Self {
+    pub fn setup_selection(mut self, start: Pos, end: Pos) -> Self {
         self.setup_cursor = selection(start, end);
         self
     }
@@ -142,10 +142,10 @@ impl ScenarioBuilder {
     /// Set the target selection range
     ///
     /// # Arguments
-    /// * `start` - Start position as (row, col)
-    /// * `end` - End position as (row, col)
+    /// * `start` - Start position
+    /// * `end` - End position
     #[must_use]
-    pub fn target_selection(mut self, start: (usize, usize), end: (usize, usize)) -> Self {
+    pub fn target_selection(mut self, start: Pos, end: Pos) -> Self {
         self.target_cursor = selection(start, end);
         self
     }

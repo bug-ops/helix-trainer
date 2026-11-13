@@ -10,6 +10,8 @@
 use helix_core::{Range, Rope, Selection};
 use serde::{Deserialize, Serialize};
 
+use crate::helix::{CursorRange, Pos};
+
 /// Minimal serializable snapshot of editor state.
 ///
 /// Used for:
@@ -185,32 +187,54 @@ impl EditorSnapshot {
     }
 }
 
-/// Selection bounds for UI rendering.
+/// Normalized selection bounds for UI rendering.
 ///
-/// Simple struct holding row/col coordinates for start and end of selection.
-/// Used to decouple UI rendering from helix-core types.
+/// Holds the document-ordered `start` and `end` positions of a selection, so
+/// rendering needs no helix-core types and cannot confuse a row with a column.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::helix::{Pos, SelectionBounds};
+///
+/// let bounds = SelectionBounds::new(Pos::new(1, 0), Pos::new(3, 5));
+/// assert_eq!(bounds.start().row(), 1);
+/// assert_eq!(bounds.end().col(), 5);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SelectionBounds {
-    /// Start row (0-indexed)
-    pub start_row: usize,
-    /// Start column (0-indexed)
-    pub start_col: usize,
-    /// End row (0-indexed)
-    pub end_row: usize,
-    /// End column (0-indexed)
-    pub end_col: usize,
+    start: Pos,
+    end: Pos,
 }
 
 impl SelectionBounds {
-    /// Create new selection bounds.
-    #[inline]
-    pub fn new(start_row: usize, start_col: usize, end_row: usize, end_col: usize) -> Self {
-        Self {
-            start_row,
-            start_col,
-            end_row,
-            end_col,
+    /// Bounds from `start` to `end`, which must not precede `start`.
+    #[must_use]
+    pub const fn new(start: Pos, end: Pos) -> Self {
+        Self { start, end }
+    }
+
+    /// Bounds of `range` in document order, whichever end is the cursor.
+    #[must_use]
+    pub fn from_range(range: CursorRange) -> Self {
+        let (anchor, head) = (range.anchor(), range.head());
+        if anchor <= head {
+            Self::new(anchor, head)
+        } else {
+            Self::new(head, anchor)
         }
+    }
+
+    /// The first position of the selection.
+    #[must_use]
+    pub const fn start(self) -> Pos {
+        self.start
+    }
+
+    /// The last position of the selection.
+    #[must_use]
+    pub const fn end(self) -> Pos {
+        self.end
     }
 }
 
@@ -229,89 +253,36 @@ impl<'a> EditorDisplay<'a> {
         Self { doc, selection }
     }
 
-    /// Get primary cursor position as (row, col).
+    /// Get primary cursor position.
     ///
     /// This is the only place where row/col conversion happens.
-    pub fn cursor_position(&self) -> (usize, usize) {
+    pub fn cursor_position(&self) -> Pos {
         let head = self.selection.primary().head;
-        self.char_to_row_col(head)
+        self.char_to_pos(head)
     }
 
-    /// Get all cursor positions as (row, col) pairs.
-    pub fn all_cursor_positions(&self) -> Vec<(usize, usize)> {
+    /// Get all cursor positions.
+    pub fn all_cursor_positions(&self) -> Vec<Pos> {
         self.selection
             .ranges()
             .iter()
-            .map(|range| self.char_to_row_col(range.head))
+            .map(|range| self.char_to_pos(range.head))
             .collect()
-    }
-
-    /// Get primary selection bounds as ((`start_row`, `start_col`), (`end_row`, `end_col`)).
-    ///
-    /// Returns None if primary selection is a point (no actual selection).
-    pub fn primary_selection_bounds(&self) -> Option<((usize, usize), (usize, usize))> {
-        let range = self.selection.primary();
-        if range.anchor == range.head {
-            return None;
-        }
-
-        let anchor_pos = self.char_to_row_col(range.anchor);
-        let head_pos = self.char_to_row_col(range.head);
-
-        // Normalize to (start, end)
-        if range.anchor < range.head {
-            Some((anchor_pos, head_pos))
-        } else {
-            Some((head_pos, anchor_pos))
-        }
     }
 
     /// Get primary selection as `SelectionBounds` for UI rendering.
     ///
     /// Returns None if primary selection is a point (no actual selection).
-    /// This is the preferred method for UI code.
     pub fn selection(&self) -> Option<SelectionBounds> {
-        let range = self.selection.primary();
-        if range.anchor == range.head {
-            return None;
-        }
-
-        let anchor_pos = self.char_to_row_col(range.anchor);
-        let head_pos = self.char_to_row_col(range.head);
-
-        // Normalize to (start, end)
-        if range.anchor < range.head {
-            Some(SelectionBounds::new(
-                anchor_pos.0,
-                anchor_pos.1,
-                head_pos.0,
-                head_pos.1,
-            ))
-        } else {
-            Some(SelectionBounds::new(
-                head_pos.0,
-                head_pos.1,
-                anchor_pos.0,
-                anchor_pos.1,
-            ))
-        }
+        self.bounds_of(self.selection.primary())
     }
 
-    /// Get all selection bounds.
-    pub fn all_selection_bounds(&self) -> Vec<((usize, usize), (usize, usize))> {
+    /// Get all non-empty selection bounds.
+    pub fn all_selection_bounds(&self) -> Vec<SelectionBounds> {
         self.selection
             .ranges()
             .iter()
-            .filter(|range| range.anchor != range.head)
-            .map(|range| {
-                let anchor_pos = self.char_to_row_col(range.anchor);
-                let head_pos = self.char_to_row_col(range.head);
-                if range.anchor < range.head {
-                    (anchor_pos, head_pos)
-                } else {
-                    (head_pos, anchor_pos)
-                }
-            })
+            .filter_map(|&range| self.bounds_of(range))
             .collect()
     }
 
@@ -339,90 +310,87 @@ impl<'a> EditorDisplay<'a> {
         }
     }
 
-    /// Convert char offset to (row, col).
-    fn char_to_row_col(&self, char_idx: usize) -> (usize, usize) {
+    fn bounds_of(&self, range: Range) -> Option<SelectionBounds> {
+        (range.anchor != range.head).then(|| {
+            SelectionBounds::from_range(CursorRange::new(
+                self.char_to_pos(range.anchor),
+                self.char_to_pos(range.head),
+            ))
+        })
+    }
+
+    fn char_to_pos(&self, char_idx: usize) -> Pos {
         let clamped = char_idx.min(self.doc.len_chars());
         let line = self.doc.char_to_line(clamped);
         let line_start = self.doc.line_to_char(line);
-        let col = clamped - line_start;
-        (line, col)
+        Pos::new(line, clamped - line_start)
     }
 }
 
 impl EditorSnapshot {
-    /// Create a snapshot from scenario config with row/col cursor position.
+    /// Create a snapshot from scenario config with a cursor position.
     ///
-    /// Converts row/col coordinates to char offsets using the content.
+    /// Converts the position to a char offset using the content.
     /// This is the entry point for loading scenarios into the helix-core representation.
-    ///
-    /// # Arguments
-    /// * `content` - Document content
-    /// * `cursor_row` - Row (0-indexed)
-    /// * `cursor_col` - Column (0-indexed)
-    pub fn from_row_col(content: String, cursor_row: usize, cursor_col: usize) -> Self {
-        let char_offset = row_col_to_char_offset(&content, cursor_row, cursor_col);
+    pub fn from_row_col(content: String, cursor: Pos) -> Self {
+        let char_offset = pos_to_char_offset(&content, cursor);
         Self::with_cursor(content, char_offset)
     }
 
-    /// Create a snapshot from scenario config with row/col selection.
+    /// Create a snapshot from scenario config with a selection.
     ///
-    /// Converts row/col coordinates to char offsets.
-    ///
-    /// # Arguments
-    /// * `content` - Document content
-    /// * `sel` - Selection as [`start_row`, `start_col`, `end_row`, `end_col`]
-    pub fn from_row_col_selection(content: String, sel: [usize; 4]) -> Self {
-        let anchor = row_col_to_char_offset(&content, sel[0], sel[1]);
-        let head = row_col_to_char_offset(&content, sel[2], sel[3]);
-        Self::with_selections(content, vec![SerializableRange::new(anchor, head)], 0)
+    /// Converts the selection ends to char offsets.
+    pub fn from_row_col_selection(content: String, sel: CursorRange) -> Self {
+        let range = range_to_serializable(&content, sel);
+        Self::with_selections(content, vec![range], 0)
     }
 
     /// Create from scenario config with multiple cursors (point selections).
-    pub fn from_multi_cursor(content: String, cursors: &[[usize; 2]]) -> Self {
+    pub fn from_multi_cursor(content: String, cursors: &[Pos]) -> Self {
         if cursors.is_empty() {
             return Self::with_cursor(content, 0);
         }
 
         let selections: Vec<SerializableRange> = cursors
             .iter()
-            .map(|c| {
-                let offset = row_col_to_char_offset(&content, c[0], c[1]);
-                SerializableRange::point(offset)
-            })
+            .map(|&cursor| SerializableRange::point(pos_to_char_offset(&content, cursor)))
             .collect();
 
         Self::with_selections(content, selections, 0)
     }
 
     /// Create from scenario config with multiple selections.
-    pub fn from_multi_selection(content: String, selections: &[[usize; 4]]) -> Self {
+    pub fn from_multi_selection(content: String, selections: &[CursorRange]) -> Self {
         if selections.is_empty() {
             return Self::with_cursor(content, 0);
         }
 
         let ranges: Vec<SerializableRange> = selections
             .iter()
-            .map(|s| {
-                let anchor = row_col_to_char_offset(&content, s[0], s[1]);
-                let head = row_col_to_char_offset(&content, s[2], s[3]);
-                SerializableRange::new(anchor, head)
-            })
+            .map(|&sel| range_to_serializable(&content, sel))
             .collect();
 
         Self::with_selections(content, ranges, 0)
     }
 }
 
-/// Convert (row, col) to char offset in content.
+fn range_to_serializable(content: &str, sel: CursorRange) -> SerializableRange {
+    SerializableRange::new(
+        pos_to_char_offset(content, sel.anchor()),
+        pos_to_char_offset(content, sel.head()),
+    )
+}
+
+/// Convert a position to a char offset in content.
 ///
 /// This is the central conversion function for row/col -> char offset.
 /// Used when loading scenarios from TOML format.
-fn row_col_to_char_offset(content: &str, row: usize, col: usize) -> usize {
+fn pos_to_char_offset(content: &str, pos: Pos) -> usize {
     let mut char_offset = 0;
     for (line_idx, line) in content.lines().enumerate() {
-        if line_idx == row {
+        if line_idx == pos.row() {
             // Clamp column to line length
-            let safe_col = col.min(line.chars().count());
+            let safe_col = pos.col().min(line.chars().count());
             return char_offset + safe_col;
         }
         // Add line length plus newline
@@ -510,10 +478,7 @@ mod tests {
         let selection = Selection::point(7); // Start of "line 2"
 
         let display = EditorDisplay::new(&rope, &selection);
-        let (row, col) = display.cursor_position();
-
-        assert_eq!(row, 1);
-        assert_eq!(col, 0);
+        assert_eq!(display.cursor_position(), Pos::new(1, 0));
     }
 
     #[test]
@@ -522,10 +487,7 @@ mod tests {
         let selection = Selection::point(6); // On 'w'
 
         let display = EditorDisplay::new(&rope, &selection);
-        let (row, col) = display.cursor_position();
-
-        assert_eq!(row, 0);
-        assert_eq!(col, 6);
+        assert_eq!(display.cursor_position(), Pos::new(0, 6));
     }
 
     #[test]
@@ -534,12 +496,24 @@ mod tests {
         let selection = Selection::single(0, 5); // "hello"
 
         let display = EditorDisplay::new(&rope, &selection);
-        let bounds = display.primary_selection_bounds();
+        let bounds = display.selection().unwrap();
 
-        assert!(bounds.is_some());
-        let ((sr, sc), (er, ec)) = bounds.unwrap();
-        assert_eq!((sr, sc), (0, 0));
-        assert_eq!((er, ec), (0, 5));
+        assert_eq!(bounds.start(), Pos::new(0, 0));
+        assert_eq!(bounds.end(), Pos::new(0, 5));
+    }
+
+    #[test]
+    fn test_display_backward_selection_is_normalized() {
+        let rope = Rope::from("hello\nworld");
+        let selection = Selection::single(8, 2); // anchor on line 1, head on line 0
+
+        let display = EditorDisplay::new(&rope, &selection);
+
+        assert_eq!(
+            display.selection(),
+            Some(SelectionBounds::new(Pos::new(0, 2), Pos::new(1, 2)))
+        );
+        assert_eq!(display.cursor_position(), Pos::new(0, 2));
     }
 
     #[test]
@@ -548,7 +522,7 @@ mod tests {
         let selection = Selection::point(3);
 
         let display = EditorDisplay::new(&rope, &selection);
-        let bounds = display.primary_selection_bounds();
+        let bounds = display.selection();
 
         assert!(bounds.is_none());
     }
@@ -580,43 +554,43 @@ mod tests {
         assert_eq!(selection.primary_index(), 1);
     }
 
-    // ==================== row_col_to_char_offset tests ====================
+    // ==================== pos_to_char_offset tests ====================
 
     #[test]
-    fn test_row_col_to_char_offset_first_line() {
+    fn test_pos_to_char_offset_first_line() {
         let content = "hello\nworld";
-        assert_eq!(row_col_to_char_offset(content, 0, 0), 0);
-        assert_eq!(row_col_to_char_offset(content, 0, 3), 3);
-        assert_eq!(row_col_to_char_offset(content, 0, 5), 5);
+        assert_eq!(pos_to_char_offset(content, Pos::new(0, 0)), 0);
+        assert_eq!(pos_to_char_offset(content, Pos::new(0, 3)), 3);
+        assert_eq!(pos_to_char_offset(content, Pos::new(0, 5)), 5);
     }
 
     #[test]
-    fn test_row_col_to_char_offset_second_line() {
+    fn test_pos_to_char_offset_second_line() {
         let content = "hello\nworld";
         // Second line starts at char 6 (5 chars + 1 newline)
-        assert_eq!(row_col_to_char_offset(content, 1, 0), 6);
-        assert_eq!(row_col_to_char_offset(content, 1, 3), 9);
+        assert_eq!(pos_to_char_offset(content, Pos::new(1, 0)), 6);
+        assert_eq!(pos_to_char_offset(content, Pos::new(1, 3)), 9);
     }
 
     #[test]
-    fn test_row_col_to_char_offset_clamps_column() {
+    fn test_pos_to_char_offset_clamps_column() {
         let content = "hi\nworld";
         // Line 0 has 2 chars, so col 10 should clamp to 2
-        assert_eq!(row_col_to_char_offset(content, 0, 10), 2);
+        assert_eq!(pos_to_char_offset(content, Pos::new(0, 10)), 2);
     }
 
     #[test]
-    fn test_row_col_to_char_offset_beyond_lines() {
+    fn test_pos_to_char_offset_beyond_lines() {
         let content = "hello";
         // Row 5 doesn't exist, should return end of content
-        assert_eq!(row_col_to_char_offset(content, 5, 0), 5);
+        assert_eq!(pos_to_char_offset(content, Pos::new(5, 0)), 5);
     }
 
     // ==================== EditorSnapshot::from_row_col tests ====================
 
     #[test]
     fn test_snapshot_from_row_col() {
-        let snap = EditorSnapshot::from_row_col("line 1\nline 2".to_string(), 1, 2);
+        let snap = EditorSnapshot::from_row_col("line 1\nline 2".to_string(), Pos::new(1, 2));
 
         assert_eq!(snap.content, "line 1\nline 2");
         // Line 1 starts at char 7, plus col 2 = char 9
@@ -627,7 +601,7 @@ mod tests {
     fn test_snapshot_from_row_col_selection() {
         let snap = EditorSnapshot::from_row_col_selection(
             "hello world".to_string(),
-            [0, 0, 0, 5], // Select "hello"
+            CursorRange::new(Pos::new(0, 0), Pos::new(0, 5)), // Select "hello"
         );
 
         assert_eq!(snap.selections.len(), 1);
@@ -637,7 +611,10 @@ mod tests {
 
     #[test]
     fn test_snapshot_from_multi_cursor() {
-        let snap = EditorSnapshot::from_multi_cursor("hello\nworld".to_string(), &[[0, 0], [1, 0]]);
+        let snap = EditorSnapshot::from_multi_cursor(
+            "hello\nworld".to_string(),
+            &[Pos::new(0, 0), Pos::new(1, 0)],
+        );
 
         assert_eq!(snap.selections.len(), 2);
         assert_eq!(snap.selections[0].anchor, 0);
@@ -650,7 +627,10 @@ mod tests {
     fn test_snapshot_from_multi_selection() {
         let snap = EditorSnapshot::from_multi_selection(
             "hello world".to_string(),
-            &[[0, 0, 0, 5], [0, 6, 0, 11]],
+            &[
+                CursorRange::new(Pos::new(0, 0), Pos::new(0, 5)),
+                CursorRange::new(Pos::new(0, 6), Pos::new(0, 11)),
+            ],
         );
 
         assert_eq!(snap.selections.len(), 2);
@@ -667,7 +647,10 @@ mod tests {
         let content = "fn main() {\n    let x = 1;\n    let y = 2;\n}";
 
         // Target snapshot from TOML config
-        let target_snap = EditorSnapshot::from_row_col_selection(content.to_string(), [1, 0, 2, 0]);
+        let target_snap = EditorSnapshot::from_row_col_selection(
+            content.to_string(),
+            CursorRange::new(Pos::new(1, 0), Pos::new(2, 0)),
+        );
 
         // Calculate what the char offsets should be:
         // "fn main() {\n" = 12 chars (11 + 1 newline)
@@ -692,7 +675,10 @@ mod tests {
         let content = "fn main() {\n    let x = 1;\n    let y = 2;\n}";
 
         // Target: line selection from row 1 to row 2
-        let target = EditorSnapshot::from_row_col_selection(content.to_string(), [1, 0, 2, 0]);
+        let target = EditorSnapshot::from_row_col_selection(
+            content.to_string(),
+            CursorRange::new(Pos::new(1, 0), Pos::new(2, 0)),
+        );
 
         // Current: same selection (as if we executed 'x' on line 1)
         // Row 1 starts at char 12, Row 2 starts at char 27
@@ -724,7 +710,10 @@ mod tests {
         let current_snap = sim.to_snapshot();
 
         // Target from TOML: selection = [1, 0, 2, 0]
-        let target_snap = EditorSnapshot::from_row_col_selection(content.to_string(), [1, 0, 2, 0]);
+        let target_snap = EditorSnapshot::from_row_col_selection(
+            content.to_string(),
+            CursorRange::new(Pos::new(1, 0), Pos::new(2, 0)),
+        );
 
         // Helix produces (anchor=27, head=12), TOML produces (anchor=12, head=27)
         // These should match because they represent the same range

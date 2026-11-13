@@ -92,10 +92,10 @@ fn syntect_to_ratatui_style(style: syntect::highlighting::Style) -> Style {
 
 /// Check if a line has selection (accounting for edge cases)
 fn line_has_selection(line_idx: usize, sel: &SelectionBounds) -> bool {
-    if line_idx == sel.end_row && sel.end_col == 0 {
+    if line_idx == sel.end().row() && sel.end().col() == 0 {
         return false;
     }
-    line_idx >= sel.start_row && line_idx <= sel.end_row
+    line_idx >= sel.start().row() && line_idx <= sel.end().row()
 }
 
 /// Highlight code with syntax highlighting, multi-cursor and multi-selection support.
@@ -137,7 +137,7 @@ pub(crate) fn highlight_code_with_multi_cursor(
 
             // Get cursors on this line
             let cursors_on_line: Vec<&CursorInfo> =
-                cursors.iter().filter(|c| c.row == line_idx).collect();
+                cursors.iter().filter(|c| c.pos.row() == line_idx).collect();
 
             // If no overlays needed, just return syntax highlighted line
             if !line_has_any_selection && cursors_on_line.is_empty() {
@@ -166,13 +166,13 @@ pub(crate) fn highlight_code_with_multi_cursor(
                 if !line_has_selection(line_idx, sel) {
                     continue;
                 }
-                let start_col = if line_idx == sel.start_row {
-                    sel.start_col
+                let start_col = if line_idx == sel.start().row() {
+                    sel.start().col()
                 } else {
                     0
                 };
-                let end_col = if line_idx == sel.end_row {
-                    sel.end_col
+                let end_col = if line_idx == sel.end().row() {
+                    sel.end().col()
                 } else {
                     line_chars.len()
                 };
@@ -185,7 +185,7 @@ pub(crate) fn highlight_code_with_multi_cursor(
 
             for (col, ch) in line_chars.iter().enumerate() {
                 // Check if cursor is at this position
-                let cursor_at_pos = cursors_on_line.iter().find(|c| c.col == col);
+                let cursor_at_pos = cursors_on_line.iter().find(|c| c.pos.col() == col);
 
                 if let Some(cursor) = cursor_at_pos {
                     // Cursor takes priority
@@ -209,7 +209,7 @@ pub(crate) fn highlight_code_with_multi_cursor(
 
             // Handle cursor at end of line
             for cursor in &cursors_on_line {
-                if cursor.col >= line_chars.len() {
+                if cursor.pos.col() >= line_chars.len() {
                     spans.push(Span::styled("\u{2588}".to_string(), cursor.style()));
                 }
             }
@@ -222,6 +222,7 @@ pub(crate) fn highlight_code_with_multi_cursor(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::helix::Pos;
 
     #[test]
     fn prewarm_samples_resolve_to_real_syntaxes() {
@@ -277,8 +278,7 @@ mod tests {
     fn test_highlight_with_cursor() {
         let code = "hello";
         let cursor = CursorInfo {
-            row: 0,
-            col: 2,
+            pos: Pos::new(0, 2),
             is_primary: true,
         };
         let lines = highlight_code_with_multi_cursor(code, &[cursor], &[], Language::Rs);

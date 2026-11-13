@@ -6,6 +6,7 @@
 //! - Complex scenarios: Real-world usage patterns
 
 use crate::grammar::commands::*;
+use crate::helix::Pos;
 use crate::helix::simulator::AnyModeSimulator;
 
 // ============================================================================
@@ -171,12 +172,12 @@ fn test_repeat_find_char_with_q_argument() {
     // head sits one past the char.
     sim.execute_command("fq").unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position(), (0, 2));
+    assert_eq!(state.cursor_position(), Pos::new(0, 2));
 
     // Repeat find (should move to the next 'q')
     sim.execute_command(".").unwrap();
     let state = sim.display();
-    assert_eq!(state.cursor_position(), (0, 4));
+    assert_eq!(state.cursor_position(), Pos::new(0, 4));
 }
 
 #[test]
@@ -297,7 +298,7 @@ fn test_repeat_insert_with_movements() {
     let state = sim.display();
     assert_eq!(state.content(), "hiworld");
     // Cursor should be at position 1 (moved left once from 2)
-    assert_eq!(state.cursor_position().1, 1);
+    assert_eq!(state.cursor_position().col(), 1);
 
     // Move to end (use 'gl' in Helix, not '$')
     sim.execute_command(CMD_GOTO_LINE_END).unwrap();
@@ -308,7 +309,7 @@ fn test_repeat_insert_with_movements() {
     // Should insert "hi" before the last char, then move left once
     assert_eq!(state.content(), "hiworlhid");
     // Cursor moved left from position 8 to position 7
-    assert_eq!(state.cursor_position().1, 7);
+    assert_eq!(state.cursor_position().col(), 7);
 }
 
 #[test]
@@ -440,7 +441,7 @@ fn test_scenario_repeat_insert_001() {
     sim.execute_command("gl").unwrap();
 
     let state = sim.display();
-    assert_eq!(state.cursor_position().0, 1, "Should be on line 1");
+    assert_eq!(state.cursor_position().row(), 1, "Should be on line 1");
 
     // Repeat the insert
     sim.execute_command(".").unwrap();

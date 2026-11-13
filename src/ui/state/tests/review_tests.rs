@@ -9,6 +9,7 @@
 //! constructing `ReviewSession` directly, since `StartReviewSession` cannot be
 //! relied on to produce a due review deterministically.
 
+use crate::learning::AttemptOutcome;
 use crate::testing::cid;
 use std::assert_matches;
 use std::time::{Duration, Instant};
@@ -30,7 +31,7 @@ fn test_review_session_with_no_due_reviews() {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
     }
@@ -330,7 +331,7 @@ fn test_review_answer_duration_is_measured_per_command() {
         tracker.record_attempt(
             &cid(command),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
     }

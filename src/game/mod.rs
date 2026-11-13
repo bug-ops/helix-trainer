@@ -22,7 +22,8 @@ pub use error::GameError;
 pub use live_scenario::LiveScenario;
 pub use recorded_action::{RecordedAction, UserAction};
 pub use scenario_collection::{
-    CompletionFilter, CurriculumStats, ScenarioCollection, ScenarioFilter, SortMode,
+    CompletionFilter, Criterion, CurriculumStats, EmptyCriterion, NonEmptySet, PrerequisiteFilter,
+    ScenarioCollection, ScenarioFilter, SortMode,
 };
 pub use scenario_state::ScenarioState;
 pub use scorer::{PerformanceRating, Scorer};

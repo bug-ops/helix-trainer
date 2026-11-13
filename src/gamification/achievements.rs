@@ -336,6 +336,7 @@ impl AchievementEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::learning::AttemptOutcome;
     use crate::testing::cid;
 
     #[test]
@@ -464,7 +465,7 @@ mod tests {
             tracker.record_attempt(
                 &cid(&cmd),
                 std::time::Duration::from_secs(1),
-                true,
+                AttemptOutcome::Succeeded,
                 std::time::Duration::from_secs(1),
             );
         }

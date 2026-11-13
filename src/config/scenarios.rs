@@ -178,6 +178,33 @@ impl CompletionRule {
     }
 }
 
+/// A free-form scenario tag (`delete`, `motion`), compared as written.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::config::ScenarioTag;
+///
+/// assert_eq!(ScenarioTag::new("motion").as_str(), "motion");
+/// ```
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(transparent)]
+pub struct ScenarioTag(String);
+
+impl ScenarioTag {
+    /// A tag with the given text.
+    #[must_use]
+    pub fn new(tag: impl Into<String>) -> Self {
+        Self(tag.into())
+    }
+
+    /// The tag text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Scenario metadata for filtering, sorting, and quest generation
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
@@ -196,7 +223,7 @@ pub struct ScenarioMetadata {
 
     /// Tags for flexible filtering (e.g., `["delete", "motion", "word"]`)
     #[serde(default)]
-    pub tags: Vec<String>,
+    pub tags: Vec<ScenarioTag>,
 
     /// Commands taught in this scenario (e.g., `["d", "w"]`)
     #[serde(default)]

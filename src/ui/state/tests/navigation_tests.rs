@@ -1,5 +1,6 @@
 //! Tests for navigation and screen transitions
 
+use crate::learning::AttemptOutcome;
 use crate::testing::cid;
 use std::assert_matches;
 
@@ -148,7 +149,7 @@ fn test_quit_app_persists_fsrs_data() {
     state.progress.performance_tracker.record_attempt(
         &cid("j"),
         Duration::from_millis(500),
-        true,
+        AttemptOutcome::Succeeded,
         Duration::from_millis(500),
     );
 

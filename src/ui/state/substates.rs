@@ -582,6 +582,7 @@ impl Default for ConfigState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::learning::AttemptOutcome;
     use crate::testing::cid;
     use std::assert_matches;
 
@@ -768,7 +769,7 @@ mod tests {
         progress.performance_tracker.record_attempt(
             &cid("x"),
             std::time::Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             std::time::Duration::from_secs(1),
         );
 
@@ -842,7 +843,7 @@ mod tests {
         progress.performance_tracker.record_attempt(
             &cid("x"),
             Duration::from_millis(500),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_millis(500),
         );
 
@@ -882,7 +883,7 @@ mod tests {
         progress.performance_tracker.record_attempt(
             &cid("d"),
             Duration::from_millis(500),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_millis(500),
         );
         progress.save_debounced().unwrap();
@@ -922,7 +923,7 @@ mod tests {
         progress.performance_tracker.record_attempt(
             &cid("j"),
             Duration::from_millis(500),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_millis(500),
         );
 

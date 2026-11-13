@@ -7,6 +7,7 @@
 //! 4. Run review session
 //! 5. Check analytics
 
+use helix_trainer::learning::AttemptOutcome;
 use helix_trainer::learning::{
     Analytics, MasteryLevel, PerformanceTracker, ReviewOutcome, ReviewSession, ReviewStep,
     Scheduler,
@@ -28,19 +29,19 @@ fn test_complete_learning_workflow() {
     tracker.record_attempt(
         &cid("x"),
         Duration::from_millis(500),
-        true,
+        AttemptOutcome::Succeeded,
         Duration::from_millis(400),
     );
     tracker.record_attempt(
         &cid("x"),
         Duration::from_millis(450),
-        true,
+        AttemptOutcome::Succeeded,
         Duration::from_millis(400),
     );
     tracker.record_attempt(
         &cid("x"),
         Duration::from_millis(400),
-        true,
+        AttemptOutcome::Succeeded,
         Duration::from_millis(400),
     );
 
@@ -48,19 +49,19 @@ fn test_complete_learning_workflow() {
     tracker.record_attempt(
         &cid("yy"),
         Duration::from_millis(600),
-        true,
+        AttemptOutcome::Succeeded,
         Duration::from_millis(500),
     );
     tracker.record_attempt(
         &cid("yy"),
         Duration::from_millis(700),
-        false,
+        AttemptOutcome::Failed,
         Duration::from_millis(500),
     );
     tracker.record_attempt(
         &cid("yy"),
         Duration::from_millis(550),
-        true,
+        AttemptOutcome::Succeeded,
         Duration::from_millis(500),
     );
 
@@ -69,7 +70,7 @@ fn test_complete_learning_workflow() {
         tracker.record_attempt(
             &cid("w"),
             Duration::from_millis(200),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_millis(200),
         );
     }
@@ -131,7 +132,7 @@ fn test_mastery_progression() {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_millis(300),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_millis(500),
         );
     }
@@ -176,7 +177,7 @@ fn test_scheduler_prioritization() {
         tracker.record_attempt(
             &cid("high_success"),
             Duration::from_millis(200),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_millis(300),
         );
     }
@@ -185,19 +186,19 @@ fn test_scheduler_prioritization() {
     tracker.record_attempt(
         &cid("low_success"),
         Duration::from_millis(500),
-        true,
+        AttemptOutcome::Succeeded,
         Duration::from_millis(400),
     );
     tracker.record_attempt(
         &cid("low_success"),
         Duration::from_millis(600),
-        false,
+        AttemptOutcome::Failed,
         Duration::from_millis(400),
     );
     tracker.record_attempt(
         &cid("low_success"),
         Duration::from_millis(700),
-        false,
+        AttemptOutcome::Failed,
         Duration::from_millis(400),
     );
 
@@ -205,7 +206,7 @@ fn test_scheduler_prioritization() {
     tracker.record_attempt(
         &cid("new_command"),
         Duration::from_millis(400),
-        true,
+        AttemptOutcome::Succeeded,
         Duration::from_millis(500),
     );
 
@@ -236,13 +237,13 @@ fn test_review_session_runs_over_due_commands() {
     tracker.record_attempt(
         &cid("x"),
         Duration::from_secs(1),
-        true,
+        AttemptOutcome::Succeeded,
         Duration::from_secs(1),
     );
     tracker.record_attempt(
         &cid("w"),
         Duration::from_secs(1),
-        true,
+        AttemptOutcome::Succeeded,
         Duration::from_secs(1),
     );
     let due = Scheduler::new().get_due_reviews(&tracker);
@@ -276,7 +277,7 @@ fn test_analytics_commands_by_mastery() {
     tracker.record_attempt(
         &cid("beginner_cmd"),
         Duration::from_secs(5),
-        false,
+        AttemptOutcome::Failed,
         Duration::from_secs(1),
     );
 
@@ -285,7 +286,7 @@ fn test_analytics_commands_by_mastery() {
         tracker.record_attempt(
             &cid("intermediate_cmd"),
             Duration::from_secs(2),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
     }

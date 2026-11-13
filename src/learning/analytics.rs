@@ -175,6 +175,7 @@ impl Analytics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::learning::AttemptOutcome;
     use crate::learning::performance::PerformanceTracker;
     use crate::testing::cid;
     use std::time::Duration;
@@ -186,7 +187,7 @@ mod tests {
         tracker.record_attempt(
             &cid("beginner1"),
             Duration::from_secs(5),
-            false,
+            AttemptOutcome::Failed,
             Duration::from_secs(1),
         );
 
@@ -195,7 +196,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("intermediate1"),
                 Duration::from_secs(2),
-                true,
+                AttemptOutcome::Succeeded,
                 Duration::from_secs(1),
             );
         }
@@ -205,7 +206,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("advanced1"),
                 Duration::from_secs(1),
-                true,
+                AttemptOutcome::Succeeded,
                 Duration::from_secs(1),
             );
         }

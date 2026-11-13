@@ -2,6 +2,7 @@
 //!
 //! Handles navigation and toggle operations for the category filters screen
 
+use crate::game::Criterion;
 use crate::ui::state::{CategoryFiltersData, HandlerContext, HandlerOutcome, TypedScreen};
 
 /// Handle `ShowCategoryFilters` message
@@ -89,15 +90,14 @@ pub(crate) fn handle_category_filter_toggle(
     let current_filter = ctx.game.scenario_collection.active_filter();
     let mut new_filter = current_filter.clone();
 
-    let filter_categories = new_filter.categories.get_or_insert_with(Default::default);
-    if filter_categories.contains(category) {
-        filter_categories.remove(category);
-        if filter_categories.is_empty() {
-            new_filter.categories = None;
-        }
-    } else {
-        filter_categories.insert(*category);
-    }
+    // Toggling the last enabled category off shows all categories again.
+    new_filter.categories = match new_filter.categories {
+        Criterion::Any => Criterion::one_of(*category, []),
+        Criterion::OneOf(enabled) if enabled.contains(category) => enabled
+            .without(category)
+            .map_or(Criterion::Any, Criterion::OneOf),
+        Criterion::OneOf(enabled) => Criterion::OneOf(enabled.with(*category)),
+    };
 
     ctx.game
         .scenario_collection
@@ -115,7 +115,7 @@ pub(crate) fn handle_category_filter_select_all(ctx: &mut HandlerContext<'_>) ->
     let mut new_filter = current_filter.clone();
 
     // Clear category filter to show all
-    new_filter.categories = None;
+    new_filter.categories = Criterion::Any;
 
     ctx.game
         .scenario_collection
@@ -424,7 +424,7 @@ mod tests {
                 .scenario_collection
                 .active_filter()
                 .categories
-                .is_none()
+                .is_any()
         );
 
         let outcome = handle_category_filter_toggle(&data, &mut ctx);
@@ -432,7 +432,7 @@ mod tests {
 
         // Category filter should now be set
         let filter = ctx.game.scenario_collection.active_filter();
-        assert!(filter.categories.is_some());
+        assert!(filter.categories.is_restricted());
     }
 
     #[test]
@@ -459,7 +459,7 @@ mod tests {
 
         // Category filter should be cleared
         let filter = ctx.game.scenario_collection.active_filter();
-        assert!(filter.categories.is_none());
+        assert!(filter.categories.is_any());
     }
 
     /// Regression test for #312/S1: `handle_category_filter_toggle` runs while
@@ -548,7 +548,7 @@ mod tests {
                 .scenario_collection
                 .active_filter()
                 .categories
-                .is_none()
+                .is_any()
         );
     }
 
@@ -574,7 +574,7 @@ mod tests {
                 .scenario_collection
                 .active_filter()
                 .categories
-                .is_some()
+                .is_restricted()
         );
 
         // Select all should clear the filter
@@ -583,7 +583,7 @@ mod tests {
 
         // Category filter should be cleared
         let filter = ctx.game.scenario_collection.active_filter();
-        assert!(filter.categories.is_none());
+        assert!(filter.categories.is_any());
     }
 
     #[test]
@@ -599,7 +599,7 @@ mod tests {
                 &state.config,
             );
             let mut filter = ctx.game.scenario_collection.active_filter().clone();
-            filter.difficulties = Some(std::iter::once(Difficulty::Beginner).collect());
+            filter.difficulties = Criterion::one_of(Difficulty::Beginner, []);
             ctx.game
                 .scenario_collection
                 .apply_filter(&filter, Some(&ctx.progress.profile));
@@ -631,9 +631,9 @@ mod tests {
             handle_category_filter_select_all(&mut ctx);
 
             let filter = ctx.game.scenario_collection.active_filter();
-            assert!(filter.categories.is_none());
+            assert!(filter.categories.is_any());
             // Difficulty filter should still be present
-            assert!(filter.difficulties.is_some());
+            assert!(filter.difficulties.is_restricted());
         }
     }
 }

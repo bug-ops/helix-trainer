@@ -10,7 +10,7 @@ use crate::gamification::{
 };
 use crate::ids::{CommandId, ScenarioId};
 use crate::learning::{
-    MasteryLevel, PerformanceTracker, ReferenceTime, ScenarioMastery, Scheduler,
+    AttemptOutcome, MasteryLevel, PerformanceTracker, ReferenceTime, ScenarioMastery, Scheduler,
 };
 use chrono::{DateTime, Utc};
 use std::time::Duration;
@@ -145,11 +145,11 @@ impl ScenarioCompletionService {
         tracker: &mut PerformanceTracker,
         commands: &[CommandId],
         duration: Duration,
-        success: bool,
+        outcome: AttemptOutcome,
         reference: ReferenceTime,
     ) -> Vec<(CommandId, MasteryLevel)> {
         scheduler
-            .record_scenario_commands_with_mastery(tracker, commands, duration, success, reference)
+            .record_scenario_commands_with_mastery(tracker, commands, duration, outcome, reference)
     }
 
     /// Extract reviewable command ids from feedback

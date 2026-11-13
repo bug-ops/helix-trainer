@@ -8,6 +8,7 @@
 //! 5. Boundary tests - 0 reviews, 1 review, many reviews
 
 use helix_trainer::gamification::{ProfileStorage, UserProfile};
+use helix_trainer::learning::AttemptOutcome;
 use helix_trainer::learning::{PerformanceTracker, ReviewOutcome, ReviewSession};
 use helix_trainer::ui::state::{AppState, Message, TypedScreen};
 
@@ -56,7 +57,7 @@ fn create_test_app_state_with_reviews(due_count: usize) -> AppState {
             tracker.record_attempt(
                 &cid(&command),
                 Duration::from_secs(5),
-                false,
+                AttemptOutcome::Failed,
                 Duration::from_secs(1),
             );
         }
@@ -232,7 +233,7 @@ fn test_complete_review_command_success() {
     assert_eq!(session_after.completed().len(), 1);
     let result = &session_after.completed()[0];
     assert_eq!(result.command, command);
-    assert!(result.success);
+    assert!(result.outcome.is_recalled());
 
     // Should have advanced to next command
     assert_eq!(session_after.completed().len(), 1);
@@ -262,7 +263,7 @@ fn test_complete_review_command_failure() {
     assert_eq!(session_after.completed().len(), 1);
     let result = &session_after.completed()[0];
     assert_eq!(result.command, command);
-    assert!(!result.success);
+    assert!(!result.outcome.is_recalled());
 
     // Should still advance to next command
     assert_eq!(session_after.completed().len(), 1);
@@ -794,7 +795,7 @@ fn test_review_results_accumulate() {
     {
         let session = review_session(&state).unwrap();
         assert_eq!(session.completed().len(), 1);
-        assert!(session.completed()[0].success);
+        assert!(session.completed()[0].outcome.is_recalled());
     }
 
     update(
@@ -807,7 +808,7 @@ fn test_review_results_accumulate() {
     {
         let session = review_session(&state).unwrap();
         assert_eq!(session.completed().len(), 2);
-        assert!(!session.completed()[1].success);
+        assert!(!session.completed()[1].outcome.is_recalled());
     }
 
     update(

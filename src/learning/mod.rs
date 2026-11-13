@@ -26,8 +26,8 @@ pub mod urgency;
 
 pub use analytics::{Analytics, MasterySummary};
 pub use performance::{
-    CardState, CommandPerformance, MasteryLevel, PerformanceData, PerformanceTracker, Rating,
-    ReferenceTime,
+    AttemptOutcome, CardState, CommandPerformance, MasteryChange, MasteryLevel, PerformanceData,
+    PerformanceTracker, Rating, ReferenceTime,
 };
 pub use scenario_history::{MasteryStats, ScenarioCompletion, ScenarioHistory, ScenarioMastery};
 pub use scheduler::{ReviewItem, Scheduler};

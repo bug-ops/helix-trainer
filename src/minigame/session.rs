@@ -7,7 +7,7 @@ use crate::config::{Difficulty, Scenario};
 use crate::constants::EXTRA_LIFE_SCORE_MILESTONE;
 use crate::game::GameError;
 use crate::game::{LiveScenario, UserAction};
-use crate::learning::PerformanceTracker;
+use crate::learning::{AttemptOutcome, PerformanceTracker};
 use crate::minigame::{
     DifficultyController, DifficultyLevel, LevelChange, MiniGameMode, MiniGameState, MiniGameStats,
     MultiplierChange, PerformancePoint, Ratio, ScoreBreakdown, ScoreCalculator,
@@ -638,8 +638,12 @@ impl<R: Rng> MiniGameSession<R> {
             self.stats.add_score(breakdown.total);
 
             // Create performance point with full data
-            let performance_point =
-                PerformancePoint::new(true, time_ratio, scenario_difficulty, efficiency);
+            let performance_point = PerformancePoint::new(
+                AttemptOutcome::Succeeded,
+                time_ratio,
+                scenario_difficulty,
+                efficiency,
+            );
 
             // Update difficulty with comprehensive performance data
             self.difficulty.update_after_scenario(performance_point);
@@ -723,8 +727,8 @@ impl<R: Rng> MiniGameSession<R> {
             .unwrap_or(Difficulty::Beginner);
 
         let performance_point = PerformancePoint::new(
-            false, // failure
-            1.0,   // timeout = 100% time used
+            AttemptOutcome::Failed,
+            1.0, // timeout = 100% time used
             scenario_difficulty,
             0.0, // no efficiency on failure
         );
@@ -1045,7 +1049,7 @@ impl<R: Rng> MiniGameSession<R> {
     ///
     /// ```
     /// use helix_trainer::minigame::MiniGameSession;
-    /// use helix_trainer::learning::PerformanceTracker;
+    /// use helix_trainer::learning::{AttemptOutcome, PerformanceTracker};
     /// use helix_trainer::config::ScenarioLoader;
     /// use std::sync::Arc;
     ///
@@ -1054,10 +1058,14 @@ impl<R: Rng> MiniGameSession<R> {
     /// let mut tracker = PerformanceTracker::new();
     ///
     /// // After scenario completion
-    /// session.record_to_fsrs(&mut tracker, true);
+    /// session.record_to_fsrs(&mut tracker, AttemptOutcome::Succeeded);
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
-    pub fn record_to_fsrs(&self, tracker: &mut crate::learning::PerformanceTracker, success: bool) {
+    pub fn record_to_fsrs(
+        &self,
+        tracker: &mut crate::learning::PerformanceTracker,
+        outcome: AttemptOutcome,
+    ) {
         if let Some(ref scenario) = self.current {
             let elapsed = scenario.elapsed();
             let actions = scenario.actions();
@@ -1084,7 +1092,7 @@ impl<R: Rng> MiniGameSession<R> {
                     tracker.record_attempt(
                         command,
                         time_per_command,
-                        success,
+                        outcome,
                         optimal_time_per_command,
                     );
                 }
@@ -1585,7 +1593,7 @@ mod tests {
         session.handle_command("\"by").unwrap();
 
         let mut tracker = PerformanceTracker::new();
-        session.record_to_fsrs(&mut tracker, true);
+        session.record_to_fsrs(&mut tracker, AttemptOutcome::Succeeded);
 
         assert!(
             tracker.performance(&cid("\"y")).is_some(),
@@ -1621,7 +1629,7 @@ mod tests {
         }
 
         let mut tracker = PerformanceTracker::new();
-        session.record_to_fsrs(&mut tracker, true);
+        session.record_to_fsrs(&mut tracker, AttemptOutcome::Succeeded);
 
         let mut cards: Vec<&str> = tracker
             .all_commands()

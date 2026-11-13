@@ -12,7 +12,7 @@ use crate::game::services::ScenarioCompletionService;
 use crate::gamification::XPCalculator;
 use crate::helix::ModeKind;
 use crate::input::resolve::{Resolution, resolve_keys};
-use crate::learning::PerformanceTracker;
+use crate::learning::{AttemptOutcome, PerformanceTracker};
 use crate::minigame::MiniGameSession;
 use crate::sound::SoundEffect;
 use crate::ui::notification::{Notification, NotificationType};
@@ -133,7 +133,7 @@ fn execute_minigame_command(
         if let Some(scenario) = session.current_scenario() {
             if !scenario.actions().is_empty() {
                 let tracker = &mut state.progress.performance_tracker;
-                session.record_to_fsrs(tracker, true); // Success!
+                session.record_to_fsrs(tracker, AttemptOutcome::Succeeded);
             }
 
             // Update quest progress for scenario completion (shared function)
@@ -367,7 +367,7 @@ pub(in crate::ui::state) fn handle_minigame_game_over(state: &mut AppState) {
 
         // 1. Record final scenario to FSRS (if applicable)
         let tracker = &mut state.progress.performance_tracker;
-        session.record_to_fsrs(tracker, false); // Game over = failure on current scenario
+        session.record_to_fsrs(tracker, AttemptOutcome::Failed); // Game over = failure on current scenario
 
         // 2. Calculate XP earned
         let xp = XPCalculator::minigame_xp(stats.score, stats.level(), stats.best_streak());
@@ -1032,7 +1032,7 @@ mod tests {
         state.progress.performance_tracker.record_attempt(
             &cid("j"),
             Duration::from_millis(500),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_millis(500),
         );
 

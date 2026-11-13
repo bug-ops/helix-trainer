@@ -1,5 +1,6 @@
 //! Tests for menu navigation and selection
 
+use crate::learning::AttemptOutcome;
 use crate::testing::cid;
 use std::assert_matches;
 
@@ -387,7 +388,7 @@ fn test_starting_review_ends_the_paused_arcade_run_and_awards_it() {
     state.progress.performance_tracker.record_attempt(
         &cid("x"),
         Duration::from_secs(5),
-        false,
+        AttemptOutcome::Failed,
         Duration::from_secs(1),
     );
     let initial_xp = state.progress.profile.total_xp;

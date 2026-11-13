@@ -1,4 +1,6 @@
-use super::performance::{CommandPerformance, MasteryLevel, PerformanceTracker, ReferenceTime};
+use super::performance::{
+    AttemptOutcome, CommandPerformance, MasteryLevel, PerformanceTracker, ReferenceTime,
+};
 use super::urgency::{Urgency, command_urgency};
 use crate::ids::CommandId;
 use crate::time::{Clock, SystemClock};
@@ -87,7 +89,7 @@ impl Scheduler {
         tracker: &mut PerformanceTracker,
         commands: &[CommandId],
         total_duration: std::time::Duration,
-        success: bool,
+        outcome: AttemptOutcome,
         reference: ReferenceTime,
     ) -> Vec<(CommandId, MasteryLevel)> {
         let avg_duration = Self::average_duration(total_duration, commands.len());
@@ -98,8 +100,8 @@ impl Scheduler {
             .filter(|command| seen.insert(*command))
             .filter_map(|command| {
                 tracker
-                    .record_attempt_with_mastery_change(command, avg_duration, success, reference)
-                    .map(|(command, _old, new_level)| (command, new_level))
+                    .record_attempt_with_mastery_change(command, avg_duration, outcome, reference)
+                    .map(|change| (change.command, change.to))
             })
             .collect()
     }
@@ -187,6 +189,7 @@ impl Scheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::learning::AttemptOutcome;
     use crate::testing::cid;
     use chrono::Duration as ChronoDuration;
     use std::time::Duration;
@@ -198,19 +201,19 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("yy"),
             Duration::from_secs(2),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("p"),
             Duration::from_secs(4),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
 
@@ -238,7 +241,7 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
 
@@ -319,13 +322,13 @@ mod tests {
         tracker.record_attempt(
             &cid("low"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("high"),
             Duration::from_secs(10),
-            false,
+            AttemptOutcome::Failed,
             Duration::from_secs(1),
         );
 
@@ -365,13 +368,13 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
 
@@ -480,20 +483,30 @@ mod tests {
             command: usize,
             duration_secs: u64,
             optimal_secs: u64,
-            success: bool,
+            outcome: AttemptOutcome,
             elapsed_days: i64,
         }
 
         fn event_strategy() -> impl Strategy<Value = Event> {
-            (0..COMMAND_POOL, 1u64..90, 1u64..90, any::<bool>(), 0i64..60).prop_map(
-                |(command, duration_secs, optimal_secs, success, elapsed_days)| Event {
-                    command,
-                    duration_secs,
-                    optimal_secs,
-                    success,
-                    elapsed_days,
-                },
+            (
+                0..COMMAND_POOL,
+                1u64..90,
+                1u64..90,
+                prop_oneof![
+                    Just(AttemptOutcome::Succeeded),
+                    Just(AttemptOutcome::Failed)
+                ],
+                0i64..60,
             )
+                .prop_map(
+                    |(command, duration_secs, optimal_secs, outcome, elapsed_days)| Event {
+                        command,
+                        duration_secs,
+                        optimal_secs,
+                        outcome,
+                        elapsed_days,
+                    },
+                )
         }
 
         fn review_item_strategy() -> impl Strategy<Value = ReviewItem> {
@@ -522,7 +535,7 @@ mod tests {
                 tracker.record_attempt(
                     &cid(&format!("c{}", event.command)),
                     Duration::from_secs(event.duration_secs),
-                    event.success,
+                    event.outcome,
                     Duration::from_secs(event.optimal_secs),
                 );
             }
@@ -677,7 +690,7 @@ mod tests {
                 &mut tracker,
                 &commands,
                 Duration::from_secs(4),
-                true,
+                AttemptOutcome::Succeeded,
                 ReferenceTime::new(Duration::from_secs(60)),
             )
         };
@@ -710,7 +723,7 @@ mod tests {
                 &mut tracker,
                 &commands,
                 total,
-                true,
+                AttemptOutcome::Succeeded,
                 reference,
             );
             tracker.performance(&cid("w")).unwrap().stability()

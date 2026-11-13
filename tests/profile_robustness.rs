@@ -10,6 +10,7 @@ use helix_trainer::gamification::{
     StreakManager, UserProfile,
 };
 use helix_trainer::ids::{CommandId, ScenarioId};
+use helix_trainer::learning::AttemptOutcome;
 use helix_trainer::learning::PerformanceTracker;
 use proptest::prelude::*;
 use serde_json::{Value, json};
@@ -130,8 +131,18 @@ fn exercise_consumers(mut profile: UserProfile, clock_selector: usize) {
     let mut tracker = PerformanceTracker::from_stats(profile.performance_data.clone());
 
     let command = CommandId::from_action("x").unwrap();
-    tracker.record_attempt(&command, Duration::MAX, true, Duration::ZERO);
-    tracker.record_attempt(&command, Duration::ZERO, false, Duration::MAX);
+    tracker.record_attempt(
+        &command,
+        Duration::MAX,
+        AttemptOutcome::Succeeded,
+        Duration::ZERO,
+    );
+    tracker.record_attempt(
+        &command,
+        Duration::ZERO,
+        AttemptOutcome::Failed,
+        Duration::MAX,
+    );
 
     let id = ScenarioId::parse("delete_line_001").unwrap();
     profile

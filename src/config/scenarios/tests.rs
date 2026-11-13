@@ -870,7 +870,10 @@ prerequisites = ["basic_001"]
 
     assert_eq!(metadata.category, Some(ScenarioCategory::Movement));
     assert_eq!(metadata.difficulty, Some(Difficulty::Intermediate));
-    assert_eq!(metadata.tags, vec!["test", "metadata"]);
+    assert_eq!(
+        metadata.tags,
+        vec![ScenarioTag::new("test"), ScenarioTag::new("metadata")]
+    );
     assert_eq!(
         metadata.commands_taught,
         vec![ncmd("h"), ncmd("j"), ncmd("k"), ncmd("l")]

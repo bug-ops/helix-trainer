@@ -39,7 +39,7 @@ pub struct ScenarioBuilder {
     tolerance: usize,
     difficulty: Option<Difficulty>,
     category: Option<ScenarioCategory>,
-    tags: Vec<String>,
+    tags: Vec<crate::config::ScenarioTag>,
 }
 
 impl Default for ScenarioBuilder {
@@ -220,7 +220,7 @@ impl ScenarioBuilder {
     /// Add a tag
     #[must_use]
     pub fn tag(mut self, tag: impl Into<String>) -> Self {
-        self.tags.push(tag.into());
+        self.tags.push(crate::config::ScenarioTag::new(tag));
         self
     }
 

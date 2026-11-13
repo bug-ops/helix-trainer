@@ -42,18 +42,56 @@ pub enum CardState {
     Relearning,
 }
 
+/// How one attempt at a command ended
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::learning::AttemptOutcome;
+///
+/// assert!(AttemptOutcome::Succeeded.is_succeeded());
+/// assert!(!AttemptOutcome::Failed.is_succeeded());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AttemptOutcome {
+    /// The command was executed or recalled correctly.
+    Succeeded,
+    /// The attempt failed or timed out.
+    Failed,
+}
+
+impl AttemptOutcome {
+    /// Whether the attempt succeeded.
+    #[must_use]
+    pub fn is_succeeded(self) -> bool {
+        self == Self::Succeeded
+    }
+}
+
+/// A command whose mastery level rose after an attempt
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MasteryChange {
+    /// The command that leveled up.
+    pub command: CommandId,
+    /// The level before the attempt.
+    pub from: MasteryLevel,
+    /// The level after the attempt.
+    pub to: MasteryLevel,
+}
+
 /// FSRS rating of one attempt, ordered from worst to best
 ///
 /// # Examples
 ///
 /// ```
+/// use helix_trainer::learning::AttemptOutcome::{Failed, Succeeded};
 /// use helix_trainer::learning::performance::{Rating, ReferenceTime};
 /// use std::time::Duration;
 ///
 /// let reference = ReferenceTime::SINGLE_ACTION;
-/// assert_eq!(Rating::for_attempt(true, Duration::from_secs(2), reference), Rating::Easy);
-/// assert_eq!(Rating::for_attempt(true, Duration::from_secs(20), reference), Rating::Hard);
-/// assert_eq!(Rating::for_attempt(false, Duration::ZERO, reference), Rating::Again);
+/// assert_eq!(Rating::for_attempt(Succeeded, Duration::from_secs(2), reference), Rating::Easy);
+/// assert_eq!(Rating::for_attempt(Succeeded, Duration::from_secs(20), reference), Rating::Hard);
+/// assert_eq!(Rating::for_attempt(Failed, Duration::ZERO, reference), Rating::Again);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Rating {
@@ -73,8 +111,12 @@ impl Rating {
 
     /// Rates an attempt: a failure is [`Rating::Again`]; a success is never `Again` and gets
     /// worse as `duration` grows relative to `reference`.
-    pub fn for_attempt(success: bool, duration: Duration, reference: ReferenceTime) -> Self {
-        if !success {
+    pub fn for_attempt(
+        outcome: AttemptOutcome,
+        duration: Duration,
+        reference: ReferenceTime,
+    ) -> Self {
+        if !outcome.is_succeeded() {
             return Self::Again;
         }
         let ratio = reference.ratio(duration);
@@ -706,10 +748,10 @@ impl PerformanceTracker {
         &mut self,
         command: &CommandId,
         duration: Duration,
-        success: bool,
+        outcome: AttemptOutcome,
         optimal_time: Duration,
     ) {
-        self.record_attempt_against(command, duration, success, ReferenceTime::new(optimal_time));
+        self.record_attempt_against(command, duration, outcome, ReferenceTime::new(optimal_time));
     }
 
     /// Like [`Self::record_attempt`] with a typed [`ReferenceTime`].
@@ -717,10 +759,10 @@ impl PerformanceTracker {
         &mut self,
         command: &CommandId,
         duration: Duration,
-        success: bool,
+        outcome: AttemptOutcome,
         reference: ReferenceTime,
     ) {
-        if let Err(error) = self.try_record_attempt(command, duration, success, reference) {
+        if let Err(error) = self.try_record_attempt(command, duration, outcome, reference) {
             tracing::error!(
                 %command,
                 %error,
@@ -740,7 +782,7 @@ impl PerformanceTracker {
         &mut self,
         command: &CommandId,
         duration: Duration,
-        success: bool,
+        outcome: AttemptOutcome,
         reference: ReferenceTime,
     ) -> Result<(), LearningError> {
         // One `now` read shared by card creation, the elapsed-days calculation and the
@@ -753,12 +795,12 @@ impl PerformanceTracker {
             .or_insert_with(|| CommandPerformance::new(now));
 
         perf.attempts = perf.attempts.saturating_add(1);
-        if success {
+        if outcome.is_succeeded() {
             perf.successes = perf.successes.saturating_add(1);
         }
         perf.total_time = perf.total_time.saturating_add(duration);
 
-        let rating = Rating::for_attempt(success, duration, reference);
+        let rating = Rating::for_attempt(outcome, duration, reference);
         let elapsed_days = Self::elapsed_days_since_review(perf, now);
         let next_state =
             Self::next_item_state(&self.fsrs, perf.memory_state(), elapsed_days, rating)?;
@@ -822,14 +864,14 @@ impl PerformanceTracker {
 
     /// Record an attempt and return mastery level change if any
     ///
-    /// Returns Some((command, `old_level`, `new_level`)) if mastery level changed
+    /// Returns the [`MasteryChange`] if the mastery level rose
     pub fn record_attempt_with_mastery_change(
         &mut self,
         command: &CommandId,
         duration: Duration,
-        success: bool,
+        outcome: AttemptOutcome,
         reference: ReferenceTime,
-    ) -> Option<(CommandId, MasteryLevel, MasteryLevel)> {
+    ) -> Option<MasteryChange> {
         // Get old mastery level (Beginner if new command)
         let old_level = self
             .stats
@@ -837,7 +879,7 @@ impl PerformanceTracker {
             .map_or(MasteryLevel::Beginner, CommandPerformance::mastery_level);
 
         // Record the attempt
-        self.record_attempt_against(command, duration, success, reference);
+        self.record_attempt_against(command, duration, outcome, reference);
 
         // Get new mastery level
         let new_level = self
@@ -847,7 +889,11 @@ impl PerformanceTracker {
 
         // Return change if level improved
         if new_level.tier_level() > old_level.tier_level() {
-            Some((command.clone(), old_level, new_level))
+            Some(MasteryChange {
+                command: command.clone(),
+                from: old_level,
+                to: new_level,
+            })
         } else {
             None
         }
@@ -961,7 +1007,7 @@ mod tests {
         tracker.record_attempt(
             &cid("h"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
 
@@ -984,13 +1030,13 @@ mod tests {
         tracker.record_attempt(
             &cid("h"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("dd"),
             Duration::from_secs(9),
-            false,
+            AttemptOutcome::Failed,
             Duration::from_secs(1),
         );
 
@@ -1051,13 +1097,13 @@ mod tests {
         tracker.record_attempt(
             &cid("h"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("j"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
 
@@ -1090,7 +1136,7 @@ mod tests {
         let result = tracker.try_record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             ReferenceTime::SINGLE_ACTION,
         );
 
@@ -1130,7 +1176,7 @@ mod tests {
         tracker.record_attempt(
             &cid("h"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         let mut json = serde_json::to_value(tracker.stats_clone()).unwrap();
@@ -1155,7 +1201,7 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
 
@@ -1170,7 +1216,7 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
 
@@ -1187,13 +1233,13 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
 
@@ -1203,7 +1249,7 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(10),
-            false,
+            AttemptOutcome::Failed,
             Duration::from_secs(1),
         );
 
@@ -1222,7 +1268,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("x"),
                 Duration::from_secs(10),
-                false,
+                AttemptOutcome::Failed,
                 Duration::from_secs(1),
             );
         }
@@ -1232,9 +1278,9 @@ mod tests {
         assert!(perf.difficulty() <= 10.0);
     }
 
-    fn rate(success: bool, secs: f64) -> Rating {
+    fn rate(outcome: AttemptOutcome, secs: f64) -> Rating {
         Rating::for_attempt(
-            success,
+            outcome,
             Duration::from_secs_f64(secs),
             ReferenceTime::new(Duration::from_secs(1)),
         )
@@ -1242,36 +1288,36 @@ mod tests {
 
     #[test]
     fn test_rating_thresholds_are_inclusive() {
-        assert_eq!(rate(true, 0.0), Rating::Easy);
-        assert_eq!(rate(true, 1.5), Rating::Easy);
-        assert_eq!(rate(true, 1.6), Rating::Good);
-        assert_eq!(rate(true, 3.0), Rating::Good);
-        assert_eq!(rate(true, 3.1), Rating::Hard);
-        assert_eq!(rate(true, 3600.0), Rating::Hard);
+        assert_eq!(rate(AttemptOutcome::Succeeded, 0.0), Rating::Easy);
+        assert_eq!(rate(AttemptOutcome::Succeeded, 1.5), Rating::Easy);
+        assert_eq!(rate(AttemptOutcome::Succeeded, 1.6), Rating::Good);
+        assert_eq!(rate(AttemptOutcome::Succeeded, 3.0), Rating::Good);
+        assert_eq!(rate(AttemptOutcome::Succeeded, 3.1), Rating::Hard);
+        assert_eq!(rate(AttemptOutcome::Succeeded, 3600.0), Rating::Hard);
     }
 
     #[test]
     fn test_failure_is_always_again() {
-        assert_eq!(rate(false, 0.0), Rating::Again);
-        assert_eq!(rate(false, 1.0), Rating::Again);
-        assert_eq!(rate(false, 1000.0), Rating::Again);
+        assert_eq!(rate(AttemptOutcome::Failed, 0.0), Rating::Again);
+        assert_eq!(rate(AttemptOutcome::Failed, 1.0), Rating::Again);
+        assert_eq!(rate(AttemptOutcome::Failed, 1000.0), Rating::Again);
     }
 
     #[test]
     fn test_slow_success_is_not_again() {
         // Regression for #550: more than 5x the reference time used to rate a success Again.
-        assert_eq!(rate(true, 6.0), Rating::Hard);
+        assert_eq!(rate(AttemptOutcome::Succeeded, 6.0), Rating::Hard);
     }
 
     #[test]
     fn test_zero_reference_time_does_not_divide_by_zero() {
         let zero = ReferenceTime::new(Duration::ZERO);
         assert_eq!(
-            Rating::for_attempt(true, Duration::ZERO, zero),
+            Rating::for_attempt(AttemptOutcome::Succeeded, Duration::ZERO, zero),
             Rating::Easy
         );
         assert_eq!(
-            Rating::for_attempt(true, Duration::from_secs(1), zero),
+            Rating::for_attempt(AttemptOutcome::Succeeded, Duration::from_secs(1), zero),
             Rating::Hard
         );
     }
@@ -1294,8 +1340,13 @@ mod tests {
         // Regression for #550: the reference no longer derives from the measured time, so
         // a slow completion rates worse than a quick one.
         let reference = ReferenceTime::for_optimal_actions(NonZeroUsize::new(2).unwrap());
-        let quick = Rating::for_attempt(true, Duration::from_secs(6), reference);
-        let slow = Rating::for_attempt(true, Duration::from_secs(60), reference);
+        let quick =
+            Rating::for_attempt(AttemptOutcome::Succeeded, Duration::from_secs(6), reference);
+        let slow = Rating::for_attempt(
+            AttemptOutcome::Succeeded,
+            Duration::from_secs(60),
+            reference,
+        );
         assert_eq!(quick, Rating::Easy);
         assert_eq!(slow, Rating::Hard);
     }
@@ -1342,7 +1393,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("weak"),
                 Duration::from_secs(10),
-                false,
+                AttemptOutcome::Failed,
                 Duration::from_secs(1),
             );
         }
@@ -1352,7 +1403,7 @@ mod tests {
             tracker.record_attempt(
                 &cid("strong"),
                 Duration::from_secs(1),
-                true,
+                AttemptOutcome::Succeeded,
                 Duration::from_secs(1),
             );
         }
@@ -1370,7 +1421,7 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         let first_last_review = tracker.performance(&cid("x")).unwrap().last_review;
@@ -1380,7 +1431,7 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         let second_last_review = tracker.performance(&cid("x")).unwrap().last_review;
@@ -1399,19 +1450,19 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("yy"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("p"),
             Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
 
@@ -1542,13 +1593,13 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(2),
-            true,
+            AttemptOutcome::Succeeded,
             Duration::from_secs(1),
         );
         tracker.record_attempt(
             &cid("x"),
             Duration::from_secs(3),
-            false,
+            AttemptOutcome::Failed,
             Duration::from_secs(1),
         );
 
@@ -1665,7 +1716,7 @@ mod tests {
         let unchanged = tracker.record_attempt_with_mastery_change(
             &cid("l"),
             Duration::from_secs(60),
-            false,
+            AttemptOutcome::Failed,
             ReferenceTime::SINGLE_ACTION,
         );
         assert!(unchanged.is_none());
@@ -1675,27 +1726,34 @@ mod tests {
             tracker.record_attempt_with_mastery_change(
                 &cid("x"),
                 Duration::from_millis(100),
-                true,
+                AttemptOutcome::Succeeded,
                 ReferenceTime::SINGLE_ACTION,
             )
         });
-        let (command, old, new) = promoted.expect("repeated quick successes promote the card");
-        assert_eq!(command, cid("x"));
-        assert!(new.tier_level() > old.tier_level());
+        let change = promoted.expect("repeated quick successes promote the card");
+        assert_eq!(change.command, cid("x"));
+        assert!(change.to.tier_level() > change.from.tier_level());
     }
 
     /// Strategy for one simulated review: (success, duration, optimal duration, days
     /// elapsed since the previous review). `elapsed_days` ranges up to a year so both
     /// properties exercise FSRS's primary scheduling input (`days_elapsed` in
     /// [`PerformanceTracker::calculate_next_fsrs_state`]), not just same-instant reviews.
-    fn attempt_strategy() -> impl Strategy<Value = (bool, u64, u64, i64)> {
-        (any::<bool>(), 1u64..90, 1u64..90, 0i64..365)
+    fn outcome_strategy() -> impl Strategy<Value = AttemptOutcome> {
+        prop_oneof![
+            Just(AttemptOutcome::Succeeded),
+            Just(AttemptOutcome::Failed)
+        ]
+    }
+
+    fn attempt_strategy() -> impl Strategy<Value = (AttemptOutcome, u64, u64, i64)> {
+        (outcome_strategy(), 1u64..90, 1u64..90, 0i64..365)
     }
 
     proptest! {
         #[test]
         fn prop_rating_is_monotonic_in_duration(
-            success in any::<bool>(),
+            outcome in outcome_strategy(),
             reference_ms in 0u64..100_000,
             a_ms in 0u64..10_000_000,
             b_ms in 0u64..10_000_000,
@@ -1703,8 +1761,8 @@ mod tests {
             let reference = ReferenceTime::new(Duration::from_millis(reference_ms));
             let (shorter, longer) = (a_ms.min(b_ms), a_ms.max(b_ms));
 
-            let quick = Rating::for_attempt(success, Duration::from_millis(shorter), reference);
-            let slow = Rating::for_attempt(success, Duration::from_millis(longer), reference);
+            let quick = Rating::for_attempt(outcome, Duration::from_millis(shorter), reference);
+            let slow = Rating::for_attempt(outcome, Duration::from_millis(longer), reference);
 
             prop_assert!(slow <= quick, "{slow:?} after {longer} ms beat {quick:?} after {shorter} ms");
         }
@@ -1715,7 +1773,7 @@ mod tests {
             duration_ms in any::<u64>(),
         ) {
             let rating = Rating::for_attempt(
-                true,
+                AttemptOutcome::Succeeded,
                 Duration::from_millis(duration_ms),
                 ReferenceTime::new(Duration::from_millis(reference_ms)),
             );
@@ -1730,11 +1788,11 @@ mod tests {
             let run = || {
                 let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
                 let mut tracker = PerformanceTracker::with_clock(clock.clone());
-                for &(success, duration_secs, optimal_secs, elapsed_days) in &attempts {
+                for &(outcome, duration_secs, optimal_secs, elapsed_days) in &attempts {
                     clock.advance_days(elapsed_days);
                     tracker.record_attempt(&cid("x"),
                         Duration::from_secs(duration_secs),
-                        success,
+                        outcome,
                         Duration::from_secs(optimal_secs),
                     );
                 }
@@ -1772,11 +1830,11 @@ mod tests {
             let clock = Arc::new(FakeClock::at("2030-01-01T00:00:00Z"));
             let mut tracker = PerformanceTracker::with_clock(clock.clone());
 
-            for &(success, duration_secs, optimal_secs, elapsed_days) in &attempts {
+            for &(outcome, duration_secs, optimal_secs, elapsed_days) in &attempts {
                 clock.advance_days(elapsed_days);
                 tracker.record_attempt(&cid("x"),
                     Duration::from_secs(duration_secs),
-                    success,
+                    outcome,
                     Duration::from_secs(optimal_secs),
                 );
 
@@ -1814,7 +1872,7 @@ mod tests {
         tracker.record_attempt(
             &cid("x"),
             std::time::Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             std::time::Duration::from_secs(1),
         );
 

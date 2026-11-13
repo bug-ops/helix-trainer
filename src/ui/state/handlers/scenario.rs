@@ -8,7 +8,7 @@ use crate::error::UserError;
 use crate::game::GameSession;
 use crate::game::services::ScenarioCompletionService;
 use crate::gamification::UserProfile;
-use crate::learning::{Analytics, ProgressionTier, ReferenceTime};
+use crate::learning::{Analytics, AttemptOutcome, ProgressionTier, ReferenceTime};
 use crate::security::error_chain;
 use crate::ui::notification::{Notification, NotificationType};
 use crate::ui::state::Effect;
@@ -92,7 +92,11 @@ fn record_scenario_completion(
         &mut ctx.progress.performance_tracker,
         &commands,
         feedback.duration,
-        feedback.score > 0,
+        if feedback.score > 0 {
+            AttemptOutcome::Succeeded
+        } else {
+            AttemptOutcome::Failed
+        },
         ReferenceTime::for_optimal_actions(
             NonZeroUsize::new(feedback.optimal_actions).unwrap_or(NonZeroUsize::MIN),
         ),
@@ -1934,7 +1938,7 @@ mod tests {
         state.progress.performance_tracker.record_attempt(
             &cid("x"),
             std::time::Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             std::time::Duration::from_secs(1),
         );
         state.progress.profile.daily_quests = vec![crate::testing::quest(
@@ -1973,7 +1977,7 @@ mod tests {
         state.progress.performance_tracker.record_attempt(
             &cid("x"),
             std::time::Duration::from_secs(1),
-            true,
+            AttemptOutcome::Succeeded,
             std::time::Duration::from_secs(1),
         );
         // No pending quests, no imperfect scenarios.

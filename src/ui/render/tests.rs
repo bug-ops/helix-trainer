@@ -1531,7 +1531,9 @@ mod results_tests {
 // ============================================================================
 
 mod statistics_tests {
+
     use super::*;
+    use crate::learning::AttemptOutcome;
     use crate::ui::state::{ReturnDestination, StatisticsData, TypedScreen};
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -1567,22 +1569,30 @@ mod statistics_tests {
         // Add some tracked commands via record_attempt
         let dur = std::time::Duration::from_secs(1);
         let optimal = std::time::Duration::from_secs(2);
-        state
-            .progress
-            .performance_tracker
-            .record_attempt(&cid("h"), dur, true, optimal);
-        state
-            .progress
-            .performance_tracker
-            .record_attempt(&cid("j"), dur, true, optimal);
-        state
-            .progress
-            .performance_tracker
-            .record_attempt(&cid("k"), dur, true, optimal);
-        state
-            .progress
-            .performance_tracker
-            .record_attempt(&cid("l"), dur, true, optimal);
+        state.progress.performance_tracker.record_attempt(
+            &cid("h"),
+            dur,
+            AttemptOutcome::Succeeded,
+            optimal,
+        );
+        state.progress.performance_tracker.record_attempt(
+            &cid("j"),
+            dur,
+            AttemptOutcome::Succeeded,
+            optimal,
+        );
+        state.progress.performance_tracker.record_attempt(
+            &cid("k"),
+            dur,
+            AttemptOutcome::Succeeded,
+            optimal,
+        );
+        state.progress.performance_tracker.record_attempt(
+            &cid("l"),
+            dur,
+            AttemptOutcome::Succeeded,
+            optimal,
+        );
 
         state.screen = TypedScreen::Statistics(StatisticsData {
             return_to: ReturnDestination::Menu,
@@ -1606,15 +1616,19 @@ mod statistics_tests {
 
         // Create weak commands (low success rate)
         for _ in 0..5 {
-            state
-                .progress
-                .performance_tracker
-                .record_attempt(&cid("dd"), dur, false, optimal);
+            state.progress.performance_tracker.record_attempt(
+                &cid("dd"),
+                dur,
+                AttemptOutcome::Failed,
+                optimal,
+            );
         }
-        state
-            .progress
-            .performance_tracker
-            .record_attempt(&cid("dd"), dur, true, optimal);
+        state.progress.performance_tracker.record_attempt(
+            &cid("dd"),
+            dur,
+            AttemptOutcome::Succeeded,
+            optimal,
+        );
 
         state.screen = TypedScreen::Statistics(StatisticsData {
             return_to: ReturnDestination::Menu,
@@ -1640,10 +1654,12 @@ mod statistics_tests {
         let commands = ["dd", "yy", "cc", "pp", "x", "r", "s"];
         for cmd in &commands {
             for _ in 0..3 {
-                state
-                    .progress
-                    .performance_tracker
-                    .record_attempt(&cid(cmd), dur, false, optimal);
+                state.progress.performance_tracker.record_attempt(
+                    &cid(cmd),
+                    dur,
+                    AttemptOutcome::Failed,
+                    optimal,
+                );
             }
         }
 
@@ -1669,10 +1685,12 @@ mod statistics_tests {
 
         // Record some commands to create due reviews
         for _ in 0..10 {
-            state
-                .progress
-                .performance_tracker
-                .record_attempt(&cid("h"), dur, true, optimal);
+            state.progress.performance_tracker.record_attempt(
+                &cid("h"),
+                dur,
+                AttemptOutcome::Succeeded,
+                optimal,
+            );
         }
 
         state.screen = TypedScreen::Statistics(StatisticsData {
@@ -1778,38 +1796,48 @@ mod statistics_tests {
 
         // High success rate command
         for _ in 0..10 {
-            state
-                .progress
-                .performance_tracker
-                .record_attempt(&cid("h"), dur, true, optimal);
+            state.progress.performance_tracker.record_attempt(
+                &cid("h"),
+                dur,
+                AttemptOutcome::Succeeded,
+                optimal,
+            );
         }
 
         // Medium success rate command
         for _ in 0..5 {
-            state
-                .progress
-                .performance_tracker
-                .record_attempt(&cid("j"), dur, true, optimal);
+            state.progress.performance_tracker.record_attempt(
+                &cid("j"),
+                dur,
+                AttemptOutcome::Succeeded,
+                optimal,
+            );
         }
         for _ in 0..3 {
-            state
-                .progress
-                .performance_tracker
-                .record_attempt(&cid("j"), dur, false, optimal);
+            state.progress.performance_tracker.record_attempt(
+                &cid("j"),
+                dur,
+                AttemptOutcome::Failed,
+                optimal,
+            );
         }
 
         // Low success rate command
         for _ in 0..2 {
-            state
-                .progress
-                .performance_tracker
-                .record_attempt(&cid("dd"), dur, true, optimal);
+            state.progress.performance_tracker.record_attempt(
+                &cid("dd"),
+                dur,
+                AttemptOutcome::Succeeded,
+                optimal,
+            );
         }
         for _ in 0..8 {
-            state
-                .progress
-                .performance_tracker
-                .record_attempt(&cid("dd"), dur, false, optimal);
+            state.progress.performance_tracker.record_attempt(
+                &cid("dd"),
+                dur,
+                AttemptOutcome::Failed,
+                optimal,
+            );
         }
 
         state.screen = TypedScreen::Statistics(StatisticsData {

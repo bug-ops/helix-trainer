@@ -5,6 +5,53 @@ use crate::config::{ScenarioMetadata, ScoringConfig, Setup, Solution, TargetStat
 use crate::testing::{ncmd, sid};
 use chrono::Utc;
 
+#[test]
+fn criterion_never_accepts_nothing_and_any_accepts_everything() {
+    let beginners = Criterion::one_of(Difficulty::Beginner, []);
+
+    assert!(beginners.admits(Some(&Difficulty::Beginner)));
+    assert!(!beginners.admits(Some(&Difficulty::Advanced)));
+    assert!(!beginners.admits(None));
+    assert!(Criterion::<Difficulty>::Any.admits(None));
+    assert!(NonEmptySet::<u8>::try_from(HashSet::new()).is_err());
+}
+
+#[test]
+fn criterion_toggle_helpers_keep_the_set_non_empty() {
+    let set = NonEmptySet::new(1u8, [2]);
+
+    let smaller = set.without(&1).expect("one value remains");
+
+    assert!(smaller.contains(&2));
+    assert!(smaller.without(&2).is_none());
+}
+
+#[test]
+fn prerequisite_filter_selects_by_presence_of_prerequisites() {
+    let mut with = create_scenario("with_prereq", "With", None, None, vec![]);
+    with.metadata.prerequisites = vec![sid("other")];
+    let without = create_scenario("no_prereq", "Without", None, None, vec![]);
+    let mut collection = ScenarioCollection::new(vec![with, without]);
+
+    collection.apply_filter(
+        &ScenarioFilter {
+            prerequisites: PrerequisiteFilter::WithPrerequisites,
+            ..Default::default()
+        },
+        None,
+    );
+    assert_eq!(collection.count(), 1);
+
+    collection.apply_filter(
+        &ScenarioFilter {
+            prerequisites: PrerequisiteFilter::WithoutPrerequisites,
+            ..Default::default()
+        },
+        None,
+    );
+    assert_eq!(collection.count(), 1);
+}
+
 /// Helper to create a test scenario with metadata
 #[expect(
     clippy::needless_pass_by_value,
@@ -105,7 +152,7 @@ fn test_filter_by_category() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Movement, []),
         ..Default::default()
     };
 
@@ -146,7 +193,7 @@ fn test_filter_by_difficulty() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        difficulties: Some([Difficulty::Beginner].iter().copied().collect()),
+        difficulties: Criterion::one_of(Difficulty::Beginner, []),
         ..Default::default()
     };
 
@@ -184,7 +231,7 @@ fn test_filter_by_command() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        commands: Some([ncmd("d")].into_iter().collect()),
+        commands: Criterion::one_of(ncmd("d"), []),
         ..Default::default()
     };
 
@@ -225,8 +272,8 @@ fn test_filter_multiple_criteria() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
-        difficulties: Some([Difficulty::Beginner].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Movement, []),
+        difficulties: Criterion::one_of(Difficulty::Beginner, []),
         ..Default::default()
     };
 
@@ -516,7 +563,7 @@ fn test_reset_filter() {
 
     // Apply filter
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Movement, []),
         ..Default::default()
     };
     collection.apply_filter(&filter, None);
@@ -635,7 +682,7 @@ fn test_filter_empty_result() {
     let mut collection = ScenarioCollection::new(scenarios);
 
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Editing].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Editing, []),
         ..Default::default()
     };
 
@@ -689,7 +736,7 @@ fn test_scenarios_without_metadata() {
 
     // Filtering by category should exclude scenario without metadata
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Movement, []),
         ..Default::default()
     };
 
@@ -717,14 +764,14 @@ fn test_active_filter_and_sort() {
 
     // Apply filter and sort
     let filter = ScenarioFilter {
-        categories: Some([ScenarioCategory::Movement].iter().copied().collect()),
+        categories: Criterion::one_of(ScenarioCategory::Movement, []),
         ..Default::default()
     };
     collection.apply_filter(&filter, None);
     collection.sort(SortMode::ByName, None);
 
     // Check active filter and sort are tracked
-    assert!(collection.active_filter().categories.is_some());
+    assert!(collection.active_filter().categories.is_restricted());
     assert_eq!(collection.active_sort(), SortMode::ByName);
 }
 

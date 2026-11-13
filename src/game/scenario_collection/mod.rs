@@ -5,10 +5,11 @@
 //! - Sorting by name, difficulty, category, progress, mastery
 //! - Efficient index mapping for menu display
 
-use crate::config::{Difficulty, Scenario, ScenarioCategory, ScenarioMetadata};
+use crate::config::{Difficulty, Scenario, ScenarioCategory, ScenarioMetadata, ScenarioTag};
 use crate::gamification::UserProfile;
 use crate::ids::NormalizedCommand;
 use std::collections::HashSet;
+use std::hash::Hash;
 
 /// Collection of scenarios with filtering and sorting support
 #[derive(Debug, Clone)]
@@ -26,26 +27,155 @@ pub struct ScenarioCollection {
     active_sort: SortMode,
 }
 
+/// A non-empty set of accepted values.
+///
+/// Emptiness is unrepresentable, so "accept one of these" can never mean "accept
+/// nothing".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NonEmptySet<T: Eq + Hash>(HashSet<T>);
+
+impl<T: Eq + Hash> NonEmptySet<T> {
+    /// The set of `first` and `rest`.
+    #[must_use]
+    pub fn new(first: T, rest: impl IntoIterator<Item = T>) -> Self {
+        let mut set: HashSet<T> = rest.into_iter().collect();
+        set.insert(first);
+        Self(set)
+    }
+
+    /// Whether `item` is in the set.
+    #[must_use]
+    pub fn contains(&self, item: &T) -> bool {
+        self.0.contains(item)
+    }
+
+    /// The set with `item` added.
+    #[must_use]
+    pub fn with(mut self, item: T) -> Self {
+        self.0.insert(item);
+        self
+    }
+
+    /// The set without `item`, or `None` when that leaves it empty.
+    #[must_use]
+    pub fn without(mut self, item: &T) -> Option<Self> {
+        self.0.remove(item);
+        (!self.0.is_empty()).then_some(self)
+    }
+}
+
+impl<T: Eq + Hash> TryFrom<HashSet<T>> for NonEmptySet<T> {
+    type Error = EmptyCriterion;
+
+    fn try_from(set: HashSet<T>) -> Result<Self, EmptyCriterion> {
+        if set.is_empty() {
+            Err(EmptyCriterion)
+        } else {
+            Ok(Self(set))
+        }
+    }
+}
+
+/// An empty set was given where at least one accepted value is required.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("a filter criterion needs at least one accepted value")]
+pub struct EmptyCriterion;
+
+/// What a [`ScenarioFilter`] requires of one scenario property.
+///
+/// # Examples
+///
+/// ```
+/// use helix_trainer::config::Difficulty;
+/// use helix_trainer::game::Criterion;
+///
+/// let beginners = Criterion::one_of(Difficulty::Beginner, []);
+/// assert!(beginners.admits(Some(&Difficulty::Beginner)));
+/// assert!(!beginners.admits(None));
+/// assert!(Criterion::<Difficulty>::Any.admits(None));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Criterion<T: Eq + Hash> {
+    /// No restriction.
+    #[default]
+    Any,
+    /// The property must be one of these values.
+    OneOf(NonEmptySet<T>),
+}
+
+impl<T: Eq + Hash> Criterion<T> {
+    /// A criterion accepting `first` and `rest`.
+    #[must_use]
+    pub fn one_of(first: T, rest: impl IntoIterator<Item = T>) -> Self {
+        Self::OneOf(NonEmptySet::new(first, rest))
+    }
+
+    /// Whether the criterion places no restriction.
+    #[must_use]
+    pub fn is_any(&self) -> bool {
+        matches!(self, Self::Any)
+    }
+
+    /// Whether the criterion restricts the property to some values.
+    #[must_use]
+    pub fn is_restricted(&self) -> bool {
+        !self.is_any()
+    }
+
+    /// Whether a property value passes; a missing value fails any restriction.
+    #[must_use]
+    pub fn admits(&self, value: Option<&T>) -> bool {
+        match self {
+            Self::Any => true,
+            Self::OneOf(accepted) => value.is_some_and(|value| accepted.contains(value)),
+        }
+    }
+
+    /// Whether at least one of `values` passes.
+    #[must_use]
+    pub fn admits_any<'a>(&self, values: impl IntoIterator<Item = &'a T>) -> bool
+    where
+        T: 'a,
+    {
+        match self {
+            Self::Any => true,
+            Self::OneOf(accepted) => values.into_iter().any(|value| accepted.contains(value)),
+        }
+    }
+}
+
+/// Prerequisite criterion for [`ScenarioFilter`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PrerequisiteFilter {
+    /// No restriction.
+    #[default]
+    Any,
+    /// Keep only scenarios that list prerequisites.
+    WithPrerequisites,
+    /// Keep only scenarios that list none.
+    WithoutPrerequisites,
+}
+
 /// Filter criteria for scenarios
 #[derive(Debug, Clone, Default)]
 pub struct ScenarioFilter {
-    /// Include only scenarios in these categories (None = all categories)
-    pub categories: Option<HashSet<ScenarioCategory>>,
+    /// Include only scenarios in these categories
+    pub categories: Criterion<ScenarioCategory>,
 
-    /// Include only scenarios at these difficulty levels (None = all difficulties)
-    pub difficulties: Option<HashSet<Difficulty>>,
+    /// Include only scenarios at these difficulty levels
+    pub difficulties: Criterion<Difficulty>,
 
-    /// Include only scenarios teaching these commands (None = no filter)
-    pub commands: Option<HashSet<NormalizedCommand>>,
+    /// Include only scenarios teaching at least one of these commands
+    pub commands: Criterion<NormalizedCommand>,
 
     /// Completion-status criterion (defaults to [`CompletionFilter::Any`])
     pub completion: CompletionFilter,
 
-    /// Include only scenarios with prerequisites met (None = no check)
-    pub has_prerequisites: Option<bool>,
+    /// Prerequisite criterion (defaults to [`PrerequisiteFilter::Any`])
+    pub prerequisites: PrerequisiteFilter,
 
-    /// Include only scenarios with specific tags
-    pub tags: Option<HashSet<String>>,
+    /// Include only scenarios with at least one of these tags
+    pub tags: Criterion<ScenarioTag>,
 }
 
 /// Completion-status criterion for [`ScenarioFilter`].
@@ -278,42 +408,18 @@ impl ScenarioCollection {
         filter: &ScenarioFilter,
         profile: Option<&UserProfile>,
     ) -> bool {
-        // Check category filter
-        if let Some(ref categories) = filter.categories {
-            let scenario_category = scenario.metadata.category;
-
-            match scenario_category {
-                Some(cat) if categories.contains(&cat) => {} // Pass
-                _ => return false, // Scenario has no category or wrong category
-            }
-        }
-
-        // Check difficulty filter
-        if let Some(ref difficulties) = filter.difficulties {
-            let scenario_difficulty = scenario.metadata.difficulty;
-
-            match scenario_difficulty {
-                Some(diff) if difficulties.contains(&diff) => {} // Pass
-                _ => return false,                               // Wrong difficulty
-            }
-        }
-
-        // Check commands filter (scenario must teach at least one of the commands)
-        if let Some(ref commands) = filter.commands {
-            let scenario_commands = &scenario.metadata.commands_taught;
-
-            if !scenario_commands.iter().any(|cmd| commands.contains(cmd)) {
-                return false;
-            }
-        }
-
-        // Check tags filter (scenario must have at least one matching tag)
-        if let Some(ref tags) = filter.tags {
-            let scenario_tags = &scenario.metadata.tags;
-
-            if !scenario_tags.iter().any(|tag| tags.contains(tag)) {
-                return false;
-            }
+        if !filter
+            .categories
+            .admits(scenario.metadata.category.as_ref())
+            || !filter
+                .difficulties
+                .admits(scenario.metadata.difficulty.as_ref())
+            || !filter
+                .commands
+                .admits_any(&scenario.metadata.commands_taught)
+            || !filter.tags.admits_any(&scenario.metadata.tags)
+        {
+            return false;
         }
 
         // Check completion status
@@ -330,16 +436,12 @@ impl ScenarioCollection {
             }
         }
 
-        // Check prerequisites filter
-        if let Some(has_prereqs) = filter.has_prerequisites {
-            let scenario_has_prereqs = !scenario.metadata.prerequisites.is_empty();
-
-            if has_prereqs != scenario_has_prereqs {
-                return false;
-            }
+        let has_prerequisites = !scenario.metadata.prerequisites.is_empty();
+        match filter.prerequisites {
+            PrerequisiteFilter::Any => true,
+            PrerequisiteFilter::WithPrerequisites => has_prerequisites,
+            PrerequisiteFilter::WithoutPrerequisites => !has_prerequisites,
         }
-
-        true
     }
 
     /// Get current active filter

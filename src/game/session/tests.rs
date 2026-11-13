@@ -56,7 +56,7 @@ fn test_record_action() {
     let scenario = create_test_scenario();
     let session = GameSession::new(scenario).unwrap();
 
-    let result = session.record_action("j".to_string()).unwrap();
+    let result = session.record_action("j").unwrap();
     match result {
         SessionAfterAction::StillActive(session) => {
             assert_eq!(session.action_count(), 1);
@@ -82,12 +82,12 @@ fn test_completion_detection() {
     let session = GameSession::new(scenario).unwrap();
 
     // Execute 'x' to select line, then 'd' to delete - this should complete the scenario
-    let result = session.record_action("x".to_string()).unwrap();
+    let result = session.record_action("x").unwrap();
     let session = match result {
         SessionAfterAction::StillActive(s) => s,
         SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
     };
-    let result = session.record_action("d".to_string()).unwrap();
+    let result = session.record_action("d").unwrap();
 
     // Should be completed now
     assert_matches!(
@@ -132,12 +132,12 @@ fn test_calculate_score_perfect() {
     let session = GameSession::new(scenario).unwrap();
 
     // Record optimal number of actions (x to select line, d to delete)
-    let result = session.record_action("x".to_string()).unwrap();
+    let result = session.record_action("x").unwrap();
     let session = match result {
         SessionAfterAction::StillActive(s) => s,
         SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
     };
-    let result = session.record_action("d".to_string()).unwrap();
+    let result = session.record_action("d").unwrap();
 
     // The session should automatically mark as completed when state matches
     match result {
@@ -169,12 +169,12 @@ fn test_get_feedback_success() {
     let session = GameSession::new(scenario).unwrap();
 
     // Complete with x + d commands
-    let result = session.record_action("x".to_string()).unwrap();
+    let result = session.record_action("x").unwrap();
     let session = match result {
         SessionAfterAction::StillActive(s) => s,
         SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
     };
-    let result = session.record_action("d".to_string()).unwrap();
+    let result = session.record_action("d").unwrap();
 
     // Should be automatically completed
     match result {
@@ -206,7 +206,7 @@ fn test_get_feedback_with_hint() {
     let movements = ["j", "j", "k", "k", "j"];
     for cmd in movements {
         session_or_completed = match session_or_completed {
-            SessionAfterAction::StillActive(s) => s.record_action(cmd.to_string()).unwrap(),
+            SessionAfterAction::StillActive(s) => s.record_action(cmd).unwrap(),
             SessionAfterAction::Completed(c) => {
                 // Already completed early, just return
                 SessionAfterAction::Completed(c)
@@ -221,20 +221,20 @@ fn test_get_feedback_with_hint() {
 
     // Move back up to row 0 before completing
     session_or_completed = match session_or_completed {
-        SessionAfterAction::StillActive(s) => s.record_action("k".to_string()).unwrap(),
+        SessionAfterAction::StillActive(s) => s.record_action("k").unwrap(),
         SessionAfterAction::Completed(c) => SessionAfterAction::Completed(c),
     };
 
     // Complete with x + d commands (if not already completed)
     // First select line with x
     session_or_completed = match session_or_completed {
-        SessionAfterAction::StillActive(s) => s.record_action("x".to_string()).unwrap(),
+        SessionAfterAction::StillActive(s) => s.record_action("x").unwrap(),
         SessionAfterAction::Completed(c) => SessionAfterAction::Completed(c),
     };
 
     // Then delete with d
     let result = match session_or_completed {
-        SessionAfterAction::StillActive(s) => s.record_action("d".to_string()).unwrap(),
+        SessionAfterAction::StillActive(s) => s.record_action("d").unwrap(),
         SessionAfterAction::Completed(c) => SessionAfterAction::Completed(c),
     };
 
@@ -258,13 +258,13 @@ fn test_reset_session() {
     let session = GameSession::new(scenario).unwrap();
 
     // Record some actions
-    let result1 = session.record_action("j".to_string()).unwrap();
+    let result1 = session.record_action("j").unwrap();
     let mut current_session = match result1 {
         SessionAfterAction::StillActive(s) => s,
         SessionAfterAction::Completed(_) => panic!("Should not complete on 'j'"),
     };
 
-    let result2 = current_session.record_action("k".to_string()).unwrap();
+    let result2 = current_session.record_action("k").unwrap();
     current_session = match result2 {
         SessionAfterAction::StillActive(s) => s,
         SessionAfterAction::Completed(_) => panic!("Should not complete on 'k'"),
@@ -315,12 +315,12 @@ fn test_timer_fixed_on_completion() {
     let session = GameSession::with_clock(scenario, clock.clone()).unwrap();
 
     // Complete with x + d commands
-    let result = session.record_action("x".to_string()).unwrap();
+    let result = session.record_action("x").unwrap();
     let session = match result {
         SessionAfterAction::StillActive(s) => s,
         SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
     };
-    let result = session.record_action("d".to_string()).unwrap();
+    let result = session.record_action("d").unwrap();
 
     match result {
         SessionAfterAction::Completed(completed) => {
@@ -353,12 +353,12 @@ fn test_playable_scenario_elapsed_fixed_after_completion() {
     let clock = Arc::new(FakeMonotonicClock::new());
     let session = GameSession::with_clock(scenario, clock.clone()).unwrap();
 
-    let result = session.record_action("x".to_string()).unwrap();
+    let result = session.record_action("x").unwrap();
     let session = match result {
         SessionAfterAction::StillActive(s) => s,
         SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
     };
-    let result = session.record_action("d".to_string()).unwrap();
+    let result = session.record_action("d").unwrap();
 
     match result {
         SessionAfterAction::Completed(completed) => {
@@ -397,7 +397,7 @@ fn test_completion_progress_not_100_while_in_insert_mode() {
         .build();
     let session = GameSession::new(scenario).unwrap();
 
-    let result = session.record_action("o".to_string()).unwrap();
+    let result = session.record_action("o").unwrap();
     let session = match result {
         SessionAfterAction::StillActive(s) => s,
         SessionAfterAction::Completed(_) => {
@@ -413,7 +413,7 @@ fn test_completion_progress_not_100_while_in_insert_mode() {
         "Progress must not read 100% while still in Insert mode"
     );
 
-    let result = session.record_action("Escape".to_string()).unwrap();
+    let result = session.record_action("Escape").unwrap();
     match result {
         SessionAfterAction::Completed(completed) => {
             assert_eq!(
@@ -441,7 +441,7 @@ fn movement_scenario(target_cursor: Pos) -> Scenario {
 }
 
 fn step(session: GameSession<Active>, command: &str) -> GameSession<Active> {
-    match session.record_action(command.to_string()).unwrap() {
+    match session.record_action(command).unwrap() {
         SessionAfterAction::StillActive(s) => s,
         SessionAfterAction::Completed(_) => panic!("unexpected completion after '{command}'"),
     }
@@ -464,7 +464,7 @@ fn test_progress_increases_as_cursor_approaches_target() {
         assert!(current < 100);
         previous = current;
     }
-    match session.record_action("l".to_string()).unwrap() {
+    match session.record_action("l").unwrap() {
         SessionAfterAction::Completed(done) => assert_eq!(done.completion_progress(), 100),
         SessionAfterAction::StillActive(_) => panic!("cursor on target must complete"),
     }
@@ -533,7 +533,7 @@ fn undo_redo_scenario() -> Scenario {
 fn completion_step(commands: &[&str]) -> Option<usize> {
     let mut session = GameSession::new(undo_redo_scenario()).unwrap();
     for (i, cmd) in commands.iter().enumerate() {
-        match session.record_action((*cmd).to_string()).unwrap() {
+        match session.record_action(*cmd).unwrap() {
             SessionAfterAction::Completed(_) => return Some(i + 1),
             SessionAfterAction::StillActive(s) => session = s,
         }
@@ -573,10 +573,10 @@ fn test_reset_keeps_language_indent_unit() {
         .build();
     let mut session = GameSession::new(scenario).unwrap();
 
-    session.apply_action(CMD_INDENT.to_string()).unwrap();
+    session.apply_action(CMD_INDENT).unwrap();
     let first = session.current_content();
     session.reset().unwrap();
-    session.apply_action(CMD_INDENT.to_string()).unwrap();
+    session.apply_action(CMD_INDENT).unwrap();
 
     assert!(first.starts_with("  item"), "unexpected indent: {first:?}");
     assert_eq!(session.current_content(), first);

@@ -29,12 +29,12 @@
 //! # Ok::<(), helix_trainer::error::UserError>(())
 //! ```
 
-use crate::config::{LastAction, Scenario};
+use crate::config::Scenario;
 use crate::game::GameError;
-use crate::game::{CommandExecutor, PerformanceRating, Scorer};
-use crate::helix::{AnyModeSimulator, EditorSnapshot, Mode, Pos};
+use crate::game::{LiveScenario, PerformanceRating, Scorer};
+use crate::helix::{EditorSnapshot, Mode};
 use crate::ids::ScenarioId;
-use crate::security::{self, SecurityError};
+use crate::security::SecurityError;
 use crate::time::{MonotonicClock, SystemMonotonicClock};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
@@ -43,20 +43,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub use typestate::{Abandoned, Active, Completed, SessionState};
-
-/// Helper to execute operations on a target snapshot's `EditorDisplay`
-///
-/// Creates a temporary `EditorDisplay` from the snapshot and passes it to the closure.
-/// This avoids repeating the Rope/Selection/Display creation pattern.
-fn with_target_display<T, F>(snapshot: &EditorSnapshot, f: F) -> T
-where
-    F: FnOnce(&crate::helix::EditorDisplay) -> T,
-{
-    let rope = helix_core::Rope::from(snapshot.content.as_str());
-    let selection = snapshot.to_helix_selection();
-    let display = crate::helix::EditorDisplay::new(&rope, &selection);
-    f(&display)
-}
 
 /// Represents a single user action during gameplay
 ///
@@ -259,14 +245,8 @@ impl SessionAfterAction {
 /// The session validates all state transitions and provides
 /// score calculation and feedback generation.
 pub struct GameSession<State: SessionState = Active> {
-    /// The scenario being played
-    scenario: Scenario,
-    /// Helix editor simulator for command execution (source of truth)
-    simulator: AnyModeSimulator,
-    /// Target as snapshot for efficient completion checking
-    target_snapshot: EditorSnapshot,
-    /// All user actions taken so far
-    user_actions: Vec<UserAction>,
+    /// The scenario in play: simulator, target and the actions taken
+    live: LiveScenario,
     /// When the session started
     started_at: Instant,
     /// When the session completed (None if still active/abandoned)
@@ -279,8 +259,6 @@ pub struct GameSession<State: SessionState = Active> {
     cached_progress: Cell<Option<u8>>,
     /// Flag indicating if progress cache needs update
     progress_needs_update: Cell<bool>,
-    /// Whether the editor already matched the target before the last action ran
-    target_held_before_last: bool,
     /// Phantom data for typestate pattern
     _state: PhantomData<State>,
 }
@@ -289,8 +267,8 @@ pub struct GameSession<State: SessionState = Active> {
 impl<State: SessionState> std::fmt::Debug for GameSession<State> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GameSession")
-            .field("scenario_id", &self.scenario.id)
-            .field("action_count", &self.user_actions.len())
+            .field("scenario_id", &self.live.scenario().id)
+            .field("action_count", &self.live.action_count())
             .field("hints_shown", &self.hints_shown)
             .field("elapsed", &self.elapsed())
             .field("state", &std::any::type_name::<State>())
@@ -314,12 +292,12 @@ impl<S: SessionState> GameSession<S> {
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn scenario(&self) -> &Scenario {
-        &self.scenario
+        self.live.scenario()
     }
 
     /// Get the number of actions taken so far
     pub fn action_count(&self) -> usize {
-        self.user_actions.len()
+        self.live.action_count()
     }
 
     /// Get elapsed time since session start
@@ -329,17 +307,17 @@ impl<S: SessionState> GameSession<S> {
 
     /// Get current editor mode
     pub fn mode(&self) -> Mode {
-        self.simulator.mode()
+        self.live.mode()
     }
 
     /// Check if the simulator is in Insert mode
     pub fn is_insert_mode(&self) -> bool {
-        self.simulator.mode() == Mode::Insert
+        self.live.is_insert_mode()
     }
 
     /// Check if a `Q`/`q` macro is currently being recorded
     pub fn is_recording_macro(&self) -> bool {
-        self.simulator.is_recording_macro()
+        self.live.is_recording_macro()
     }
 
     /// Get number of hints shown so far
@@ -363,7 +341,7 @@ impl<S: SessionState> GameSession<S> {
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn actions(&self) -> &[UserAction] {
-        &self.user_actions
+        self.live.actions()
     }
 
     /// Calculate completion progress as percentage (0-100)
@@ -388,8 +366,8 @@ impl<S: SessionState> GameSession<S> {
     /// This is a private helper method that performs the actual calculation.
     /// The public `completion_progress()` method caches this result.
     fn calculate_progress(&self) -> u8 {
-        let current_content = self.simulator.display().content();
-        let target_content = &self.target_snapshot.content;
+        let current_content = self.live.current_content();
+        let target_content = &self.live.target_snapshot().content;
 
         let current_lines: Vec<&str> = current_content.lines().collect();
         let target_lines: Vec<&str> = target_content.lines().collect();
@@ -424,11 +402,12 @@ impl<S: SessionState> GameSession<S> {
     /// Progress once the text is on target: 100 only when cursor/selection
     /// also match, otherwise a value below 100 from their remaining distance.
     fn cursor_progress(&self) -> usize {
-        let current = self.simulator.to_snapshot();
-        if current.matches(&self.target_snapshot) {
+        let current = self.live.simulator().to_snapshot();
+        let target = self.live.target_snapshot();
+        if current.matches(target) {
             return 100;
         }
-        let (distance, max_distance) = selection_distance(&current, &self.target_snapshot);
+        let (distance, max_distance) = selection_distance(&current, target);
         let remaining = max_distance.saturating_sub(distance);
         (remaining * 100 / max_distance).min(99)
     }
@@ -517,21 +496,14 @@ impl GameSession<Active> {
         scenario: Scenario,
         clock: Arc<dyn MonotonicClock>,
     ) -> Result<Self, GameError> {
-        // Use unified ScenarioState helper for initialization
-        let state = crate::game::ScenarioState::from_scenario(&scenario);
-
         Ok(Self {
-            scenario,
-            simulator: state.simulator,
-            target_snapshot: state.target_snapshot,
-            user_actions: Vec::new(),
+            live: LiveScenario::new(Arc::new(scenario)),
             started_at: clock.now(),
             completed_at: None,
             clock,
             hints_shown: 0,
             cached_progress: Cell::new(None),
             progress_needs_update: Cell::new(true),
-            target_held_before_last: false,
             _state: PhantomData,
         })
     }
@@ -576,8 +548,11 @@ impl GameSession<Active> {
     /// assert!(done.feedback()?.success());
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
-    pub fn record_action(mut self, command: String) -> Result<SessionAfterAction, GameError> {
-        self.apply_action(command)?;
+    pub fn record_action(
+        mut self,
+        command: impl AsRef<str>,
+    ) -> Result<SessionAfterAction, GameError> {
+        self.apply_action(command.as_ref())?;
         Ok(self.finish_action())
     }
 
@@ -591,8 +566,11 @@ impl GameSession<Active> {
     ///
     /// Returns an error if the action limit is exceeded or the simulator
     /// rejects the command.
-    pub fn apply_action(&mut self, command: String) -> Result<(), GameError> {
-        self.apply(command, Self::execute_single)
+    pub fn apply_action(&mut self, command: &str) -> Result<(), GameError> {
+        let at = self.elapsed();
+        self.live.apply_text(command, at)?;
+        self.progress_needs_update.set(true);
+        Ok(())
     }
 
     /// Execute and record one parsed Normal-mode command, as
@@ -607,46 +585,16 @@ impl GameSession<Active> {
         &mut self,
         command: &crate::helix::normal_command::NormalCommand,
     ) -> Result<(), GameError> {
-        self.apply(command.to_string(), |session, _| {
-            session.execute_typed(command)
-        })
-    }
-
-    fn apply(
-        &mut self,
-        recorded: String,
-        execute: impl FnOnce(&mut Self, &str) -> Result<(), GameError>,
-    ) -> Result<(), GameError> {
-        // Validate action count doesn't exceed limits
-        security::arithmetic::validate_action_count(self.user_actions.len() + 1)?;
-
-        execute(self, &recorded)?;
-
-        // Record action in history
-        let elapsed = self.elapsed();
-        let action = UserAction::new(recorded, elapsed);
-        self.user_actions.push(action);
-        Ok(())
-    }
-
-    fn execute_typed(
-        &mut self,
-        command: &crate::helix::normal_command::NormalCommand,
-    ) -> Result<(), GameError> {
-        let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
-        self.simulator.execute_normal(command)?;
-        self.target_held_before_last = held_before;
-
-        // Invalidate progress cache since state changed
+        let at = self.elapsed();
+        self.live.apply_command(command, at)?;
         self.progress_needs_update.set(true);
-
         Ok(())
     }
 
     /// Resolve the session state after [`GameSession::apply_action`]: completed
     /// if the editor now matches the target, otherwise still active.
     pub fn finish_action(self) -> SessionAfterAction {
-        if CommandExecutor::check_completion(&self) {
+        if self.live.is_completed() {
             SessionAfterAction::Completed(self.into_completed())
         } else {
             SessionAfterAction::StillActive(self)
@@ -656,17 +604,13 @@ impl GameSession<Active> {
     /// Transition to completed state (private helper)
     fn into_completed(self) -> GameSession<Completed> {
         GameSession {
-            scenario: self.scenario,
-            simulator: self.simulator,
-            target_snapshot: self.target_snapshot,
-            user_actions: self.user_actions,
+            live: self.live,
             started_at: self.started_at,
             completed_at: Some(self.clock.now()),
             clock: self.clock,
             hints_shown: self.hints_shown,
             cached_progress: self.cached_progress,
             progress_needs_update: self.progress_needs_update,
-            target_held_before_last: self.target_held_before_last,
             _state: PhantomData,
         }
     }
@@ -688,13 +632,7 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn check_completion(&self) -> bool {
-        self.scenario.is_completed_by(
-            self.simulator.matches_snapshot(&self.target_snapshot),
-            self.user_actions.last().map(|a| LastAction {
-                command: a.command.as_str(),
-                target_held_before: self.target_held_before_last,
-            }),
-        )
+        self.live.is_completed()
     }
 
     /// Check if content matches target (ignoring cursor position)
@@ -715,9 +653,10 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn check_content_matches(&self) -> bool {
-        self.simulator
+        self.live
+            .simulator()
             .to_snapshot()
-            .content_matches(&self.target_snapshot)
+            .content_matches(self.live.target_snapshot())
     }
 
     /// Get the next available hint
@@ -740,8 +679,8 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn hint(&mut self) -> Option<String> {
-        if self.hints_shown < self.scenario.hints.len() {
-            let hint = self.scenario.hints[self.hints_shown].clone();
+        if self.hints_shown < self.live.scenario().hints.len() {
+            let hint = self.live.scenario().hints[self.hints_shown].clone();
             self.hints_shown += 1;
             Some(hint)
         } else {
@@ -769,17 +708,13 @@ impl GameSession<Active> {
     /// ```
     pub fn abandon(self) -> GameSession<Abandoned> {
         GameSession {
-            scenario: self.scenario,
-            simulator: self.simulator,
-            target_snapshot: self.target_snapshot,
-            user_actions: self.user_actions,
+            live: self.live,
             started_at: self.started_at,
             completed_at: None,
             clock: self.clock,
             hints_shown: self.hints_shown,
             cached_progress: self.cached_progress,
             progress_needs_update: self.progress_needs_update,
-            target_held_before_last: self.target_held_before_last,
             _state: PhantomData,
         }
     }
@@ -808,9 +743,7 @@ impl GameSession<Active> {
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn reset(&mut self) -> Result<(), SecurityError> {
-        // Same construction path as `new`, so the scenario's language (indent unit) survives
-        self.simulator = crate::game::ScenarioState::from_scenario(&self.scenario).simulator;
-        self.user_actions.clear();
+        self.live.reset();
         self.started_at = self.clock.now();
         self.completed_at = None;
         self.hints_shown = 0;
@@ -818,24 +751,6 @@ impl GameSession<Active> {
         self.cached_progress.set(None);
         self.progress_needs_update.set(true);
         Ok(())
-    }
-}
-
-// Implement CommandExecutor trait for unified count prefix handling
-impl CommandExecutor for GameSession<Active> {
-    fn execute_single(&mut self, command: &str) -> Result<(), GameError> {
-        let held_before = self.simulator.matches_snapshot(&self.target_snapshot);
-        self.simulator.execute_command(command)?;
-        self.target_held_before_last = held_before;
-
-        // Invalidate progress cache since state changed
-        self.progress_needs_update.set(true);
-
-        Ok(())
-    }
-
-    fn check_completion(&self) -> bool {
-        GameSession::check_completion(self)
     }
 }
 
@@ -874,7 +789,7 @@ impl GameSession<Completed> {
     /// # Ok::<(), helix_trainer::error::UserError>(())
     /// ```
     pub fn score(&self) -> Result<u32, SecurityError> {
-        Scorer::score_with_config(&self.scenario.scoring, self.user_actions.len())
+        Scorer::score_with_config(&self.live.scenario().scoring, self.live.action_count())
     }
 
     /// Get detailed feedback for the completed session
@@ -916,9 +831,9 @@ impl GameSession<Completed> {
     /// Panics if the session carries no completion time, which the typestate rules
     /// out for a completed session.
     pub fn feedback(&self) -> Result<Feedback, SecurityError> {
-        let actions_taken = self.user_actions.len();
-        let optimal_actions = self.scenario.scoring.optimal_count.get();
-        let max_points = self.scenario.scoring.max_points;
+        let actions_taken = self.live.action_count();
+        let optimal_actions = self.live.scenario().scoring.optimal_count.get();
+        let max_points = self.live.scenario().scoring.max_points;
 
         let score = self.score()?;
         let rating = Scorer::rating(score, max_points);
@@ -932,21 +847,21 @@ impl GameSession<Completed> {
         let hint = if actions_taken > optimal_actions * 2 {
             Some(format!(
                 "Try using: {}. {}",
-                self.scenario.solution.commands.join(", "),
-                self.scenario.solution.description
+                self.live.scenario().solution.commands.join(", "),
+                self.live.scenario().solution.description
             ))
         } else {
             None
         };
 
-        let outcome = if actions_taken <= optimal_actions + self.scenario.scoring.tolerance {
+        let outcome = if actions_taken <= optimal_actions + self.live.scenario().scoring.tolerance {
             FeedbackOutcome::Optimal
         } else {
             FeedbackOutcome::Completed
         };
 
         Ok(Feedback {
-            scenario_id: self.scenario.id.clone(),
+            scenario_id: self.live.scenario().id.clone(),
             score,
             max_points,
             rating,
@@ -955,7 +870,7 @@ impl GameSession<Completed> {
             duration,
             hint,
             outcome,
-            user_actions: self.user_actions.clone(),
+            user_actions: self.live.actions().to_vec(),
         })
     }
 }
@@ -982,20 +897,20 @@ impl GameSession<Abandoned> {
     /// ```
     pub fn feedback(&self) -> Feedback {
         Feedback {
-            scenario_id: self.scenario.id.clone(),
+            scenario_id: self.live.scenario().id.clone(),
             score: 0,
-            max_points: self.scenario.scoring.max_points,
+            max_points: self.live.scenario().scoring.max_points,
             rating: PerformanceRating::Poor,
-            actions_taken: self.user_actions.len(),
-            optimal_actions: self.scenario.scoring.optimal_count.get(),
+            actions_taken: self.live.action_count(),
+            optimal_actions: self.live.scenario().scoring.optimal_count.get(),
             duration: self.elapsed(),
             hint: Some(format!(
                 "Solution: {}. {}",
-                self.scenario.solution.commands.join(", "),
-                self.scenario.solution.description
+                self.live.scenario().solution.commands.join(", "),
+                self.live.scenario().solution.description
             )),
             outcome: FeedbackOutcome::Abandoned,
-            user_actions: self.user_actions.clone(),
+            user_actions: self.live.actions().to_vec(),
         }
     }
 }
@@ -1003,87 +918,15 @@ impl GameSession<Abandoned> {
 /// Typestate pattern markers for compile-time state machine enforcement
 pub mod typestate;
 
-// Implement PlayableScenario trait for GameSession in any state.
-// Shared logic lives here; only `elapsed()` differs per state, delegated to
-// `SessionState::session_elapsed`.
+// Implement PlayableScenario trait for GameSession in any state; only `elapsed()`
+// differs per state, delegated to `SessionState::session_elapsed`.
 impl<S: SessionState> super::PlayableScenario for GameSession<S> {
-    fn current_content(&self) -> String {
-        self.simulator.display().content()
-    }
-
-    fn target_content(&self) -> String {
-        self.target_snapshot.content.clone()
-    }
-
-    fn current_cursor(&self) -> Pos {
-        self.simulator.display().cursor_position()
-    }
-
-    #[expect(
-        clippy::redundant_closure_for_method_calls,
-        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
-    )]
-    fn target_cursor(&self) -> Pos {
-        with_target_display(&self.target_snapshot, |d| d.cursor_position())
-    }
-
-    fn current_selection(&self) -> Option<crate::helix::SelectionBounds> {
-        self.simulator.display().selection()
-    }
-
-    #[expect(
-        clippy::redundant_closure_for_method_calls,
-        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
-    )]
-    fn target_selection(&self) -> Option<crate::helix::SelectionBounds> {
-        with_target_display(&self.target_snapshot, |d| d.selection())
-    }
-
-    fn action_count(&self) -> usize {
-        self.action_count()
-    }
-
-    fn is_insert_mode(&self) -> bool {
-        self.is_insert_mode()
-    }
-
-    fn mode_kind(&self) -> crate::helix::ModeKind {
-        self.simulator.mode_kind()
+    fn live(&self) -> &LiveScenario {
+        &self.live
     }
 
     fn elapsed(&self) -> Duration {
         S::session_elapsed(self.started_at, self.completed_at, self.clock.now())
-    }
-
-    fn language(&self) -> crate::helix::Language {
-        self.scenario
-            .setup
-            .language
-            .unwrap_or(crate::config::DEFAULT_LANGUAGE)
-    }
-
-    fn all_cursors(&self) -> Vec<Pos> {
-        self.simulator.display().all_cursor_positions()
-    }
-
-    fn all_selections(&self) -> Vec<crate::helix::SelectionBounds> {
-        self.simulator.display().all_selection_bounds()
-    }
-
-    #[expect(
-        clippy::redundant_closure_for_method_calls,
-        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
-    )]
-    fn all_target_cursors(&self) -> Vec<Pos> {
-        with_target_display(&self.target_snapshot, |d| d.all_cursor_positions())
-    }
-
-    #[expect(
-        clippy::redundant_closure_for_method_calls,
-        reason = "the method path cannot name the higher-ranked lifetime or private type of the receiver"
-    )]
-    fn all_target_selections(&self) -> Vec<crate::helix::SelectionBounds> {
-        with_target_display(&self.target_snapshot, |d| d.all_selection_bounds())
     }
 }
 

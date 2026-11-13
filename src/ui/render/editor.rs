@@ -918,7 +918,7 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // "A" (append at end of line) puts the cursor at col == line length, i.e. past-EOL.
-        let session = match session.record_action("A".to_string()).unwrap() {
+        let session = match session.record_action("A").unwrap() {
             SessionAfterAction::StillActive(session) => session,
             SessionAfterAction::Completed(_) => panic!("expected session to remain active"),
         };
@@ -995,7 +995,7 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // "A" (append at end of line) puts the cursor past-EOL, beyond the inner width.
-        let session = match session.record_action("A".to_string()).unwrap() {
+        let session = match session.record_action("A").unwrap() {
             SessionAfterAction::StillActive(session) => session,
             SessionAfterAction::Completed(_) => panic!("expected session to remain active"),
         };

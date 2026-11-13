@@ -175,7 +175,7 @@ fn apply_to_session(
 ) -> Result<(), UserError> {
     apply_with(task_data, |session| {
         match input {
-            SessionInput::Text(text) => session.apply_action(text.to_owned()),
+            SessionInput::Text(text) => session.apply_action(text),
             SessionInput::Command(command) => session.apply_command(command),
         }
         .map_err(UserError::from)

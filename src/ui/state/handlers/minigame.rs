@@ -138,9 +138,9 @@ fn execute_minigame_command(
 
             // Update quest progress for scenario completion (shared function)
             let duration = scenario.elapsed();
-            let scenario_id = scenario.scenario.id.clone();
-            let scenario_difficulty = scenario.scenario.metadata.difficulty;
-            let optimal_count = scenario.scenario.scoring.optimal_count.get();
+            let scenario_id = scenario.scenario().id.clone();
+            let scenario_difficulty = scenario.scenario().metadata.difficulty;
+            let optimal_count = scenario.scenario().scoring.optimal_count.get();
             let actual_count = scenario.action_count().max(1);
             // Efficiency-only, matching Training's `is_perfect` definition. This is
             // deliberately looser than `PerformanceTier::Perfect` (efficiency AND

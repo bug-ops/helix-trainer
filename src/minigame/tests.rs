@@ -363,7 +363,7 @@ fn arcade_completion_step(commands: &[&str]) -> Option<usize> {
         session.tick_countdown();
     }
     assert_eq!(
-        session.current_scenario().unwrap().scenario.id.as_str(),
+        session.current_scenario().unwrap().scenario().id.as_str(),
         "undo_redo_001"
     );
     for (i, cmd) in commands.iter().enumerate() {

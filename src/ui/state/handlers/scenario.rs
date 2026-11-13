@@ -518,14 +518,10 @@ mod tests {
         use crate::game::SessionAfterAction;
 
         let session = GameSession::new(create_test_scenario()).unwrap();
-        let SessionAfterAction::StillActive(session) =
-            session.record_action("x".to_string()).unwrap()
-        else {
+        let SessionAfterAction::StillActive(session) = session.record_action("x").unwrap() else {
             panic!("Should not complete after just 'x'");
         };
-        let SessionAfterAction::Completed(completed) =
-            session.record_action("d".to_string()).unwrap()
-        else {
+        let SessionAfterAction::Completed(completed) = session.record_action("d").unwrap() else {
             panic!("Should complete after 'x' + 'd'");
         };
         completed
@@ -619,12 +615,12 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // Complete the scenario by executing the solution commands
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -692,12 +688,12 @@ mod tests {
 
         let scenario = create_test_scenario();
         let session = GameSession::new(scenario).unwrap();
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -741,12 +737,12 @@ mod tests {
 
         let scenario = create_test_scenario();
         let session = GameSession::new(scenario).unwrap();
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -797,12 +793,12 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // Complete the scenario
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -839,12 +835,12 @@ mod tests {
         let scenario = create_test_scenario();
         let session = GameSession::new(scenario).unwrap();
 
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -880,12 +876,12 @@ mod tests {
         let scenario = create_test_scenario(); // Difficulty::Beginner
         let session = GameSession::new(scenario).unwrap();
 
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -921,12 +917,12 @@ mod tests {
             let scenario = create_test_scenario_with_difficulty("multi_difficulty", difficulty);
             let session = GameSession::new(scenario).unwrap();
 
-            let result = session.record_action("x".to_string()).unwrap();
+            let result = session.record_action("x").unwrap();
             let session = match result {
                 SessionAfterAction::StillActive(s) => s,
                 SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
             };
-            let result = session.record_action("d".to_string()).unwrap();
+            let result = session.record_action("d").unwrap();
             let completed = match result {
                 SessionAfterAction::Completed(c) => c,
                 SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -965,12 +961,12 @@ mod tests {
         let scenario = create_test_scenario(); // Difficulty::Beginner
         let session = GameSession::new(scenario).unwrap();
 
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -1018,12 +1014,12 @@ mod tests {
         let scenario = create_test_scenario();
         let session = GameSession::new(scenario).unwrap();
 
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -1714,12 +1710,12 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // Complete the scenario
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),
@@ -1799,12 +1795,12 @@ mod tests {
         let session = GameSession::new(scenario).unwrap();
 
         // Complete the scenario
-        let result = session.record_action("x".to_string()).unwrap();
+        let result = session.record_action("x").unwrap();
         let session = match result {
             SessionAfterAction::StillActive(s) => s,
             SessionAfterAction::Completed(_) => panic!("Should not complete after just 'x'"),
         };
-        let result = session.record_action("d".to_string()).unwrap();
+        let result = session.record_action("d").unwrap();
         let completed = match result {
             SessionAfterAction::Completed(c) => c,
             SessionAfterAction::StillActive(_) => panic!("Should complete after 'x' + 'd'"),

@@ -325,14 +325,7 @@ impl From<SecurityError> for UserError {
                 cause: Some(e.into()),
             },
 
-            SecurityError::InvalidState(msg) => UserError::InvalidState {
-                message: msg.clone(),
-                cause: Some(SecurityError::InvalidState(msg).into()),
-            },
-
-            e @ (SecurityError::InvalidCursorPosition
-            | SecurityError::TooManyActions { .. }
-            | SecurityError::ScoreOverflow
+            e @ (SecurityError::TooManyActions { .. }
             | SecurityError::CommandSequenceTooLong { .. }
             | SecurityError::InvalidContent
             | SecurityError::InvalidEncoding(_)
@@ -480,22 +473,7 @@ mod tests {
     }
 
     #[test]
-    fn test_error_conversion_invalid_state() {
-        let err = SecurityError::InvalidState("bad state".to_string());
-        let user_err = UserError::from(err);
-        assert!(user_err.to_string().contains("Invalid application state"));
-    }
-
-    #[test]
     fn test_error_conversion_others_map_to_operation_failed() {
-        let err = SecurityError::InvalidCursorPosition;
-        let user_err = UserError::from(err);
-        assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
-
-        let err = SecurityError::ScoreOverflow;
-        let user_err = UserError::from(err);
-        assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
-
         let err = SecurityError::TooManyActions { max: 1_000_000 };
         let user_err = UserError::from(err);
         assert_eq!(user_err.to_string(), "Operation failed. Please try again.");
@@ -551,9 +529,6 @@ mod tests {
         assert!(error_chain(&user).contains("Invalid TOML format: "));
         assert!(error_chain(&user).contains("TOML parse error"));
         assert!(!user.to_string().contains("TOML parse error"));
-
-        let user = UserError::from(SecurityError::InvalidState("broken".to_string()));
-        assert!(error_chain(&user).contains("Invalid state: broken"));
 
         let user = UserError::from(crate::gamification::GamificationError::StreakFreezeUnavailable);
         assert_matches!(

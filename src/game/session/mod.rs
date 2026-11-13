@@ -182,11 +182,6 @@ pub enum SessionAfterAction {
 }
 
 impl SessionAfterAction {
-    /// Check if session is still active
-    pub fn is_active(&self) -> bool {
-        matches!(self, Self::StillActive(_))
-    }
-
     /// Check if session completed
     pub fn is_completed(&self) -> bool {
         matches!(self, Self::Completed(_))

@@ -21,7 +21,6 @@
 //! ```
 
 use crate::config::ScoringConfig;
-use crate::security::{self, SecurityError};
 use std::num::NonZeroUsize;
 
 /// Calculates scores for training scenarios
@@ -105,31 +104,6 @@ impl Scorer {
             40..=59 => PerformanceRating::Fair,
             _ => PerformanceRating::Poor,
         }
-    }
-
-    /// Calculate total session score from multiple scenario scores
-    ///
-    /// Sums up scores from multiple completed scenarios with overflow protection.
-    ///
-    /// # Errors
-    /// Returns `SecurityError::ScoreOverflow` if sum would overflow u32
-    ///
-    /// # Examples
-    /// ```
-    /// use helix_trainer::game::Scorer;
-    ///
-    /// let scores = vec![100, 85, 90];
-    /// let total = Scorer::calculate_total_score(&scores).unwrap();
-    /// assert_eq!(total, 275);
-    /// ```
-    pub fn calculate_total_score(scores: &[u32]) -> Result<u32, SecurityError> {
-        let mut total: u32 = 0;
-
-        for &score in scores {
-            total = security::arithmetic::checked_score_add(total, score)?;
-        }
-
-        Ok(total)
     }
 }
 
@@ -297,13 +271,6 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_total_score() {
-        let scores = vec![100, 85, 90];
-        let total = Scorer::calculate_total_score(&scores).unwrap();
-        assert_eq!(total, 275);
-    }
-
-    #[test]
     fn test_performance_rating_descriptions() {
         assert_eq!(
             PerformanceRating::Perfect.description(),
@@ -332,14 +299,6 @@ mod tests {
         // Ensure tolerance addition doesn't overflow
         let score = scored(5, 10, usize::MAX, 100);
         assert_eq!(score, 100); // Within saturating tolerance
-    }
-
-    #[test]
-    fn test_total_score_overflow_prevention() {
-        // Test that overflow is properly prevented
-        let scores = vec![u32::MAX, u32::MAX];
-        let result = Scorer::calculate_total_score(&scores);
-        assert!(result.is_err());
     }
 
     #[test]

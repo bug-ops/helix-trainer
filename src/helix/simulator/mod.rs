@@ -394,19 +394,9 @@ impl HelixSimulator<NormalMode> {
         &self.search_state
     }
 
-    /// Get a mutable reference to the search state
-    pub fn search_state_mut(&mut self) -> &mut SearchState {
-        &mut self.search_state
-    }
-
     /// Get a reference to the view state
     pub fn view_state(&self) -> &ViewState {
         &self.view_state
-    }
-
-    /// Get a mutable reference to the view state
-    pub fn view_state_mut(&mut self) -> &mut ViewState {
-        &mut self.view_state
     }
 }
 

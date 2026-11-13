@@ -295,12 +295,6 @@ impl<'a> EditorDisplay<'a> {
         self.doc.to_string()
     }
 
-    /// Get number of lines in document.
-    #[inline]
-    pub fn line_count(&self) -> usize {
-        self.doc.len_lines()
-    }
-
     /// Get a specific line by index.
     pub fn line(&self, idx: usize) -> Option<String> {
         if idx < self.doc.len_lines() {

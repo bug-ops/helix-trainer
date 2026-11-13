@@ -44,7 +44,7 @@ fn test_all_scenarios_load_successfully() {
                             scenario.name, scenario.id, e
                         );
                         println!("    ✗ {error_msg}");
-                        failed_scenarios.push((scenario.id.clone(), error_msg));
+                        failed_scenarios.push((scenario.id, error_msg));
                     }
                 }
             }
@@ -378,10 +378,7 @@ fn test_all_scenarios_execute_solution() {
         let session = match GameSession::new(scenario.clone()) {
             Ok(s) => s,
             Err(e) => {
-                failed_scenarios.push((
-                    scenario.id.clone(),
-                    format!("Failed to create session: {e:?}"),
-                ));
+                failed_scenarios.push((scenario.id, format!("Failed to create session: {e:?}")));
                 continue;
             }
         };
@@ -462,7 +459,7 @@ fn test_all_scenarios_execute_solution() {
                 SessionAfterAction::StillActive(s) => {
                     if !s.check_completion() {
                         failed_scenarios.push((
-                            scenario.id.clone(),
+                            scenario.id,
                             format!(
                                 "Solution did not complete scenario.\n  Current: content='{}', cursor={:?}, selection={:?}\n  Target:  content='{}', cursor={:?}, selection={:?}",
                                 s.current_content(),

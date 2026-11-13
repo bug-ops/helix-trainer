@@ -83,11 +83,11 @@ fn legacy_profile_loads_with_strict_ids() {
 
     let quest = QuestId::parse("quest_easy_1").unwrap();
     assert!(profile.is_quest_completed(&quest));
-    assert_eq!(profile.daily_quests.len(), 3);
-    assert_eq!(profile.daily_quests[0].id, quest);
+    assert_eq!(profile.daily_quests().len(), 3);
+    assert_eq!(profile.daily_quests()[0].id, quest);
     assert!(
         profile
-            .scenario_history
+            .scenario_history()
             .get(&ScenarioId::parse("delete_line_001").unwrap())
             .is_some()
     );
@@ -100,12 +100,12 @@ fn legacy_quest_completion_loads_into_the_quest_status() {
     let profile = load_legacy_profile();
 
     assert_eq!(
-        profile.daily_quests[0].status(),
+        profile.daily_quests()[0].status(),
         QuestStatus::Completed { rewarded: true }
     );
-    assert_eq!(profile.daily_quests[1].status(), QuestStatus::InProgress);
+    assert_eq!(profile.daily_quests()[1].status(), QuestStatus::InProgress);
     assert_eq!(
-        profile.daily_quests[2].status(),
+        profile.daily_quests()[2].status(),
         QuestStatus::Completed { rewarded: false }
     );
     assert_eq!(profile.completed_quests_today().count(), 2);
@@ -119,7 +119,7 @@ fn legacy_quest_completion_loads_into_the_quest_status() {
 fn legacy_quest_commands_keep_their_normalized_form() {
     let profile = load_legacy_profile();
 
-    let QuestType::Exploration { commands_used, .. } = &profile.daily_quests[1].quest_type else {
+    let QuestType::Exploration { commands_used, .. } = &profile.daily_quests()[1].quest_type else {
         panic!("expected the exploration quest");
     };
     assert!(commands_used.contains(&NormalizedCommand::from_raw("3h").unwrap()));
@@ -129,7 +129,7 @@ fn legacy_quest_commands_keep_their_normalized_form() {
 #[test]
 fn legacy_cards_with_non_card_keys_are_dropped_not_fatal() {
     let profile = load_legacy_profile();
-    let data = &profile.performance_data;
+    let data = &profile.performance_data();
 
     assert_eq!(data.len(), 5, "only the five canonical fixture cards stay");
     for key in ["ciw", "dd", "x", "w", "gg"] {
@@ -149,7 +149,7 @@ fn legacy_numeric_keymap_fingerprint_loads_as_legacy() {
     let loaded = load_profile_json(&profile);
 
     assert_eq!(
-        loaded.keymap_fingerprint,
+        loaded.keymap_fingerprint(),
         Some(StoredKeymapFingerprint::Legacy(11_400_714_819_323_198_485))
     );
 }
@@ -162,7 +162,7 @@ fn tagged_keymap_fingerprint_survives_a_save_and_load() {
     let loaded = load_profile_json(&profile);
 
     assert_eq!(
-        loaded.keymap_fingerprint,
+        loaded.keymap_fingerprint(),
         Some(StoredKeymapFingerprint::Current(
             KeymapFingerprint::Fnv1a64V1(42)
         ))
@@ -179,7 +179,7 @@ fn profile_without_a_keymap_fingerprint_loads_with_none() {
         .unwrap()
         .remove("keymap_fingerprint");
 
-    assert_eq!(load_profile_json(&profile).keymap_fingerprint, None);
+    assert_eq!(load_profile_json(&profile).keymap_fingerprint(), None);
 }
 
 /// Sets serialize in hash order, so arrays of strings are compared sorted.
@@ -275,4 +275,73 @@ fn invalid_persisted_ids_are_a_corrupt_load_error() {
     assert_corrupt("scenario_history key over 64 bytes", |p| {
         rename_history_entry(p, &"a".repeat(65));
     });
+}
+
+/// #647 FR-002/FR-003: the stored level is ignored in favor of the one derived from the XP,
+/// and a later save carries no `level` key.
+#[test]
+fn legacy_level_key_is_ignored_and_never_written() {
+    let mut profile = legacy_profile_json();
+    profile["total_xp"] = json!(1500);
+    profile["level"] = json!(99);
+
+    let loaded = load_profile_json(&profile);
+
+    assert_eq!(
+        loaded.level(),
+        helix_trainer::gamification::XPCalculator::level_from_xp(1500)
+    );
+    assert!(
+        serde_json::to_value(&loaded)
+            .unwrap()
+            .get("level")
+            .is_none()
+    );
+}
+
+/// #647 FR-004/FR-005: every repair, one fixture each; the profile loads, never rejected.
+#[test]
+fn legacy_streak_and_completion_bounds_are_repaired_on_load() {
+    let mut profile = legacy_profile_json();
+    profile["current_streak"] = json!(9);
+    profile["longest_streak"] = json!(4);
+    profile["perfect_scenarios"] = json!(8);
+    profile["scenarios_completed"] = json!(6);
+
+    let loaded = load_profile_json(&profile);
+
+    assert_eq!(loaded.longest_streak(), 9);
+    assert_eq!(loaded.scenarios_completed(), 8);
+}
+
+#[test]
+fn legacy_challenge_counters_are_repaired_on_load() {
+    let mut profile = legacy_profile_json();
+    profile["challenge_progress"] = json!({
+        "last_challenge_date": "2026-01-12",
+        "attempts_used_today": 7,
+        "best_score_today": 900,
+        "best_scenarios_today": 6,
+        "all_time_best_score": 400,
+        "all_time_best_scenarios": 3,
+        "total_challenges_attempted": 3,
+        "total_challenges_completed": 5
+    });
+
+    let loaded = load_profile_json(&profile);
+    let challenge = loaded.challenge_progress();
+
+    // The daily attempt limit is 3; the 7 stored attempts stay spent.
+    assert_eq!(challenge.attempts_used_today(), 3);
+    assert_eq!(challenge.all_time_best_score(), 900);
+    assert_eq!(challenge.all_time_best_scenarios(), 6);
+    assert_eq!(challenge.total_challenges_attempted(), 5);
+}
+
+#[test]
+fn a_consistent_profile_loads_unchanged() {
+    let loaded = load_legacy_profile();
+
+    assert!(loaded.longest_streak() >= loaded.current_streak());
+    assert!(loaded.scenarios_completed() >= loaded.perfect_scenarios());
 }

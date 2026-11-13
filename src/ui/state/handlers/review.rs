@@ -65,7 +65,7 @@ pub(crate) fn handle_complete_review_command(
 fn finish_review_session(summary: &SessionSummary, ctx: &mut HandlerContext<'_>) -> HandlerOutcome {
     let xp = XPCalculator::review_session_xp(summary.total_reviews, summary.successful);
     let leveled_up = ctx.progress.profile.add_xp(xp);
-    let new_level = ctx.progress.profile.level;
+    let new_level = ctx.progress.profile.level();
 
     ctx.ui
         .notifications

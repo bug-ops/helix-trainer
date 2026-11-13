@@ -660,7 +660,7 @@ impl QuestGenerator {
         today: PlayerDay,
     ) -> QuestGeneration {
         let mut rng = Self::create_rng(today);
-        QuestDistribution::for_level(profile.level).generate_quests(&mut rng, registry)
+        QuestDistribution::for_level(profile.level()).generate_quests(&mut rng, registry)
     }
 
     fn create_rng(today: PlayerDay) -> StdRng {
@@ -922,17 +922,12 @@ mod tests {
 
         // Level 1 - should get 3 quests (2 easy + 1 medium)
         let mut profile = UserProfile::new();
-        profile.level = 1;
         let quests = QuestGenerator::generate_quests(&profile, &registry, today).quests;
         assert_eq!(quests.len(), 3);
-
-        // Level 10 - should get 4 quests (1 easy + 2 medium + 1 hard)
-        profile.level = 10;
+        profile.set_total_xp(crate::gamification::XPCalculator::xp_for_level(10));
         let quests = QuestGenerator::generate_quests(&profile, &registry, today).quests;
         assert_eq!(quests.len(), 4);
-
-        // Level 20 - should get 4 quests (1 medium + 2 hard + 1 exploration)
-        profile.level = 20;
+        profile.set_total_xp(crate::gamification::XPCalculator::xp_for_level(20));
         let quests = QuestGenerator::generate_quests(&profile, &registry, today).quests;
         assert_eq!(quests.len(), 4);
     }
@@ -945,7 +940,7 @@ mod tests {
         for level in [6, 10, 15, 16, 22, 40] {
             for today in days {
                 let mut profile = UserProfile::new();
-                profile.level = level;
+                profile.set_total_xp(crate::gamification::XPCalculator::xp_for_level(level));
                 let quests = QuestGenerator::generate_quests(&profile, &registry, today).quests;
                 let ids: HashSet<_> = quests.iter().map(|q| q.id.clone()).collect();
                 assert_eq!(ids.len(), quests.len(), "level {level} on {today}");
@@ -977,7 +972,7 @@ mod tests {
         let today = crate::testing::today();
         for (level, slots) in [(1, 3), (10, 4), (20, 4)] {
             let mut profile = UserProfile::new();
-            profile.level = level;
+            profile.set_total_xp(crate::gamification::XPCalculator::xp_for_level(level));
 
             let generation =
                 QuestGenerator::generate_quests(&profile, &QuestTemplateRegistry::new(), today);
@@ -991,7 +986,7 @@ mod tests {
     fn test_generate_quests_with_a_difficulty_missing_fills_only_the_rest() {
         let today = crate::testing::today();
         let mut profile = UserProfile::new();
-        profile.level = 10;
+        profile.set_total_xp(crate::gamification::XPCalculator::xp_for_level(10));
         let full = test_registry();
         let mut partial = QuestTemplateRegistry::new();
         partial.templates = full

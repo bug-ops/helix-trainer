@@ -21,7 +21,7 @@ fn sid(raw: &str) -> helix_trainer::ids::ScenarioId {
 
 /// Push a quest for today and mark it completed and rewarded.
 fn push_rewarded_quest(profile: &mut UserProfile, id: &str) {
-    profile.daily_quests.push(Quest::new(
+    profile.push_daily_quest(Quest::new(
         qid(id),
         QuestType::ScenarioCompletion {
             target: 1,
@@ -65,10 +65,10 @@ fn test_complete_user_flow() {
     let completed = QuestTracker::update_command_progress(&mut quests, &ncmd("x"));
 
     // Award the completed quest
-    profile.daily_quests = quests;
+    profile.set_daily_quests(quests);
     if let Some(id) = completed.first() {
         let reward = profile
-            .daily_quests
+            .daily_quests()
             .iter()
             .find(|quest| quest.id == *id)
             .map(|quest| quest.xp_reward)
@@ -85,7 +85,7 @@ fn test_complete_user_flow() {
     );
 
     // Check achievements
-    profile.perfect_scenarios = 1;
+    profile.set_perfect_scenarios(1);
     let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
     assert!(unlocked.contains(&AchievementId::FirstPerfect));
 }
@@ -95,18 +95,18 @@ fn test_level_progression() {
     let mut profile = UserProfile::new();
 
     // Start at level 1
-    assert_eq!(profile.level, 1);
-    assert_eq!(profile.total_xp, 0);
+    assert_eq!(profile.level(), 1);
+    assert_eq!(profile.total_xp(), 0);
 
     // Add XP to reach level 2 (100 XP required)
     let leveled_up = profile.add_xp(100);
     assert!(leveled_up);
-    assert_eq!(profile.level, 2);
+    assert_eq!(profile.level(), 2);
 
     // Add more XP to reach level 3 (~183 more XP)
     let leveled_up = profile.add_xp(183);
     assert!(leveled_up);
-    assert_eq!(profile.level, 3);
+    assert_eq!(profile.level(), 3);
 
     // Verify XP progress calculation
     let progress = profile.xp_progress();
@@ -119,27 +119,22 @@ fn test_quest_generation_adapts_to_level() {
 
     // Level 1: Easy quests
     let mut profile = UserProfile::new();
-    profile.level = 1;
     let quests = QuestGenerator::generate_quests(
         &profile,
         &registry,
         helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
     )
     .quests;
-    assert_eq!(quests.len(), 3); // 2 easy + 1 medium
-
-    // Level 10: Mixed difficulty
-    profile.level = 10;
+    assert_eq!(quests.len(), 3);
+    profile.set_total_xp(helix_trainer::gamification::XPCalculator::xp_for_level(10));
     let quests = QuestGenerator::generate_quests(
         &profile,
         &registry,
         helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
     )
     .quests;
-    assert_eq!(quests.len(), 4); // 1 easy + 2 medium + 1 hard
-
-    // Level 20: Hard quests
-    profile.level = 20;
+    assert_eq!(quests.len(), 4);
+    profile.set_total_xp(helix_trainer::gamification::XPCalculator::xp_for_level(20));
     let quests = QuestGenerator::generate_quests(
         &profile,
         &registry,
@@ -154,7 +149,7 @@ fn test_streak_milestone_rewards() {
     let mut profile = UserProfile::new();
 
     // Reach 7-day streak milestone
-    profile.current_streak = 7;
+    profile.set_current_streak(7);
     let bonus = StreakManager::milestone_xp_bonus(7);
     assert_eq!(bonus, 50);
 
@@ -197,19 +192,19 @@ fn test_achievement_progression() {
     );
 
     // Unlock FirstPerfect
-    profile.perfect_scenarios = 1;
+    profile.set_perfect_scenarios(1);
     let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
     assert!(unlocked.contains(&AchievementId::FirstPerfect));
     profile.unlock_achievement(AchievementId::FirstPerfect);
 
     // Unlock Perfect10
-    profile.perfect_scenarios = 10;
+    profile.set_perfect_scenarios(10);
     let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
     assert!(unlocked.contains(&AchievementId::Perfect10));
     assert!(!unlocked.contains(&AchievementId::FirstPerfect)); // Already unlocked
 
     // Unlock scenario milestones
-    profile.scenarios_completed = 100;
+    profile.set_scenarios_completed(100);
     let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
     assert!(unlocked.contains(&AchievementId::Centurion));
 }
@@ -220,16 +215,16 @@ fn test_streak_freeze_mechanics() {
 
     let clock = FakeClock::at("2026-01-15T12:00:00Z");
     let mut profile = UserProfile::new_at(clock.now());
-    profile.current_streak = 10;
-    profile.streak_freeze_available = true;
+    profile.set_current_streak(10);
+    profile.set_streak_freeze_available(true);
 
     // Simulate missing a day
     clock.advance_days(2);
 
     let change = StreakManager::update_streak(&mut profile, clock.now());
     assert_eq!(change, StreakChange::Protected);
-    assert_eq!(profile.current_streak, 10); // Preserved
-    assert!(!profile.streak_freeze_available); // Used up
+    assert_eq!(profile.current_streak(), 10); // Preserved
+    assert!(!profile.streak_freeze_available()); // Used up
 }
 
 #[test]
@@ -302,8 +297,8 @@ fn test_storage_persistence() {
     // Create and save profile
     let mut profile = UserProfile::new();
     profile.add_xp(500);
-    profile.current_streak = 10;
-    profile.perfect_scenarios = 5;
+    profile.set_current_streak(10);
+    profile.set_perfect_scenarios(5);
     profile.unlock_achievement(AchievementId::FirstPerfect);
     push_rewarded_quest(&mut profile, "quest_1");
 
@@ -311,10 +306,10 @@ fn test_storage_persistence() {
 
     // Load and verify
     let loaded = storage.load().unwrap();
-    assert_eq!(loaded.level, profile.level);
-    assert_eq!(loaded.total_xp, profile.total_xp);
-    assert_eq!(loaded.current_streak, profile.current_streak);
-    assert_eq!(loaded.perfect_scenarios, profile.perfect_scenarios);
+    assert_eq!(loaded.level(), profile.level());
+    assert_eq!(loaded.total_xp(), profile.total_xp());
+    assert_eq!(loaded.current_streak(), profile.current_streak());
+    assert_eq!(loaded.perfect_scenarios(), profile.perfect_scenarios());
     assert!(loaded.has_achievement(&AchievementId::FirstPerfect));
     assert!(loaded.is_quest_completed(&qid("quest_1")));
 }
@@ -331,7 +326,7 @@ fn test_daily_quest_reset() {
     // Reset daily quests
     profile.reset_daily_quests(chrono::Utc::now());
     assert_eq!(profile.completed_quests_today().count(), 0);
-    assert_eq!(profile.daily_quests.len(), 0);
+    assert_eq!(profile.daily_quests().len(), 0);
 }
 
 #[test]
@@ -462,7 +457,7 @@ fn test_freeze_eligibility() {
 
     // Generate today's quests
     for i in 0..3 {
-        profile.daily_quests.push(Quest::new(
+        profile.push_daily_quest(Quest::new(
             qid(&format!("quest_{i}")),
             QuestType::CommandPractice {
                 command: ncmd("x"),
@@ -494,21 +489,21 @@ fn test_longest_streak_tracking() {
 
     let clock = FakeClock::at("2026-01-15T12:00:00Z");
     let mut profile = UserProfile::new_at(clock.now());
-    profile.current_streak = 5;
-    profile.longest_streak = 5;
+    profile.set_current_streak(5);
+    profile.set_longest_streak(5);
 
     // Increment streak
     push_rewarded_quest(&mut profile, "test");
     clock.advance_days(1);
     StreakManager::update_streak(&mut profile, clock.now());
 
-    assert_eq!(profile.current_streak, 6);
-    assert_eq!(profile.longest_streak, 6);
+    assert_eq!(profile.current_streak(), 6);
+    assert_eq!(profile.longest_streak(), 6);
 
     // Break streak
     clock.advance_days(2);
     StreakManager::update_streak(&mut profile, clock.now());
 
-    assert_eq!(profile.current_streak, 0);
-    assert_eq!(profile.longest_streak, 6); // Preserved
+    assert_eq!(profile.current_streak(), 0);
+    assert_eq!(profile.longest_streak(), 6); // Preserved
 }

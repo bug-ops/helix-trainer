@@ -82,7 +82,7 @@ pub(super) fn render_mode_selection(frame: &mut Frame, state: &AppState) {
             inner,
             selection,
             state.progress.today(),
-            &state.progress.profile.challenge_progress,
+            state.progress.profile.challenge_progress(),
         );
     }
 

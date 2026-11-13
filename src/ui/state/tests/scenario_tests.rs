@@ -208,7 +208,7 @@ fn test_previously_completed_quests_tracking() {
     // In Helix, use 'x' (select_line) for line-based quests
     {
         let profile = &mut state.progress.profile;
-        profile.daily_quests.push(Quest::new(
+        profile.push_daily_quest(Quest::new(
             qid("test_quest"),
             QuestType::CommandPractice {
                 command: ncmd("x"),
@@ -242,7 +242,7 @@ fn test_previously_completed_quests_tracking() {
     // Quest should be completed (command was tracked during gameplay)
     {
         let profile = &state.progress.profile;
-        let quest = &profile.daily_quests[0];
+        let quest = &profile.daily_quests()[0];
         assert!(
             quest.is_completed(),
             "Quest should be completed after executing 'x'. Quest state: {quest:?}"

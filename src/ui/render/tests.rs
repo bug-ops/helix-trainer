@@ -367,7 +367,10 @@ mod screen_render_tests {
     fn test_render_saturates_next_level_at_the_level_cap() {
         let mut terminal = create_terminal();
         let mut state = create_test_app_state(vec![create_test_scenario()]);
-        state.progress.profile.level = u32::MAX;
+        state
+            .progress
+            .profile
+            .set_total_xp(crate::gamification::XPCalculator::xp_for_level(u32::MAX));
         state.screen = TypedScreen::Menu(MenuData::default());
         terminal.draw(|f| super::super::render(f, &state)).unwrap();
 
@@ -677,12 +680,13 @@ mod screen_render_tests {
     fn test_render_with_high_level_profile() {
         let mut terminal = create_terminal();
         let mut state = create_test_app_state(vec![create_test_scenario()]);
-
-        // Set high level profile
-        state.progress.profile.level = 99;
-        state.progress.profile.total_xp = 1_000_000;
-        state.progress.profile.scenarios_completed = 500;
-        state.progress.profile.perfect_scenarios = 100;
+        state.progress.profile.set_total_xp(1_000_000);
+        state.progress.profile.set_scenarios_completed(500);
+        state.progress.profile.set_perfect_scenarios(100);
+        state
+            .progress
+            .profile
+            .set_total_xp(crate::gamification::XPCalculator::xp_for_level(99));
 
         state.screen = TypedScreen::Profile(ProfileData {
             return_to: ReturnDestination::Menu,
@@ -1150,12 +1154,11 @@ mod results_tests {
         let mut terminal = create_terminal();
         let scenario = create_completable_scenario();
         let mut state = create_test_app_state(vec![scenario.clone()]);
-        state.progress.profile.scenario_history.record_completion(
-            &scenario.id,
-            100,
-            50,
-            chrono::Utc::now(),
-        );
+        state
+            .progress
+            .profile
+            .scenario_history_mut()
+            .record_completion(&scenario.id, 100, 50, chrono::Utc::now());
 
         let results_data = create_abandoned_results_data(scenario);
         state.screen = TypedScreen::Results(results_data);
@@ -1198,18 +1201,16 @@ mod results_tests {
             .optimal_count(1)
             .build();
         let mut state = create_test_app_state(vec![scenario1.clone(), scenario2.clone()]);
-        state.progress.profile.scenario_history.record_completion(
-            &scenario1.id,
-            100,
-            50,
-            chrono::Utc::now(),
-        );
-        state.progress.profile.scenario_history.record_completion(
-            &scenario2.id,
-            100,
-            50,
-            chrono::Utc::now(),
-        );
+        state
+            .progress
+            .profile
+            .scenario_history_mut()
+            .record_completion(&scenario1.id, 100, 50, chrono::Utc::now());
+        state
+            .progress
+            .profile
+            .scenario_history_mut()
+            .record_completion(&scenario2.id, 100, 50, chrono::Utc::now());
 
         // scenario_index Some(0) out of 2 filtered scenarios - not the last one.
         let results_data = create_abandoned_results_data(scenario1);
@@ -1378,13 +1379,14 @@ mod results_tests {
         let mut terminal = create_terminal();
         let scenario = create_completable_scenario();
         let mut state = create_test_app_state(vec![scenario.clone()]);
-
-        // Set up profile with various stats
-        state.progress.profile.level = 15;
-        state.progress.profile.total_xp = 5000;
-        state.progress.profile.scenarios_completed = 50;
-        state.progress.profile.perfect_scenarios = 20;
-        state.progress.profile.current_streak = 7;
+        state.progress.profile.set_total_xp(5000);
+        state.progress.profile.set_scenarios_completed(50);
+        state.progress.profile.set_perfect_scenarios(20);
+        state.progress.profile.set_current_streak(7);
+        state
+            .progress
+            .profile
+            .set_total_xp(crate::gamification::XPCalculator::xp_for_level(15));
 
         let mut results_data = create_abandoned_results_data(scenario);
         results_data.xp_breakdown = Some(create_xp_breakdown(50, 25, 10, 1.0, 1.0));
@@ -1404,7 +1406,7 @@ mod results_tests {
         let mut state = create_test_app_state(vec![scenario.clone()]);
 
         // No current streak
-        state.progress.profile.current_streak = 0;
+        state.progress.profile.set_current_streak(0);
 
         let mut results_data = create_abandoned_results_data(scenario);
         results_data.xp_breakdown = Some(create_xp_breakdown(50, 0, 0, 1.0, 1.0));
@@ -1482,9 +1484,12 @@ mod results_tests {
         let mut state = create_test_app_state(vec![scenario.clone()]);
 
         // Set profile for streak display
-        state.progress.profile.current_streak = 5;
-        state.progress.profile.level = 10;
-        state.progress.profile.total_xp = 3000;
+        state.progress.profile.set_current_streak(5);
+        state.progress.profile.set_total_xp(3000);
+        state
+            .progress
+            .profile
+            .set_total_xp(crate::gamification::XPCalculator::xp_for_level(10));
 
         // XP with all bonuses and penalties
         let xp = XPBreakdown {
@@ -1708,8 +1713,8 @@ mod statistics_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         // Add some scenario history
-        state.progress.profile.scenarios_completed = 10;
-        state.progress.profile.perfect_scenarios = 5;
+        state.progress.profile.set_scenarios_completed(10);
+        state.progress.profile.set_perfect_scenarios(5);
 
         state.screen = TypedScreen::Statistics(StatisticsData {
             return_to: ReturnDestination::Menu,
@@ -1729,8 +1734,8 @@ mod statistics_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         // Set up streaks
-        state.progress.profile.current_streak = 7;
-        state.progress.profile.longest_streak = 14;
+        state.progress.profile.set_current_streak(7);
+        state.progress.profile.set_longest_streak(14);
 
         state.screen = TypedScreen::Statistics(StatisticsData {
             return_to: ReturnDestination::Menu,
@@ -1750,9 +1755,9 @@ mod statistics_tests {
         let mut state = create_test_app_state(vec![scenario]);
 
         // Set up arcade mode stats
-        state.progress.profile.minigame_high_score = 5000;
-        state.progress.profile.minigame_best_streak = 15;
-        state.progress.profile.minigame_games_played = 25;
+        state.progress.profile.set_minigame_high_score(5000);
+        state.progress.profile.set_minigame_best_streak(15);
+        state.progress.profile.set_minigame_games_played(25);
 
         state.screen = TypedScreen::Statistics(StatisticsData {
             return_to: ReturnDestination::Menu,
@@ -2050,7 +2055,7 @@ mod mode_selection_extended_tests {
         state
             .progress
             .profile
-            .challenge_progress
+            .challenge_progress_mut()
             .start_attempt(today);
 
         state.screen = TypedScreen::ModeSelection(ModeSelectionData {
@@ -2642,10 +2647,9 @@ mod shared_definitions {
             .collect()
     }
 
-    fn state_with_progress(level: u32, total_xp: u64, screen: TypedScreen) -> AppState {
+    fn state_with_progress(_level: u32, total_xp: u64, screen: TypedScreen) -> AppState {
         let mut state = create_test_app_state(vec![]);
-        state.progress.profile.level = level;
-        state.progress.profile.total_xp = total_xp;
+        state.progress.profile.set_total_xp(total_xp);
         state.screen = screen;
         state
     }
@@ -2685,19 +2689,21 @@ mod shared_definitions {
     #[test]
     fn profile_active_quests_total_is_the_generated_count() {
         let mut state = state_with_progress(22, 9822, profile_screen());
-        state.progress.profile.daily_quests = (0..4)
-            .map(|i| {
-                Quest::new(
-                    qid(&format!("quest_{i}")),
-                    QuestType::ScenarioCompletion {
-                        target: 5,
-                        current: 0,
-                    },
-                    QuestDifficulty::Easy,
-                )
-            })
-            .collect();
-        state.progress.profile.daily_quests[0].mark_completed();
+        state.progress.profile.set_daily_quests(
+            (0..4)
+                .map(|i| {
+                    Quest::new(
+                        qid(&format!("quest_{i}")),
+                        QuestType::ScenarioCompletion {
+                            target: 5,
+                            current: 0,
+                        },
+                        QuestDifficulty::Easy,
+                    )
+                })
+                .collect(),
+        );
+        state.progress.profile.daily_quests_mut()[0].mark_completed();
         let text = screen_text(&state);
         assert!(text.contains("Active Quests: 3/4"), "{text}");
     }

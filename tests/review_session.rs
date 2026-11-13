@@ -140,7 +140,7 @@ fn test_complete_all_reviews_successfully() {
     let mut state = create_test_app_state_with_reviews(3);
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     // Start session
@@ -164,7 +164,7 @@ fn test_complete_all_reviews_successfully() {
     // Verify XP was awarded
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
     assert!(final_xp > initial_xp, "XP should be awarded");
 }
@@ -393,7 +393,7 @@ fn test_xp_calculation_base_only() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -407,7 +407,7 @@ fn test_xp_calculation_base_only() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     let awarded_xp = final_xp - initial_xp;
@@ -424,7 +424,7 @@ fn test_xp_calculation_success_rate_bonus_100_percent() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -442,7 +442,7 @@ fn test_xp_calculation_success_rate_bonus_100_percent() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     let awarded_xp = final_xp - initial_xp;
@@ -459,7 +459,7 @@ fn test_xp_calculation_success_rate_bonus_0_percent() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -477,7 +477,7 @@ fn test_xp_calculation_success_rate_bonus_0_percent() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     let awarded_xp = final_xp - initial_xp;
@@ -494,7 +494,7 @@ fn test_xp_calculation_success_rate_bonus_mixed() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -531,7 +531,7 @@ fn test_xp_calculation_success_rate_bonus_mixed() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     let awarded_xp = final_xp - initial_xp;
@@ -548,7 +548,7 @@ fn test_xp_calculation_always_positive() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -562,7 +562,7 @@ fn test_xp_calculation_always_positive() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     let awarded_xp = final_xp - initial_xp;
@@ -581,7 +581,7 @@ fn test_complete_flow_all_successful() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     // Start review session
@@ -609,7 +609,7 @@ fn test_complete_flow_all_successful() {
     // XP should be awarded
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
     assert_eq!(final_xp - initial_xp, 70); // 5*10 + 20 bonus
 }
@@ -620,7 +620,7 @@ fn test_complete_flow_all_failed() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -642,7 +642,7 @@ fn test_complete_flow_all_failed() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
     assert_eq!(final_xp - initial_xp, 30); // 3*10 + 0 bonus
 }
@@ -653,7 +653,7 @@ fn test_complete_flow_abandoned_after_partial() {
 
     let initial_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     update(&mut state, Message::StartReviewSession).unwrap();
@@ -683,7 +683,7 @@ fn test_complete_flow_abandoned_after_partial() {
 
     let final_xp = {
         let profile = &state.progress.profile;
-        profile.total_xp
+        profile.total_xp()
     };
 
     // XP should not be awarded for abandoned session

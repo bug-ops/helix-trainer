@@ -296,7 +296,7 @@ impl ScenarioCollection {
                         // Completed scenarios go to the end
                         self.scenarios
                             .get(idx)
-                            .is_some_and(|s| prof.scenario_history.get(&s.id).is_some())
+                            .is_some_and(|s| prof.scenario_history().get(&s.id).is_some())
                     });
                 }
                 // If no profile, don't change order
@@ -330,7 +330,7 @@ impl ScenarioCollection {
                         // Sort by completion count (fewer completions = lower mastery = higher priority)
                         self.scenarios
                             .get(idx)
-                            .and_then(|s| prof.scenario_history.get(&s.id))
+                            .and_then(|s| prof.scenario_history().get(&s.id))
                             .map_or(0, |completion| completion.attempts) // Never attempted = highest priority
                     });
                 }
@@ -424,7 +424,7 @@ impl ScenarioCollection {
 
         // Check completion status
         if let Some(prof) = profile {
-            let is_completed = prof.scenario_history.get(&scenario.id).is_some();
+            let is_completed = prof.scenario_history().get(&scenario.id).is_some();
 
             let keep = match filter.completion {
                 CompletionFilter::Any => true,
@@ -460,7 +460,7 @@ impl ScenarioCollection {
     /// [`Self::curriculum_stats`] (single-pass, allocates `per_category`) so the
     /// two can never disagree on what counts as "completed".
     fn is_scenario_completed(scenario: &Scenario, profile: &UserProfile) -> bool {
-        profile.scenario_history.get(&scenario.id).is_some()
+        profile.scenario_history().get(&scenario.id).is_some()
     }
 
     /// Number of unfiltered scenarios with at least one recorded completion.
@@ -503,7 +503,7 @@ impl ScenarioCollection {
     /// let mut profile = UserProfile::new();
     /// assert_eq!(collection.completed_count(&profile), 0);
     ///
-    /// profile.scenario_history.record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
+    /// profile.scenario_history_mut().record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
     /// assert_eq!(collection.completed_count(&profile), 1);
     /// ```
     pub fn completed_count(&self, profile: &UserProfile) -> usize {
@@ -553,7 +553,7 @@ impl ScenarioCollection {
     /// let mut profile = UserProfile::new();
     /// assert!(!collection.is_curriculum_complete(&profile));
     ///
-    /// profile.scenario_history.record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
+    /// profile.scenario_history_mut().record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
     /// assert!(collection.is_curriculum_complete(&profile));
     ///
     /// // An empty collection is never complete, even with no scenarios to finish.
@@ -606,7 +606,7 @@ impl ScenarioCollection {
     ///
     /// let collection = ScenarioCollection::new(vec![scenario]);
     /// let mut profile = UserProfile::new();
-    /// profile.scenario_history.record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
+    /// profile.scenario_history_mut().record_completion(&ScenarioId::parse("s1").unwrap(), 100, 50, Utc::now());
     ///
     /// let stats = collection.curriculum_stats(&profile);
     /// assert_eq!(stats.total, 1);
@@ -623,7 +623,7 @@ impl ScenarioCollection {
         for scenario in &self.scenarios {
             let completed = Self::is_scenario_completed(scenario, profile);
             let perfected = profile
-                .scenario_history
+                .scenario_history()
                 .get(&scenario.id)
                 .is_some_and(|c| c.perfect_count > 0);
 

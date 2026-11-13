@@ -104,9 +104,12 @@ fn create_profile_with_completions(scenario_ids: &[ScenarioId]) -> UserProfile {
     for (idx, scenario_id) in scenario_ids.iter().enumerate() {
         if idx % 3 == 0 {
             // Complete ~33% of scenarios
-            profile
-                .scenario_history
-                .record_completion(scenario_id, 100, 50, chrono::Utc::now());
+            profile.scenario_history_mut().record_completion(
+                scenario_id,
+                100,
+                50,
+                chrono::Utc::now(),
+            );
         }
     }
 
@@ -587,7 +590,7 @@ fn bench_menu_render_simulation(c: &mut Criterion) {
                     // Check completion status for each scenario (like menu does)
                     let mut count = 0;
                     for scenario in &filtered {
-                        let completed = profile.scenario_history.get(&scenario.id).is_some();
+                        let completed = profile.scenario_history().get(&scenario.id).is_some();
                         black_box(completed);
 
                         // Get difficulty indicator (like menu does)

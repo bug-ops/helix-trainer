@@ -337,7 +337,7 @@ fn render_scenario_mastery_section(lines: &mut Vec<Line<'static>>, state: &AppSt
     lines.push(Line::from(""));
 
     let profile = &state.progress.profile;
-    let stats = profile.scenario_history.mastery_stats();
+    let stats = profile.scenario_history().mastery_stats();
 
     let total = stats.learning + stats.proficient + stats.mastered;
     let [mastered, proficient, learning, total_count] =
@@ -397,8 +397,8 @@ fn render_quest_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     ]));
 
     // Streak information
-    let current_streak = profile.current_streak;
-    let longest_streak = profile.longest_streak;
+    let current_streak = profile.current_streak();
+    let longest_streak = profile.longest_streak();
 
     lines.push(Line::from(vec![
         Span::raw(t!("statistics.current_streak").to_string()),
@@ -429,8 +429,8 @@ fn render_session_history(lines: &mut Vec<Line<'static>>, state: &AppState) {
 
     // Calculate average score from profile data
     let profile = &state.progress.profile;
-    let scenarios_completed = profile.scenarios_completed;
-    let perfect_scenarios = profile.perfect_scenarios;
+    let scenarios_completed = profile.scenarios_completed();
+    let perfect_scenarios = profile.perfect_scenarios();
 
     let avg_score = if scenarios_completed > 0 {
         // Rough estimate: perfect = 100%, others average ~75%
@@ -506,7 +506,7 @@ fn render_arcade_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw(t!("statistics.high_score").to_string()),
         Span::styled(
-            format!("{}", profile.minigame_high_score),
+            format!("{}", profile.minigame_high_score()),
             Style::default().fg(Color::Yellow),
         ),
     ]));
@@ -515,7 +515,7 @@ fn render_arcade_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw(t!("statistics.best_streak").to_string()),
         Span::styled(
-            format!("{}", profile.minigame_best_streak),
+            format!("{}", profile.minigame_best_streak()),
             Style::default().fg(Color::Cyan),
         ),
     ]));
@@ -524,7 +524,7 @@ fn render_arcade_statistics(lines: &mut Vec<Line<'static>>, state: &AppState) {
     lines.push(Line::from(vec![
         Span::raw(t!("statistics.games_played").to_string()),
         Span::styled(
-            format!("{}", profile.minigame_games_played),
+            format!("{}", profile.minigame_games_played()),
             Style::default().fg(Color::Green),
         ),
     ]));

@@ -286,7 +286,7 @@ fn profile_task_failed(storage: &ProfileStorage, error: JoinError) -> DataLoadMe
 /// let msg = start_fresh_profile_message(ProfileStorage::with_path(&path))
 ///     .await
 ///     .unwrap();
-/// assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1);
+/// assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.level() == 1);
 /// # }
 /// ```
 pub async fn start_fresh_profile_message(
@@ -330,7 +330,7 @@ pub async fn start_fresh_profile_message(
 /// std::fs::write(storage.path(), "{broken").unwrap();
 ///
 /// let msg = restore_previous_profile_message(storage).await.unwrap();
-/// assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 500);
+/// assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp() == 500);
 /// # }
 /// ```
 pub async fn restore_previous_profile_message(
@@ -445,7 +445,7 @@ mod tests {
 
         let msg = load_profile_message(storage).await.unwrap();
 
-        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.level == 1);
+        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.level() == 1);
     }
 
     /// Regression test for #440: an unparsable profile is reported as an
@@ -486,7 +486,7 @@ mod tests {
 
         let msg = start_fresh_profile_message(storage.clone()).await.unwrap();
 
-        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp == 0);
+        assert_matches!(msg, DataLoadMessage::ProfileReady(p) if p.total_xp() == 0);
         assert!(storage.load().is_ok());
         let QuarantineOutcome::BackedUp(backup_path) = backup else {
             panic!("expected a backup");
@@ -618,7 +618,7 @@ mod tests {
                 other => panic!("no profile message: {:?}", other.map(|m| m.is_some())),
             }
         };
-        assert_eq!(profile.total_xp, 700);
+        assert_eq!(profile.total_xp(), 700);
 
         profile.add_xp(50);
         app_storage.save(&profile).unwrap();
@@ -641,7 +641,7 @@ mod tests {
         let message = restore_previous_profile_message(storage.clone())
             .await
             .unwrap();
-        assert_matches!(message, DataLoadMessage::ProfileReady(p) if p.total_xp == 500);
+        assert_matches!(message, DataLoadMessage::ProfileReady(p) if p.total_xp() == 500);
 
         std::fs::write(storage.path(), "{broken again").unwrap();
         std::fs::write(storage.path().with_added_extension("prev"), "{also broken").unwrap();

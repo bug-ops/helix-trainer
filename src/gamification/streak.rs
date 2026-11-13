@@ -64,12 +64,12 @@ impl StreakManager {
     ///
     /// let today: DateTime<Utc> = "2026-01-15T12:00:00Z".parse().unwrap();
     /// let mut profile = UserProfile::new_at(today);
-    /// profile.current_streak = 5;
-    /// profile.daily_quests.push(Quest::new(
+    /// profile.set_current_streak(5);
+    /// profile.set_daily_quests(vec![Quest::new(
     ///     QuestId::parse("test_quest").unwrap(),
     ///     QuestType::ScenarioCompletion { target: 1, current: 0 },
     ///     QuestDifficulty::Easy,
-    /// ));
+    /// )]);
     /// profile.complete_quest(&QuestId::parse("test_quest").unwrap());
     ///
     /// // Simulate next day activity
@@ -77,7 +77,7 @@ impl StreakManager {
     ///
     /// let change = StreakManager::update_streak(&mut profile, tomorrow);
     /// assert_eq!(change, StreakChange::Incremented { new_streak: 6 });
-    /// assert_eq!(profile.current_streak, 6);
+    /// assert_eq!(profile.current_streak(), 6);
     /// ```
     pub fn update_streak(profile: &mut UserProfile, now: impl Into<Moment>) -> StreakChange {
         let now = now.into();
@@ -146,12 +146,12 @@ impl StreakManager {
     /// use helix_trainer::gamification::{StreakManager, UserProfile};
     ///
     /// let mut profile = UserProfile::new();
-    /// profile.current_streak = 5;
+    /// profile.set_current_streak(5);
     /// StreakManager::grant_freeze(&mut profile);
     ///
     /// // A 2-day gap is within the freeze's coverage.
     /// StreakManager::use_freeze(&mut profile, 2).unwrap();
-    /// assert!(!profile.streak_freeze_available);
+    /// assert!(!profile.streak_freeze_available());
     /// ```
     pub fn use_freeze(profile: &mut UserProfile, days_since_active: i64) -> Result<()> {
         if !profile.streak_freeze_available {

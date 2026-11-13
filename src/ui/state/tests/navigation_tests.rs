@@ -44,16 +44,16 @@ fn test_quit_app_awards_minigame_game_over() {
     if let Some(session) = state.minigame_session_mut() {
         session.stats.score = 5000;
     }
-    let initial_xp = state.progress.profile.total_xp;
+    let initial_xp = state.progress.profile.total_xp();
 
     update(&mut state, Message::QuitApp).unwrap();
 
     assert!(!state.ui.running);
     assert!(
-        state.progress.profile.total_xp > initial_xp,
+        state.progress.profile.total_xp() > initial_xp,
         "mid-session Ctrl-C should award XP just like quitting to the menu"
     );
-    assert_eq!(state.progress.profile.minigame_high_score, 5000);
+    assert_eq!(state.progress.profile.minigame_high_score(), 5000);
 }
 
 /// Regression test for #323/#324: a per-scenario timeout depleting the last
@@ -85,18 +85,20 @@ fn test_quit_app_after_timeout_game_over_does_not_double_award() {
             .is_some_and(|s| s.state().is_game_over())
     );
 
-    let xp_after_timeout_game_over = state.progress.profile.total_xp;
-    let games_played_after_timeout = state.progress.profile.minigame_games_played;
+    let xp_after_timeout_game_over = state.progress.profile.total_xp();
+    let games_played_after_timeout = state.progress.profile.minigame_games_played();
 
     // Ctrl-C fires for the same already-finished session.
     update(&mut state, Message::QuitApp).unwrap();
 
     assert_eq!(
-        state.progress.profile.total_xp, xp_after_timeout_game_over,
+        state.progress.profile.total_xp(),
+        xp_after_timeout_game_over,
         "QuitApp must not re-award XP for a session already finished via timeout"
     );
     assert_eq!(
-        state.progress.profile.minigame_games_played, games_played_after_timeout,
+        state.progress.profile.minigame_games_played(),
+        games_played_after_timeout,
         "QuitApp must not double-increment games_played for an already-finished session"
     );
 }
@@ -112,17 +114,17 @@ fn test_quit_app_zero_score_session_awards_cleanly() {
     update(&mut state, Message::SelectArcadeMode).unwrap();
     assert!(state.minigame_session().is_some());
 
-    let initial_games_played = state.progress.profile.minigame_games_played;
+    let initial_games_played = state.progress.profile.minigame_games_played();
 
     update(&mut state, Message::QuitApp).unwrap();
 
     assert!(!state.ui.running);
     assert_eq!(
-        state.progress.profile.minigame_games_played,
+        state.progress.profile.minigame_games_played(),
         initial_games_played + 1,
         "a zero-score session should still be counted as a played game"
     );
-    assert_eq!(state.progress.profile.minigame_high_score, 0);
+    assert_eq!(state.progress.profile.minigame_high_score(), 0);
 }
 
 /// Regression test for #324: the Ctrl-C (`QuitApp`) path must persist FSRS
@@ -156,9 +158,9 @@ fn test_quit_app_persists_fsrs_data() {
     update(&mut state, Message::QuitApp).unwrap();
 
     let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
-    assert!(!persisted.performance_data.is_empty());
+    assert!(!persisted.performance_data().is_empty());
     assert!(
-        persisted.performance_data.contains_key(&cid("j")),
+        persisted.performance_data().contains_key(&cid("j")),
         "FSRS review data recorded before Ctrl-C must be persisted, not just XP/high score"
     );
 }
@@ -209,7 +211,7 @@ fn test_quit_app_persists_fsrs_data_from_live_action() {
 
     let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
     assert!(
-        persisted.performance_data.contains_key(&cid("x")),
+        persisted.performance_data().contains_key(&cid("x")),
         "an action taken mid-session before Ctrl-C must reach record_to_fsrs, \
          not just whatever was already in the tracker"
     );

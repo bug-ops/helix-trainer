@@ -128,7 +128,7 @@ impl AchievementEngine {
     /// use helix_trainer::learning::PerformanceTracker;
     ///
     /// let mut profile = UserProfile::new();
-    /// profile.perfect_scenarios = 1;
+    /// profile.set_perfect_scenarios(1);
     ///
     /// let tracker = PerformanceTracker::new();
     /// let unlocked = AchievementEngine::check_achievements(&profile, &tracker);
@@ -172,7 +172,7 @@ impl AchievementEngine {
     /// use helix_trainer::learning::PerformanceTracker;
     ///
     /// let mut profile = UserProfile::new();
-    /// profile.perfect_scenarios = 1;
+    /// profile.set_perfect_scenarios(1);
     ///
     /// let tracker = PerformanceTracker::new();
     /// let unlocked = AchievementEngine::check_and_unlock(&mut profile, &tracker);

@@ -254,7 +254,7 @@ impl ProgressState {
         monotonic: Arc<dyn MonotonicClock>,
     ) -> Self {
         // Initialize sound manager from profile config
-        let mut sound_manager = SoundManager::new(profile.sound_config.clone());
+        let mut sound_manager = SoundManager::new(profile.sound_config().clone());
         // Try to initialize audio (graceful failure)
         if let Err(e) = sound_manager.try_init() {
             tracing::warn!("Audio initialization failed: {e}. Running in silent mode.");
@@ -305,7 +305,7 @@ impl ProgressState {
     /// apply its saved sound settings to the sound manager.
     pub fn mark_profile_loaded(&mut self) {
         self.persistence = ProfilePersistence::Writable;
-        let config = &self.profile.sound_config;
+        let config = &self.profile.sound_config();
         self.sound_manager.set_volume(config.volume());
         self.sound_manager.set_enabled(config.enabled());
     }
@@ -323,7 +323,7 @@ impl ProgressState {
     pub fn toggle_sound(&mut self) -> bool {
         let enabled = self.sound_manager.toggle();
         if self.persistence.is_writable() {
-            self.profile.sound_config.set_enabled(enabled);
+            self.profile.sound_config_mut().set_enabled(enabled);
             self.mark_unsaved();
         }
         enabled
@@ -426,7 +426,7 @@ impl ProgressState {
     /// This is the single source of truth for saving progress: every call site that
     /// persists the profile mid-session must go through this method (or
     /// [`ProgressState::save_debounced`]) rather than calling `storage.save` directly,
-    /// otherwise `profile.performance_data` silently goes stale.
+    /// otherwise `profile.performance_data()` silently goes stale.
     ///
     /// When a save channel has been wired up via
     /// [`ProgressState::set_save_channel`] (the case for the real app, never
@@ -459,7 +459,8 @@ impl ProgressState {
             tracing::debug!(state = ?self.persistence, "Profile save skipped: profile is not saveable");
             return Ok(());
         }
-        self.profile.performance_data = self.performance_tracker.stats_clone();
+        self.profile
+            .set_performance_data(self.performance_tracker.stats_clone());
 
         let Some(tx) = &self.save_tx else {
             return self.save_sync();
@@ -538,7 +539,8 @@ impl ProgressState {
         if !self.persistence.is_writable() {
             return None;
         }
-        self.profile.performance_data = self.performance_tracker.stats_clone();
+        self.profile
+            .set_performance_data(self.performance_tracker.stats_clone());
         Some(SaveRequest {
             storage: self.storage.clone(),
             profile: self.profile.clone(),
@@ -650,21 +652,24 @@ mod tests {
     fn test_mark_profile_loaded_applies_saved_sound_config_clamped() {
         let mut progress = writable_progress();
         progress.begin_profile_load();
-        progress.profile.sound_config =
-            serde_json::from_str(r#"{"volume": 12.0, "enabled": false}"#).unwrap();
+        progress.profile.set_sound_config(
+            serde_json::from_str(r#"{"volume": 12.0, "enabled": false}"#).unwrap(),
+        );
 
         progress.mark_profile_loaded();
 
         assert!(progress.persistence().is_writable());
         assert!(!progress.sound_manager.config().enabled());
         assert!((progress.sound_manager.config().volume().get() - 1.0).abs() < f32::EPSILON);
-        assert!((progress.profile.sound_config.volume().get() - 1.0).abs() < f32::EPSILON);
+        assert!((progress.profile.sound_config().volume().get() - 1.0).abs() < f32::EPSILON);
     }
 
     #[test]
     fn test_mark_profile_loaded_rejects_non_finite_volume() {
         let mut progress = writable_progress();
-        progress.profile.sound_config = SoundConfig::new(Volume::new(f32::NAN), true);
+        progress
+            .profile
+            .set_sound_config(SoundConfig::new(Volume::new(f32::NAN), true));
 
         progress.mark_profile_loaded();
 
@@ -680,12 +685,12 @@ mod tests {
     fn test_toggle_sound_mirrors_into_profile_and_marks_dirty() {
         let mut progress = writable_progress();
         progress.mark_saved();
-        assert!(progress.profile.sound_config.enabled());
+        assert!(progress.profile.sound_config().enabled());
 
         let enabled = progress.toggle_sound();
 
         assert!(!enabled);
-        assert!(!progress.profile.sound_config.enabled());
+        assert!(!progress.profile.sound_config().enabled());
         assert!(progress.should_save());
     }
 
@@ -696,7 +701,7 @@ mod tests {
 
         progress.toggle_sound();
 
-        assert!(progress.profile.sound_config.enabled());
+        assert!(progress.profile.sound_config().enabled());
     }
 
     #[test]
@@ -860,9 +865,9 @@ mod tests {
         progress.save_immediate().unwrap();
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
-        assert!(!persisted.performance_data.is_empty());
+        assert!(!persisted.performance_data().is_empty());
         assert!(stats_match(
-            &persisted.performance_data,
+            persisted.performance_data(),
             &progress.performance_tracker.stats_clone()
         ));
     }
@@ -942,10 +947,10 @@ mod tests {
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert!(stats_match(
-            &persisted.performance_data,
+            persisted.performance_data(),
             &progress.performance_tracker.stats_clone()
         ));
-        assert!(!persisted.performance_data.is_empty());
+        assert!(!persisted.performance_data().is_empty());
     }
 
     /// Regression test for #294: once a save channel is wired up,
@@ -982,7 +987,7 @@ mod tests {
             .expect("channel should not be closed");
         assert_matches!(msg, DataLoadMessage::ProfileSaved);
 
-        let expected_xp = progress.profile.total_xp;
+        let expected_xp = progress.profile.total_xp();
         // Drop every sender clone — including the one `progress` holds
         // internally — so the writer's receive loop sees the channel close
         // and its `JoinHandle` actually resolves.
@@ -991,7 +996,7 @@ mod tests {
         writer_handle.await.unwrap();
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
-        assert_eq!(persisted.total_xp, expected_xp);
+        assert_eq!(persisted.total_xp(), expected_xp);
     }
 
     /// Regression test for review finding N1: when the writer's queue is
@@ -1020,14 +1025,14 @@ mod tests {
         let (save_tx, mut save_rx) = mpsc::channel::<SaveRequest>(1);
         progress.set_save_channel(save_tx);
 
-        progress.profile.total_xp = 100;
+        progress.profile.set_total_xp(100);
         progress.save_immediate().unwrap();
         assert!(
             !progress.should_save(),
             "the first dispatch marks saved optimistically"
         );
 
-        progress.profile.total_xp = 999;
+        progress.profile.set_total_xp(999);
         progress.save_immediate().unwrap();
 
         assert!(
@@ -1044,7 +1049,8 @@ mod tests {
             .try_recv()
             .expect("the first request must still be queued");
         assert_eq!(
-            queued.profile.total_xp, 100,
+            queued.profile.total_xp(),
+            100,
             "the queued snapshot must be the older one, not overwritten by the skipped save"
         );
     }
@@ -1117,7 +1123,7 @@ mod tests {
         progress.set_save_channel(save_tx.clone());
 
         for &xp in &REQUESTED_XP_VALUES {
-            progress.profile.total_xp = xp;
+            progress.profile.set_total_xp(xp);
             progress.save_immediate().unwrap();
         }
 
@@ -1142,7 +1148,7 @@ mod tests {
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert_eq!(
-            persisted.total_xp,
+            persisted.total_xp(),
             *REQUESTED_XP_VALUES.last().unwrap(),
             "the last-requested save must be the one left on disk"
         );
@@ -1176,11 +1182,11 @@ mod tests {
 
         // A mid-session save dispatched moments before exit (e.g. a
         // review-session completion), still possibly in flight.
-        progress.profile.total_xp = 100;
+        progress.profile.set_total_xp(100);
         progress.save_immediate().unwrap();
 
         // More happens before the user quits.
-        progress.profile.total_xp = 999;
+        progress.profile.set_total_xp(999);
 
         // The exit path: build the final snapshot, enqueue it last, drop
         // every sender clone, and drain.
@@ -1202,7 +1208,8 @@ mod tests {
 
         let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
         assert_eq!(
-            persisted.total_xp, 999,
+            persisted.total_xp(),
+            999,
             "the exit-time snapshot must win over the earlier in-flight save"
         );
     }

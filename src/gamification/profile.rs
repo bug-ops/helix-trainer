@@ -55,33 +55,35 @@ where
 /// User profile with progression, streaks, and achievements
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserProfile {
-    /// Current level
-    pub level: u32,
+    /// The `level` key of profiles written before the level was derived from `total_xp`;
+    /// read once on load by [`UserProfile::finish_load`], never written.
+    #[serde(default, rename = "level", skip_serializing)]
+    legacy_level: Option<u32>,
 
     /// Total XP accumulated
-    pub total_xp: u64,
+    pub(super) total_xp: u64,
 
     /// Current streak (consecutive days)
-    pub current_streak: u32,
+    pub(super) current_streak: u32,
 
     /// Longest streak ever achieved
-    pub longest_streak: u32,
+    pub(super) longest_streak: u32,
 
     /// Last activity timestamp
-    pub last_activity: DateTime<Utc>,
+    pub(super) last_activity: DateTime<Utc>,
 
     /// Unlocked achievements
     ///
     /// Ids this build does not know (e.g. written by a newer version) are
     /// dropped on load instead of failing the whole profile.
     #[serde(deserialize_with = "deserialize_known_achievements")]
-    pub achievements_unlocked: HashSet<AchievementId>,
+    pub(super) achievements_unlocked: HashSet<AchievementId>,
 
     /// Active daily quests
-    pub daily_quests: Vec<Quest>,
+    pub(super) daily_quests: Vec<Quest>,
 
     /// Last time quests were refreshed
-    pub last_quest_refresh: DateTime<Utc>,
+    pub(super) last_quest_refresh: DateTime<Utc>,
 
     /// The completed-quest set of profiles written before completion lived on the
     /// quests; read once on load by [`UserProfile::finish_load`], never written.
@@ -89,69 +91,69 @@ pub struct UserProfile {
     legacy_rewarded_quests: HashSet<QuestId>,
 
     /// Streak freeze available (protects from one missed day)
-    pub streak_freeze_available: bool,
+    pub(super) streak_freeze_available: bool,
 
     /// Total scenarios completed
-    pub scenarios_completed: u32,
+    pub(super) scenarios_completed: u32,
 
     /// Perfect scenario count
-    pub perfect_scenarios: u32,
+    pub(super) perfect_scenarios: u32,
 
     /// Total commands executed
-    pub commands_executed: u32,
+    pub(super) commands_executed: u32,
 
     /// Scenario completion history and mastery tracking
     #[serde(default)]
-    pub scenario_history: ScenarioHistory,
+    pub(super) scenario_history: ScenarioHistory,
 
     /// Best score achieved in mini-game mode
     #[serde(default)]
-    pub minigame_high_score: u64,
+    pub(super) minigame_high_score: u64,
 
     /// Best streak achieved in mini-game mode
     #[serde(default)]
-    pub minigame_best_streak: u32,
+    pub(super) minigame_best_streak: u32,
 
     /// Total number of mini-game sessions played
     #[serde(default)]
-    pub minigame_games_played: u32,
+    pub(super) minigame_games_played: u32,
 
     /// Sound configuration for audio feedback
     #[serde(default)]
-    pub sound_config: SoundConfig,
+    pub(super) sound_config: SoundConfig,
 
     /// Challenge mode progress (daily puzzle tracking)
     #[serde(default)]
-    pub challenge_progress: crate::gamification::ChallengeProgress,
+    pub(super) challenge_progress: crate::gamification::ChallengeProgress,
 
     /// Survival mode best level reached
     #[serde(default)]
-    pub survival_best_level: u32,
+    pub(super) survival_best_level: u32,
 
     /// Survival mode best scenarios completed in single run
     #[serde(default)]
-    pub survival_best_scenarios: u32,
+    pub(super) survival_best_scenarios: u32,
 
     /// Persisted FSRS/PerformanceTracker data
     #[serde(default)]
-    pub performance_data: PerformanceData,
+    pub(super) performance_data: PerformanceData,
 
     /// Count of scenario completions finished in under
     /// `SPEED_DEMON_TIME_RATIO` of a
     /// scenario's time budget, in either Training or arcade mode. Powers
     /// `SpeedDemon`/`Speedrunner`.
     #[serde(default)]
-    pub speed_run_count: u32,
+    pub(super) speed_run_count: u32,
 
     /// Count of scenario completions finished in under
     /// `FLASH_TIME_RATIO` of a scenario's
     /// time budget, in either Training or arcade mode. Powers `Flash`.
     #[serde(default)]
-    pub flash_run_count: u32,
+    pub(super) flash_run_count: u32,
 
     /// Difficulty levels completed at least once, across any mode. Powers `Polyglot`.
     #[serde(default)]
-    pub difficulties_completed: HashSet<Difficulty>,
+    pub(super) difficulties_completed: HashSet<Difficulty>,
 
     /// Fingerprint of the resolved keymap bindings active when review
     /// history was last recorded, or `None` if no custom keymap has ever
@@ -166,7 +168,7 @@ pub struct UserProfile {
         default,
         deserialize_with = "crate::config::keymap::fingerprint::lenient_stored_fingerprint"
     )]
-    pub keymap_fingerprint: Option<StoredKeymapFingerprint>,
+    pub(super) keymap_fingerprint: Option<StoredKeymapFingerprint>,
 }
 
 impl UserProfile {
@@ -178,9 +180,9 @@ impl UserProfile {
     /// use helix_trainer::gamification::UserProfile;
     ///
     /// let profile = UserProfile::new();
-    /// assert_eq!(profile.level, 1);
-    /// assert_eq!(profile.total_xp, 0);
-    /// assert_eq!(profile.current_streak, 0);
+    /// assert_eq!(profile.level(), 1);
+    /// assert_eq!(profile.total_xp(), 0);
+    /// assert_eq!(profile.current_streak(), 0);
     /// ```
     pub fn new() -> Self {
         Self::new_at(Utc::now())
@@ -195,11 +197,11 @@ impl UserProfile {
     /// use helix_trainer::gamification::UserProfile;
     ///
     /// let profile = UserProfile::new_at(Utc::now());
-    /// assert_eq!(profile.level, 1);
+    /// assert_eq!(profile.level(), 1);
     /// ```
     pub fn new_at(now: DateTime<Utc>) -> Self {
         Self {
-            level: 1,
+            legacy_level: None,
             total_xp: 0,
             current_streak: 0,
             longest_streak: 0,
@@ -240,21 +242,254 @@ impl UserProfile {
     /// let mut profile = UserProfile::new();
     /// let leveled_up = profile.add_xp(100);
     /// assert!(leveled_up); // Leveled up from 1 to 2
-    /// assert_eq!(profile.level, 2);
+    /// assert_eq!(profile.level(), 2);
     /// ```
     pub fn add_xp(&mut self, xp: u64) -> bool {
-        let old_level = self.level;
+        let old_level = self.level();
         self.total_xp = self.total_xp.saturating_add(xp);
-        self.level = XPCalculator::level_from_xp(self.total_xp);
-        self.level > old_level
+        self.level() > old_level
     }
 
-    /// Replace `level` with the level implied by `total_xp`.
+    /// Total XP accumulated.
+    #[must_use]
+    pub fn total_xp(&self) -> u64 {
+        self.total_xp
+    }
+
+    /// Current streak in consecutive days.
+    #[must_use]
+    pub fn current_streak(&self) -> u32 {
+        self.current_streak
+    }
+
+    /// Longest streak ever achieved; never below the current streak.
+    #[must_use]
+    pub fn longest_streak(&self) -> u32 {
+        self.longest_streak
+    }
+
+    /// When the player was last active.
+    #[must_use]
+    pub fn last_activity(&self) -> DateTime<Utc> {
+        self.last_activity
+    }
+
+    /// Unlocked achievements.
+    #[must_use]
+    pub fn achievements_unlocked(&self) -> &HashSet<AchievementId> {
+        &self.achievements_unlocked
+    }
+
+    /// Today's quests.
+    #[must_use]
+    pub fn daily_quests(&self) -> &[Quest] {
+        &self.daily_quests
+    }
+
+    /// Today's quests, for progress updates.
+    pub fn daily_quests_mut(&mut self) -> &mut [Quest] {
+        &mut self.daily_quests
+    }
+
+    /// Replace today's quests.
+    pub fn set_daily_quests(&mut self, quests: Vec<Quest>) {
+        self.daily_quests = quests;
+    }
+
+    /// When the daily quests were last refreshed.
+    #[must_use]
+    pub fn last_quest_refresh(&self) -> DateTime<Utc> {
+        self.last_quest_refresh
+    }
+
+    /// Whether a streak freeze is held.
+    #[must_use]
+    pub fn streak_freeze_available(&self) -> bool {
+        self.streak_freeze_available
+    }
+
+    /// Scenarios completed; never below the perfect count.
+    #[must_use]
+    pub fn scenarios_completed(&self) -> u32 {
+        self.scenarios_completed
+    }
+
+    /// Scenarios completed perfectly.
+    #[must_use]
+    pub fn perfect_scenarios(&self) -> u32 {
+        self.perfect_scenarios
+    }
+
+    /// Commands executed in total.
+    #[must_use]
+    pub fn commands_executed(&self) -> u32 {
+        self.commands_executed
+    }
+
+    /// Scenario completion history.
+    #[must_use]
+    pub fn scenario_history(&self) -> &ScenarioHistory {
+        &self.scenario_history
+    }
+
+    /// Scenario completion history, for recording completions.
+    pub fn scenario_history_mut(&mut self) -> &mut ScenarioHistory {
+        &mut self.scenario_history
+    }
+
+    /// Best score in arcade mode.
+    #[must_use]
+    pub fn minigame_high_score(&self) -> u64 {
+        self.minigame_high_score
+    }
+
+    /// Best streak in arcade mode.
+    #[must_use]
+    pub fn minigame_best_streak(&self) -> u32 {
+        self.minigame_best_streak
+    }
+
+    /// Arcade sessions played.
+    #[must_use]
+    pub fn minigame_games_played(&self) -> u32 {
+        self.minigame_games_played
+    }
+
+    /// Sound settings.
+    #[must_use]
+    pub fn sound_config(&self) -> &SoundConfig {
+        &self.sound_config
+    }
+
+    /// Replace the sound settings.
+    pub fn set_sound_config(&mut self, config: SoundConfig) {
+        self.sound_config = config;
+    }
+
+    /// The sound settings, for changing one of them.
+    pub fn sound_config_mut(&mut self) -> &mut SoundConfig {
+        &mut self.sound_config
+    }
+
+    /// Daily challenge progress.
+    #[must_use]
+    pub fn challenge_progress(&self) -> &crate::gamification::ChallengeProgress {
+        &self.challenge_progress
+    }
+
+    /// Daily challenge progress, for recording attempts.
+    pub fn challenge_progress_mut(&mut self) -> &mut crate::gamification::ChallengeProgress {
+        &mut self.challenge_progress
+    }
+
+    /// Best level reached in survival mode.
+    #[must_use]
+    pub fn survival_best_level(&self) -> u32 {
+        self.survival_best_level
+    }
+
+    /// Most scenarios completed in one survival run.
+    #[must_use]
+    pub fn survival_best_scenarios(&self) -> u32 {
+        self.survival_best_scenarios
+    }
+
+    /// Per-command FSRS data.
+    #[must_use]
+    pub fn performance_data(&self) -> &PerformanceData {
+        &self.performance_data
+    }
+
+    /// Replace the per-command FSRS data.
+    pub fn set_performance_data(&mut self, data: PerformanceData) {
+        self.performance_data = data;
+    }
+
+    /// Completions under the speed-run time budget.
+    #[must_use]
+    pub fn speed_run_count(&self) -> u32 {
+        self.speed_run_count
+    }
+
+    /// Completions under the flash-run time budget.
+    #[must_use]
+    pub fn flash_run_count(&self) -> u32 {
+        self.flash_run_count
+    }
+
+    /// Difficulty levels completed at least once.
+    #[must_use]
+    pub fn difficulties_completed(&self) -> &HashSet<Difficulty> {
+        &self.difficulties_completed
+    }
+
+    /// Fingerprint of the keymap active when review history was last recorded.
+    #[must_use]
+    pub fn keymap_fingerprint(&self) -> Option<StoredKeymapFingerprint> {
+        self.keymap_fingerprint
+    }
+
+    /// Record the fingerprint of the keymap now active.
+    pub fn set_keymap_fingerprint(&mut self, fingerprint: Option<StoredKeymapFingerprint>) {
+        self.keymap_fingerprint = fingerprint;
+    }
+
+    /// Count a completed scenario, perfect or not; the completed count never falls below
+    /// the perfect count.
+    pub fn record_scenario_completed(&mut self, perfect: bool) {
+        self.scenarios_completed = self.scenarios_completed.saturating_add(1);
+        if perfect {
+            self.perfect_scenarios = self.perfect_scenarios.saturating_add(1);
+        }
+    }
+
+    /// Count commands executed in a finished scenario.
+    pub fn add_commands_executed(&mut self, count: u32) {
+        self.commands_executed = self.commands_executed.saturating_add(count);
+    }
+
+    /// Count a completion under the speed-run time budget.
+    pub fn record_speed_run(&mut self) {
+        self.speed_run_count = self.speed_run_count.saturating_add(1);
+    }
+
+    /// Count a completion under the flash-run time budget.
+    pub fn record_flash_run(&mut self) {
+        self.flash_run_count = self.flash_run_count.saturating_add(1);
+    }
+
+    /// Remember that a difficulty level was completed.
+    pub fn record_difficulty_completed(&mut self, difficulty: Difficulty) {
+        self.difficulties_completed.insert(difficulty);
+    }
+
+    /// Record a finished arcade game: bump the games played and keep the best score and
+    /// streak. Returns whether `score` beat the previous high score.
+    pub fn record_minigame_result(&mut self, score: u64, best_streak: u32) -> bool {
+        let new_high_score = score > self.minigame_high_score;
+        if new_high_score {
+            self.minigame_high_score = score;
+        }
+        self.minigame_best_streak = self.minigame_best_streak.max(best_streak);
+        self.minigame_games_played = self.minigame_games_played.saturating_add(1);
+        new_high_score
+    }
+
+    /// The level implied by `total_xp`, the single source of truth.
     ///
-    /// `total_xp` is the single source of truth; a stored `level` that
-    /// disagrees with it (hand edit, downgrade) is silently corrected.
-    pub fn recompute_level(&mut self) {
-        self.level = XPCalculator::level_from_xp(self.total_xp);
+    /// # Examples
+    ///
+    /// ```
+    /// use helix_trainer::gamification::UserProfile;
+    ///
+    /// let mut profile = UserProfile::new();
+    /// assert_eq!(profile.level(), 1);
+    /// profile.add_xp(150);
+    /// assert_eq!(profile.level(), 2);
+    /// ```
+    #[must_use]
+    pub fn level(&self) -> u32 {
+        XPCalculator::level_from_xp(self.total_xp)
     }
 
     /// Position of this profile inside its current level.
@@ -271,7 +506,7 @@ impl UserProfile {
     /// ```
     #[must_use]
     pub fn level_progress(&self) -> LevelProgress {
-        LevelProgress::at(self.level, self.total_xp)
+        LevelProgress::at(self.level(), self.total_xp)
     }
 
     /// XP earned inside the current level, clamped to `[0, level span]`.
@@ -335,11 +570,36 @@ impl UserProfile {
         true
     }
 
-    /// Bring a freshly deserialized profile to its invariants: the level follows
-    /// the total XP, and the legacy completed-quest set marks the quests whose
+    /// Bring a freshly deserialized profile to its invariants, logging each repair: the
+    /// streak and completion bounds hold, the stored level is ignored in favor of the one
+    /// derived from the total XP, and the legacy completed-quest set marks the quests whose
     /// completion XP was already granted (no XP is granted retroactively).
     pub(crate) fn finish_load(&mut self) {
-        self.recompute_level();
+        if let Some(stored) = self.legacy_level.take()
+            && stored != self.level()
+        {
+            tracing::warn!(
+                stored,
+                derived = self.level(),
+                "Stored level disagrees with total_xp; the derived level is used"
+            );
+        }
+        if self.longest_streak < self.current_streak {
+            tracing::warn!(
+                longest = self.longest_streak,
+                current = self.current_streak,
+                "Longest streak below the current streak; repaired"
+            );
+            self.longest_streak = self.current_streak;
+        }
+        if self.scenarios_completed < self.perfect_scenarios {
+            tracing::warn!(
+                completed = self.scenarios_completed,
+                perfect = self.perfect_scenarios,
+                "Completed scenarios below the perfect count; repaired"
+            );
+            self.scenarios_completed = self.perfect_scenarios;
+        }
         for quest in &mut self.daily_quests {
             if quest.status().is_completed() && self.legacy_rewarded_quests.contains(&quest.id) {
                 quest.mark_rewarded();
@@ -364,6 +624,86 @@ impl UserProfile {
     pub fn reset_daily_quests(&mut self, now: DateTime<Utc>) {
         self.daily_quests.clear();
         self.last_quest_refresh = now;
+    }
+}
+
+/// Direct writes of the stored values, for tests that need a specific state.
+#[cfg(any(test, feature = "test-util"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
+impl UserProfile {
+    /// Add a quest to today's quests.
+    pub fn push_daily_quest(&mut self, quest: Quest) {
+        self.daily_quests.push(quest);
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_total_xp(&mut self, value: u64) {
+        self.total_xp = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_current_streak(&mut self, value: u32) {
+        self.current_streak = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_longest_streak(&mut self, value: u32) {
+        self.longest_streak = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_last_activity(&mut self, value: DateTime<Utc>) {
+        self.last_activity = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_last_quest_refresh(&mut self, value: DateTime<Utc>) {
+        self.last_quest_refresh = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_streak_freeze_available(&mut self, value: bool) {
+        self.streak_freeze_available = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_scenarios_completed(&mut self, value: u32) {
+        self.scenarios_completed = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_perfect_scenarios(&mut self, value: u32) {
+        self.perfect_scenarios = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_commands_executed(&mut self, value: u32) {
+        self.commands_executed = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_minigame_high_score(&mut self, value: u64) {
+        self.minigame_high_score = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_minigame_best_streak(&mut self, value: u32) {
+        self.minigame_best_streak = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_minigame_games_played(&mut self, value: u32) {
+        self.minigame_games_played = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_survival_best_level(&mut self, value: u32) {
+        self.survival_best_level = value;
+    }
+
+    /// Set the stored value, bypassing the invariants the recording methods keep.
+    pub fn set_survival_best_scenarios(&mut self, value: u32) {
+        self.survival_best_scenarios = value;
     }
 }
 
@@ -801,7 +1141,7 @@ mod tests {
     )]
     fn test_new_profile_defaults() {
         let profile = UserProfile::new();
-        assert_eq!(profile.level, 1);
+        assert_eq!(profile.level(), 1);
         assert_eq!(profile.total_xp, 0);
         assert_eq!(profile.current_streak, 0);
         assert_eq!(profile.longest_streak, 0);
@@ -817,13 +1157,13 @@ mod tests {
         // Add 100 XP - should level up from 1 to 2
         let leveled_up = profile.add_xp(100);
         assert!(leveled_up);
-        assert_eq!(profile.level, 2);
+        assert_eq!(profile.level(), 2);
         assert_eq!(profile.total_xp, 100);
 
         // Add more XP without leveling
         let leveled_up = profile.add_xp(50);
         assert!(!leveled_up);
-        assert_eq!(profile.level, 2);
+        assert_eq!(profile.level(), 2);
         assert_eq!(profile.total_xp, 150);
     }
 
@@ -1000,7 +1340,7 @@ mod tests {
     fn test_profile_game_mode_fields_backward_compat() {
         // Create a full profile, serialize it, then verify game mode fields can be absent
         let mut profile = UserProfile::new();
-        profile.level = 5;
+        profile.set_total_xp(crate::gamification::XPCalculator::xp_for_level(5));
         profile.total_xp = 1000;
         profile.current_streak = 3;
         profile.survival_best_level = 10;
@@ -1014,7 +1354,7 @@ mod tests {
         let restored: UserProfile = toml::from_str(&toml_str).unwrap();
 
         // Verify original fields are loaded
-        assert_eq!(restored.level, 5);
+        assert_eq!(restored.level(), 5);
         assert_eq!(restored.total_xp, 1000);
         assert_eq!(restored.current_streak, 3);
 
@@ -1057,17 +1397,10 @@ mod tests {
     /// the bar out of range.
     #[test]
     fn test_xp_progress_inconsistent_level_never_panics_or_leaves_range() {
-        for (level, total_xp) in [
-            (50, 0),
-            (u32::MAX, 0),
-            (u32::MAX, u64::MAX),
-            (1, 1_000_000),
-            (0, 0),
-            (1, 0),
-        ] {
+        for total_xp in [0, 1, 99, 1_000_000, u64::MAX / 2, u64::MAX] {
             let mut profile = UserProfile::new();
-            profile.level = level;
-            profile.total_xp = total_xp;
+            profile.set_total_xp(total_xp);
+            let level = profile.level();
 
             let progress = profile.xp_progress();
             assert!(
@@ -1084,21 +1417,19 @@ mod tests {
     fn test_xp_progress_unchanged_for_consistent_profile() {
         let mut profile = UserProfile::new();
         profile.add_xp(150);
-        assert_eq!(profile.level, 2);
+        assert_eq!(profile.level(), 2);
         assert_eq!(profile.xp_in_level(), 50);
         assert!((profile.xp_progress() - 50.0 / 183.0).abs() < 1e-9);
     }
 
     #[test]
-    fn test_recompute_level_follows_total_xp() {
+    fn level_is_derived_from_total_xp() {
         let mut profile = UserProfile::new();
-        profile.level = 50;
-        profile.recompute_level();
-        assert_eq!(profile.level, 1);
+        assert_eq!(profile.level(), 1);
+        profile.set_total_xp(crate::gamification::XPCalculator::xp_for_level(50));
 
-        profile.total_xp = 1_000_000;
-        profile.recompute_level();
-        assert_eq!(profile.level, XPCalculator::level_from_xp(1_000_000));
+        profile.set_total_xp(1_000_000);
+        assert_eq!(profile.level(), XPCalculator::level_from_xp(1_000_000));
     }
 
     #[test]

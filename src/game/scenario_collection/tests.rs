@@ -311,10 +311,10 @@ fn test_filter_by_completion_status() {
 
     let mut profile = UserProfile::new();
     profile
-        .scenario_history
+        .scenario_history_mut()
         .record_completion(&sid("001"), 100, 50, Utc::now());
     profile
-        .scenario_history
+        .scenario_history_mut()
         .record_completion(&sid("003"), 100, 50, Utc::now());
 
     let mut collection = ScenarioCollection::new(scenarios);
@@ -855,20 +855,20 @@ mod curriculum_stats_tests {
     /// Regression guard for S1: a scenario completed multiple times, only
     /// perfect on some of those runs, must contribute exactly 1 to `completed`
     /// and `perfected` - never derived from the replay-inclusive event
-    /// counters (`profile.scenarios_completed`/`perfect_scenarios`).
+    /// counters (`profile.scenarios_completed()`/`perfect_scenarios`).
     #[test]
     fn test_curriculum_stats_replay_heavy_scenario_counts_once() {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
         // Three attempts on "001": two perfect, one not.
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("001"), 100, 50, Utc::now());
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("001"), 80, 40, Utc::now());
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("001"), 100, 50, Utc::now());
 
         let stats = collection.curriculum_stats(&profile);
@@ -905,10 +905,10 @@ mod curriculum_stats_tests {
         let collection = ScenarioCollection::new(scenarios);
         let mut profile = UserProfile::new();
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("001"), 100, 50, Utc::now());
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("002"), 50, 25, Utc::now());
 
         let stats = collection.curriculum_stats(&profile);
@@ -958,7 +958,7 @@ mod curriculum_stats_tests {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("001"), 100, 50, Utc::now());
 
         assert_eq!(
@@ -979,10 +979,10 @@ mod curriculum_stats_tests {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("001"), 100, 50, Utc::now());
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("002"), 100, 50, Utc::now());
 
         assert!(!collection.is_curriculum_complete(&profile));
@@ -993,13 +993,13 @@ mod curriculum_stats_tests {
         let collection = three_scenario_collection();
         let mut profile = UserProfile::new();
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("001"), 100, 50, Utc::now());
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("002"), 100, 50, Utc::now());
         profile
-            .scenario_history
+            .scenario_history_mut()
             .record_completion(&sid("003"), 100, 50, Utc::now());
 
         assert!(collection.is_curriculum_complete(&profile));

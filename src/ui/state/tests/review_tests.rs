@@ -114,7 +114,7 @@ fn test_complete_review_command_persists_fsrs_data_mid_session() {
         .load()
         .unwrap();
     assert!(
-        persisted.performance_data.contains_key(&cid("x")),
+        persisted.performance_data().contains_key(&cid("x")),
         "the completed review's FSRS data must be persisted before the session ends"
     );
 }
@@ -132,7 +132,7 @@ fn test_review_session_completion_persists_xp_and_fsrs_data() {
     let temp_dir = TempDir::new().unwrap();
     state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
 
-    let initial_xp = state.progress.profile.total_xp;
+    let initial_xp = state.progress.profile.total_xp();
 
     // Single due command: completing it ends the session immediately.
     state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![cid(
@@ -149,15 +149,15 @@ fn test_review_session_completion_persists_xp_and_fsrs_data() {
 
     // Session should be cleared and XP awarded (1 completed * 10 + 100% success * 20).
     assert!(review_session(&state).is_none());
-    assert_eq!(state.progress.profile.total_xp, initial_xp + 30);
+    assert_eq!(state.progress.profile.total_xp(), initial_xp + 30);
     assert_matches!(state.screen, TypedScreen::Menu(_));
 
     let persisted = ProfileStorage::with_path(state.progress.storage.path())
         .load()
         .unwrap();
-    assert_eq!(persisted.total_xp, state.progress.profile.total_xp);
+    assert_eq!(persisted.total_xp(), state.progress.profile.total_xp());
     assert!(
-        persisted.performance_data.contains_key(&cid("x")),
+        persisted.performance_data().contains_key(&cid("x")),
         "FSRS data recorded during the review session must survive the final flush"
     );
 }
@@ -175,8 +175,7 @@ fn test_review_session_completion_persists_level_up() {
     state.progress.storage = ProfileStorage::with_path(temp_dir.path().join("profile.json"));
 
     let xp_for_level_2 = XPCalculator::xp_for_level(2);
-    state.progress.profile.total_xp = xp_for_level_2 - 10;
-    state.progress.profile.level = 1;
+    state.progress.profile.set_total_xp(xp_for_level_2 - 10);
 
     state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![cid(
         "x",
@@ -190,12 +189,12 @@ fn test_review_session_completion_persists_level_up() {
     )
     .unwrap();
 
-    assert_eq!(state.progress.profile.level, 2);
+    assert_eq!(state.progress.profile.level(), 2);
 
     let persisted = ProfileStorage::with_path(state.progress.storage.path())
         .load()
         .unwrap();
-    assert_eq!(persisted.level, 2);
+    assert_eq!(persisted.level(), 2);
 }
 
 /// Regression test for #318: `handle_next_review_command` discarded the `leveled_up`
@@ -210,8 +209,7 @@ fn test_review_session_completion_notifies_on_level_up() {
     let mut state = create_test_app_state(vec![scenario]);
 
     let xp_for_level_2 = XPCalculator::xp_for_level(2);
-    state.progress.profile.total_xp = xp_for_level_2 - 10;
-    state.progress.profile.level = 1;
+    state.progress.profile.set_total_xp(xp_for_level_2 - 10);
 
     state.screen = TypedScreen::Review(ReviewData::new(review_session_with_commands(vec![cid(
         "x",
@@ -225,7 +223,7 @@ fn test_review_session_completion_notifies_on_level_up() {
     )
     .unwrap();
 
-    assert_eq!(state.progress.profile.level, 2);
+    assert_eq!(state.progress.profile.level(), 2);
     assert!(
         state.ui.notifications.visible().any(|n| matches!(
             n.notification_type,
@@ -312,7 +310,7 @@ fn test_abandon_review_session_persists_partial_progress() {
 
     let persisted = ProfileStorage::with_path(&profile_path).load().unwrap();
     assert!(
-        persisted.performance_data.contains_key(&cid("x")),
+        persisted.performance_data().contains_key(&cid("x")),
         "abandoning must flush FSRS data recorded before the debounce window elapsed"
     );
 }

@@ -42,7 +42,7 @@ pub(crate) fn track_command_for_quests(
 
     // Update command progress in quests
     let profile = &mut state.progress.profile;
-    QuestTracker::update_command_progress(&mut profile.daily_quests, command)
+    QuestTracker::update_command_progress(profile.daily_quests_mut(), command)
 }
 
 /// Track scenario completion for quests
@@ -58,7 +58,7 @@ pub(crate) fn track_scenario_completion_for_quests(
     duration: Duration,
 ) -> Vec<QuestId> {
     let profile = &mut state.progress.profile;
-    QuestTracker::update_scenario_progress(&mut profile.daily_quests, scenario_id, duration)
+    QuestTracker::update_scenario_progress(profile.daily_quests_mut(), scenario_id, duration)
 }
 
 /// Track time invested for quests, in whole minutes
@@ -71,7 +71,7 @@ fn track_time_for_quests(state: &mut AppState, duration: Duration) -> Vec<QuestI
         return Vec::new();
     }
     QuestTracker::update_time_progress(
-        &mut state.progress.profile.daily_quests,
+        state.progress.profile.daily_quests_mut(),
         u32::try_from(minutes).unwrap_or(u32::MAX),
     )
 }
@@ -111,7 +111,7 @@ pub(crate) fn award_quest_completion_xp(
     let newly_completed: Vec<(QuestId, String, u32)> = state
         .progress
         .profile
-        .daily_quests
+        .daily_quests()
         .iter()
         .filter(|quest| {
             completed.contains(&quest.id)
@@ -218,7 +218,7 @@ pub(crate) fn apply_quest_event(state: &mut AppState, event: QuestEvent) -> Ques
     let progress_before: HashMap<QuestId, u32> = {
         let profile = &state.progress.profile;
         profile
-            .daily_quests
+            .daily_quests()
             .iter()
             .map(|q| (q.id.clone(), get_quest_current_progress(&q.quest_type)))
             .collect()
@@ -236,7 +236,7 @@ pub(crate) fn apply_quest_event(state: &mut AppState, event: QuestEvent) -> Ques
     // Detect progress changes AFTER updates
     {
         let profile = &state.progress.profile;
-        for quest in &profile.daily_quests {
+        for quest in profile.daily_quests() {
             let old = progress_before.get(&quest.id).copied().unwrap_or(0);
             let new = get_quest_current_progress(&quest.quest_type);
 

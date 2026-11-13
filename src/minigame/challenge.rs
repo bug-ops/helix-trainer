@@ -99,10 +99,10 @@ mod tests {
     #[test]
     fn test_challenge_progress_new() {
         let progress = ChallengeProgress::new();
-        assert_eq!(progress.last_challenge_date, ChallengeDay::NotStarted);
-        assert_eq!(progress.attempts_used_today, 0);
-        assert_eq!(progress.best_score_today, 0);
-        assert_eq!(progress.all_time_best_score, 0);
+        assert_eq!(progress.last_challenge_date(), ChallengeDay::NotStarted);
+        assert_eq!(progress.attempts_used_today(), 0);
+        assert_eq!(progress.best_score_today(), 0);
+        assert_eq!(progress.all_time_best_score(), 0);
     }
 
     /// FR-006/FR-003: a stored day after today (written west of UTC by the previous build)
@@ -112,14 +112,14 @@ mod tests {
         let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let tomorrow = crate::time::PlayerDay::from_ymd(2026, 1, 16).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date = ChallengeDay::On(tomorrow);
-        progress.attempts_used_today = 3;
+        progress.set_last_challenge_date(ChallengeDay::On(tomorrow));
+        progress.set_attempts_used_today(3);
 
         assert!(!progress.can_attempt(today));
         assert_eq!(progress.attempts_remaining(today), 0);
         assert!(progress.is_today(today));
         progress.start_attempt(today);
-        assert_eq!(progress.last_challenge_date, ChallengeDay::On(tomorrow));
+        assert_eq!(progress.last_challenge_date(), ChallengeDay::On(tomorrow));
     }
 
     /// FR-007: east, west, east on one real day resets exactly once.
@@ -129,18 +129,19 @@ mod tests {
 
         let clock = FakeClock::at_offset("2026-01-15T20:00:00Z", 9);
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date =
-            ChallengeDay::On(crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap());
-        progress.attempts_used_today = 3;
+        progress.set_last_challenge_date(ChallengeDay::On(
+            crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap(),
+        ));
+        progress.set_attempts_used_today(3);
 
         let mut resets = 0;
         for hours in [9, -8, 9] {
             clock.set_utc_offset_hours(hours);
-            if progress.can_attempt(clock.player_day()) && progress.attempts_used_today == 3 {
+            if progress.can_attempt(clock.player_day()) && progress.attempts_used_today() == 3 {
                 resets += 1;
             }
             progress.start_attempt(clock.player_day());
-            progress.attempts_used_today = 3;
+            progress.set_attempts_used_today(3);
         }
 
         assert_eq!(resets, 1);
@@ -158,13 +159,13 @@ mod tests {
     fn test_can_attempt_after_using_attempts() {
         let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date = ChallengeDay::On(today);
-        progress.attempts_used_today = 2;
+        progress.set_last_challenge_date(ChallengeDay::On(today));
+        progress.set_attempts_used_today(2);
 
         assert!(progress.can_attempt(today));
         assert_eq!(progress.attempts_remaining(today), 1);
 
-        progress.attempts_used_today = 3;
+        progress.set_attempts_used_today(3);
         assert!(!progress.can_attempt(today));
         assert_eq!(progress.attempts_remaining(today), 0);
     }
@@ -173,35 +174,36 @@ mod tests {
     fn test_start_attempt_new_day() {
         let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date =
-            ChallengeDay::On(crate::time::PlayerDay::from_ymd(2020, 1, 1).unwrap());
-        progress.attempts_used_today = 3;
-        progress.best_score_today = 5000;
-        progress.best_scenarios_today = 8;
+        progress.set_last_challenge_date(ChallengeDay::On(
+            crate::time::PlayerDay::from_ymd(2020, 1, 1).unwrap(),
+        ));
+        progress.set_attempts_used_today(3);
+        progress.set_best_score_today(5000);
+        progress.set_best_scenarios_today(8);
 
         progress.start_attempt(today);
 
         // Should reset for new day
-        assert_eq!(progress.attempts_used_today, 1);
-        assert_eq!(progress.best_score_today, 0);
-        assert_eq!(progress.best_scenarios_today, 0);
-        assert_eq!(progress.total_challenges_attempted, 1);
+        assert_eq!(progress.attempts_used_today(), 1);
+        assert_eq!(progress.best_score_today(), 0);
+        assert_eq!(progress.best_scenarios_today(), 0);
+        assert_eq!(progress.total_challenges_attempted(), 1);
     }
 
     #[test]
     fn test_start_attempt_same_day() {
         let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.last_challenge_date = ChallengeDay::On(today);
-        progress.attempts_used_today = 1;
-        progress.best_score_today = 5000;
+        progress.set_last_challenge_date(ChallengeDay::On(today));
+        progress.set_attempts_used_today(1);
+        progress.set_best_score_today(5000);
 
         progress.start_attempt(today);
 
         // Should not reset, just increment
-        assert_eq!(progress.attempts_used_today, 2);
-        assert_eq!(progress.best_score_today, 5000);
-        assert_eq!(progress.last_challenge_date, ChallengeDay::On(today));
+        assert_eq!(progress.attempts_used_today(), 2);
+        assert_eq!(progress.best_score_today(), 5000);
+        assert_eq!(progress.last_challenge_date(), ChallengeDay::On(today));
     }
 
     #[test]
@@ -211,37 +213,37 @@ mod tests {
         progress.start_attempt(today);
 
         progress.record_result(1000, 5);
-        assert_eq!(progress.best_score_today, 1000);
-        assert_eq!(progress.best_scenarios_today, 5);
+        assert_eq!(progress.best_score_today(), 1000);
+        assert_eq!(progress.best_scenarios_today(), 5);
 
         // Higher score should update
         progress.record_result(2000, 7);
-        assert_eq!(progress.best_score_today, 2000);
-        assert_eq!(progress.best_scenarios_today, 7);
+        assert_eq!(progress.best_score_today(), 2000);
+        assert_eq!(progress.best_scenarios_today(), 7);
 
         // Lower score should not update
         progress.record_result(500, 3);
-        assert_eq!(progress.best_score_today, 2000);
-        assert_eq!(progress.best_scenarios_today, 7);
+        assert_eq!(progress.best_score_today(), 2000);
+        assert_eq!(progress.best_scenarios_today(), 7);
     }
 
     #[test]
     fn test_record_result_updates_all_time_best() {
         let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
-        progress.all_time_best_score = 3000;
-        progress.all_time_best_scenarios = 8;
+        progress.set_all_time_best_score(3000);
+        progress.set_all_time_best_scenarios(8);
         progress.start_attempt(today);
 
         // Should not update (lower)
         progress.record_result(2000, 5);
-        assert_eq!(progress.all_time_best_score, 3000);
-        assert_eq!(progress.all_time_best_scenarios, 8);
+        assert_eq!(progress.all_time_best_score(), 3000);
+        assert_eq!(progress.all_time_best_scenarios(), 8);
 
         // Should update (higher)
         progress.record_result(5000, 10);
-        assert_eq!(progress.all_time_best_score, 5000);
-        assert_eq!(progress.all_time_best_scenarios, 10);
+        assert_eq!(progress.all_time_best_score(), 5000);
+        assert_eq!(progress.all_time_best_scenarios(), 10);
     }
 
     #[test]
@@ -252,11 +254,11 @@ mod tests {
 
         // Incomplete challenge
         progress.record_result(1000, 9);
-        assert_eq!(progress.total_challenges_completed, 0);
+        assert_eq!(progress.total_challenges_completed(), 0);
 
         // Complete challenge
         progress.record_result(2000, 10);
-        assert_eq!(progress.total_challenges_completed, 1);
+        assert_eq!(progress.total_challenges_completed(), 1);
     }
 
     #[test]
@@ -353,13 +355,22 @@ mod tests {
         let toml = toml::to_string(&progress).unwrap();
         let restored: ChallengeProgress = toml::from_str(&toml).unwrap();
 
-        assert_eq!(restored.attempts_used_today, progress.attempts_used_today);
-        assert_eq!(restored.best_score_today, progress.best_score_today);
-        assert_eq!(restored.all_time_best_score, progress.all_time_best_score);
-        assert_eq!(restored.best_scenarios_today, progress.best_scenarios_today);
         assert_eq!(
-            restored.total_challenges_attempted,
-            progress.total_challenges_attempted
+            restored.attempts_used_today(),
+            progress.attempts_used_today()
+        );
+        assert_eq!(restored.best_score_today(), progress.best_score_today());
+        assert_eq!(
+            restored.all_time_best_score(),
+            progress.all_time_best_score()
+        );
+        assert_eq!(
+            restored.best_scenarios_today(),
+            progress.best_scenarios_today()
+        );
+        assert_eq!(
+            restored.total_challenges_attempted(),
+            progress.total_challenges_attempted()
         );
     }
 
@@ -368,23 +379,21 @@ mod tests {
     fn test_challenge_progress_default_values() {
         // Verify that Default provides sensible initial values
         let progress = ChallengeProgress::default();
-        assert_eq!(progress.last_challenge_date, ChallengeDay::NotStarted);
-        assert_eq!(progress.attempts_used_today, 0);
-        assert_eq!(progress.best_score_today, 0);
-        assert_eq!(progress.best_scenarios_today, 0);
-        assert_eq!(progress.all_time_best_score, 0);
-        assert_eq!(progress.all_time_best_scenarios, 0);
-        assert_eq!(progress.total_challenges_attempted, 0);
-        assert_eq!(progress.total_challenges_completed, 0);
+        assert_eq!(progress.last_challenge_date(), ChallengeDay::NotStarted);
+        assert_eq!(progress.attempts_used_today(), 0);
+        assert_eq!(progress.best_score_today(), 0);
+        assert_eq!(progress.best_scenarios_today(), 0);
+        assert_eq!(progress.all_time_best_score(), 0);
+        assert_eq!(progress.all_time_best_scenarios(), 0);
+        assert_eq!(progress.total_challenges_attempted(), 0);
+        assert_eq!(progress.total_challenges_completed(), 0);
     }
 
     fn load_with_date(date: Option<serde_json::Value>, attempts: u8) -> ChallengeProgress {
-        let mut json = serde_json::to_value(ChallengeProgress {
-            all_time_best_score: 42,
-            attempts_used_today: attempts,
-            ..ChallengeProgress::new()
-        })
-        .unwrap();
+        let mut stored = ChallengeProgress::new();
+        stored.set_all_time_best_score(42);
+        stored.set_attempts_used_today(attempts);
+        let mut json = serde_json::to_value(stored).unwrap();
         let object = json.as_object_mut().unwrap();
         match date {
             Some(value) => object.insert("last_challenge_date".to_owned(), value),
@@ -398,7 +407,7 @@ mod tests {
     fn test_last_challenge_date_deserialize_valid() {
         let p = load_with_date(Some("2026-01-15".into()), 2);
         assert_eq!(
-            p.last_challenge_date,
+            p.last_challenge_date(),
             ChallengeDay::On(crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap())
         );
     }
@@ -407,9 +416,9 @@ mod tests {
     fn test_last_challenge_date_deserialize_malformed_is_unreadable() {
         for text in ["not-a-date", "2026-02-30", "2026-01-15T10:00:00"] {
             let p = load_with_date(Some(text.into()), 3);
-            assert_eq!(p.last_challenge_date, ChallengeDay::Unreadable, "{text}");
-            assert_eq!(p.all_time_best_score, 42, "{text}");
-            assert_eq!(p.attempts_used_today, 3, "{text}");
+            assert_eq!(p.last_challenge_date(), ChallengeDay::Unreadable, "{text}");
+            assert_eq!(p.all_time_best_score(), 42, "{text}");
+            assert_eq!(p.attempts_used_today(), 3, "{text}");
         }
     }
 
@@ -421,8 +430,8 @@ mod tests {
             serde_json::json!({"a": 1}),
         ] {
             let p = load_with_date(Some(value), 0);
-            assert_eq!(p.last_challenge_date, ChallengeDay::Unreadable);
-            assert_eq!(p.all_time_best_score, 42);
+            assert_eq!(p.last_challenge_date(), ChallengeDay::Unreadable);
+            assert_eq!(p.all_time_best_score(), 42);
         }
     }
 
@@ -430,9 +439,9 @@ mod tests {
     fn test_last_challenge_date_missing_or_null_depends_on_attempts() {
         for date in [None, Some(serde_json::Value::Null)] {
             let fresh = load_with_date(date.clone(), 0);
-            assert_eq!(fresh.last_challenge_date, ChallengeDay::NotStarted);
+            assert_eq!(fresh.last_challenge_date(), ChallengeDay::NotStarted);
             let used = load_with_date(date, 2);
-            assert_eq!(used.last_challenge_date, ChallengeDay::Unreadable);
+            assert_eq!(used.last_challenge_date(), ChallengeDay::Unreadable);
         }
     }
 
@@ -444,9 +453,9 @@ mod tests {
         assert_eq!(p.attempts_remaining(today), 0);
 
         p.settle_unreadable_day(today);
-        assert_eq!(p.last_challenge_date, ChallengeDay::On(today));
+        assert_eq!(p.last_challenge_date(), ChallengeDay::On(today));
         assert!(!p.can_attempt(today));
-        assert_eq!(p.attempts_used_today, CHALLENGE_MAX_ATTEMPTS);
+        assert_eq!(p.attempts_used_today(), CHALLENGE_MAX_ATTEMPTS);
     }
 
     #[test]
@@ -455,7 +464,7 @@ mod tests {
         let json = serde_json::to_value(&p).unwrap();
         assert!(json["last_challenge_date"].is_null());
         let reloaded: ChallengeProgress = serde_json::from_str(&json.to_string()).unwrap();
-        assert_eq!(reloaded.last_challenge_date, ChallengeDay::Unreadable);
+        assert_eq!(reloaded.last_challenge_date(), ChallengeDay::Unreadable);
     }
 
     #[test]
@@ -476,8 +485,9 @@ mod tests {
         progress.start_attempt(today);
         assert!(progress.is_today(today)); // Now has today's date
 
-        progress.last_challenge_date =
-            ChallengeDay::On(crate::time::PlayerDay::from_ymd(2020, 1, 1).unwrap());
+        progress.set_last_challenge_date(ChallengeDay::On(
+            crate::time::PlayerDay::from_ymd(2020, 1, 1).unwrap(),
+        ));
         assert!(!progress.is_today(today)); // Past date
     }
 

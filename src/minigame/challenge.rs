@@ -147,6 +147,28 @@ mod tests {
         assert_eq!(resets, 1);
     }
 
+    /// FR-001/FR-006: the daily challenge resets at the player's local midnight, west and east of UTC.
+    #[test]
+    fn test_challenge_resets_at_local_midnight_in_west_and_east_zones() {
+        use crate::time::{Clock, FakeClock};
+
+        // 2026-01-15T20:00Z is the 15th at UTC-8 (12:00) and the 16th at UTC+9 (05:00).
+        for (hours, resets) in [(-8, false), (9, true)] {
+            let clock = FakeClock::at_offset("2026-01-15T20:00:00Z", hours);
+            let mut progress = ChallengeProgress::new();
+            progress.set_last_challenge_date(ChallengeDay::On(
+                crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap(),
+            ));
+            progress.set_attempts_used_today(3);
+
+            assert_eq!(
+                progress.can_attempt(clock.player_day()),
+                resets,
+                "UTC{hours:+}"
+            );
+        }
+    }
+
     #[test]
     fn test_can_attempt_new_day() {
         let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();

@@ -478,6 +478,50 @@ fn test_scenario_completed_event_feeds_time_invested() {
     ));
 }
 
+/// FR-032: arcade scenarios last seconds; their durations add up to whole minutes.
+#[test]
+fn test_short_arcade_completions_accumulate_into_minutes() {
+    let scenario = create_test_scenario();
+    let mut state = create_test_app_state(vec![scenario]);
+    state.progress.profile.set_daily_quests(vec![Quest::new(
+        qid("time"),
+        QuestType::TimeInvested {
+            target_minutes: 5,
+            current_minutes: 0,
+        },
+        QuestDifficulty::Easy,
+    )]);
+
+    let complete = |state: &mut crate::ui::AppState| {
+        update(
+            state,
+            Message::UpdateQuestProgress(QuestEvent::ScenarioCompleted {
+                id: sid("test_scenario"),
+                duration: Duration::from_secs(10),
+            }),
+        )
+        .unwrap();
+    };
+    let minutes =
+        |state: &crate::ui::AppState| match state.progress.profile.daily_quests()[0].quest_type {
+            QuestType::TimeInvested {
+                current_minutes, ..
+            } => current_minutes,
+            _ => unreachable!("the only quest is a time quest"),
+        };
+
+    for _ in 0..5 {
+        complete(&mut state);
+    }
+    assert_eq!(minutes(&state), 0);
+    complete(&mut state);
+    assert_eq!(minutes(&state), 1);
+    for _ in 0..6 {
+        complete(&mut state);
+    }
+    assert_eq!(minutes(&state), 2);
+}
+
 /// FR-036: two quests completed by one event are both awarded, once each, whatever
 /// their order in the list; a later event does not award them again.
 #[test]

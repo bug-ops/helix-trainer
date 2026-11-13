@@ -61,12 +61,17 @@ pub(crate) fn track_scenario_completion_for_quests(
     QuestTracker::update_scenario_progress(profile.daily_quests_mut(), scenario_id, duration)
 }
 
-/// Track time invested for quests, in whole minutes
+/// Track time invested for quests
+///
+/// Sub-minute durations accumulate in `time_remainder` until they add up to a
+/// whole minute, so short arcade scenarios still advance time quests.
 ///
 /// Returns the quests the time newly completed.
 #[must_use]
 fn track_time_for_quests(state: &mut AppState, duration: Duration) -> Vec<QuestId> {
-    let minutes = duration.as_secs() / 60;
+    let total = state.progress.time_remainder.saturating_add(duration);
+    let minutes = total.as_secs() / 60;
+    state.progress.time_remainder = Duration::from_secs(total.as_secs() % 60);
     if minutes == 0 {
         return Vec::new();
     }

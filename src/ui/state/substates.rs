@@ -188,6 +188,9 @@ pub struct ProgressState {
     /// Commands used today (for exploration quests)
     pub commands_used_today: HashSet<NormalizedCommand>,
 
+    /// Practice time not yet credited to time quests (always under one minute)
+    pub time_remainder: std::time::Duration,
+
     /// Session start time
     pub session_start_time: Instant,
 
@@ -270,6 +273,7 @@ impl ProgressState {
             quest_registry: QuestRegistrySlot::default(),
             scenarios_completed_today: 0,
             commands_used_today: HashSet::new(),
+            time_remainder: std::time::Duration::ZERO,
             session_start_time: monotonic.now(),
             last_save_time: None,
             sound_manager,

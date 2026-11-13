@@ -2,8 +2,11 @@
 //! FR-154, FR-155, SC-014). A profile written before the id newtypes existed must still load.
 
 use helix_trainer::config::keymap::fingerprint::{KeymapFingerprint, StoredKeymapFingerprint};
-use helix_trainer::gamification::{ProfileStorage, QuestStatus, QuestType, UserProfile};
+use helix_trainer::gamification::{
+    ChallengeDay, ProfileStorage, QuestStatus, QuestType, UserProfile,
+};
 use helix_trainer::ids::{CommandId, NormalizedCommand, QuestId, ScenarioId};
+use helix_trainer::time::PlayerDay;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -336,6 +339,31 @@ fn legacy_challenge_counters_are_repaired_on_load() {
     assert_eq!(challenge.all_time_best_score(), 900);
     assert_eq!(challenge.all_time_best_scenarios(), 6);
     assert_eq!(challenge.total_challenges_attempted(), 5);
+}
+
+/// #660 FR-006: a challenge date stored as a UTC day by the previous build loads as a player day.
+#[test]
+fn legacy_utc_challenge_date_loads_as_a_player_day() {
+    let mut profile = legacy_profile_json();
+    profile["challenge_progress"] = json!({
+        "last_challenge_date": "2026-01-12",
+        "attempts_used_today": 2,
+        "best_score_today": 100,
+        "best_scenarios_today": 1,
+        "all_time_best_score": 100,
+        "all_time_best_scenarios": 1,
+        "total_challenges_attempted": 2,
+        "total_challenges_completed": 1
+    });
+
+    let loaded = load_profile_json(&profile);
+    let challenge = loaded.challenge_progress();
+    let stored = PlayerDay::from_ymd(2026, 1, 12).unwrap();
+
+    assert_eq!(challenge.last_challenge_date(), ChallengeDay::On(stored));
+    assert_eq!(challenge.attempts_remaining(stored), 1);
+    assert!(challenge.can_attempt(PlayerDay::from_ymd(2026, 1, 13).unwrap()));
+    assert_eq!(challenge.attempts_used_today(), 2);
 }
 
 #[test]

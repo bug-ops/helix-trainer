@@ -621,9 +621,12 @@ impl UserProfile {
     }
 
     /// Reset daily quest state (called at midnight)
+    ///
+    /// The refresh instant only moves forward: a stored instant later than `now`
+    /// is kept, so a clock that ran ahead never rewinds the stored day.
     pub fn reset_daily_quests(&mut self, now: DateTime<Utc>) {
         self.daily_quests.clear();
-        self.last_quest_refresh = now;
+        self.last_quest_refresh = self.last_quest_refresh.max(now);
     }
 }
 
@@ -1268,6 +1271,18 @@ mod tests {
         profile.reset_daily_quests(Utc::now());
         assert!(!profile.is_quest_completed(&qid("quest_1")));
         assert!(profile.daily_quests.is_empty());
+    }
+
+    /// #660 FR-003: a refresh never moves the stored refresh instant backward.
+    #[test]
+    fn test_reset_daily_quests_never_rewinds_the_refresh_instant() {
+        let mut profile = UserProfile::new();
+        let ahead = Utc::now() + chrono::Duration::days(1);
+        profile.set_last_quest_refresh(ahead);
+
+        profile.reset_daily_quests(Utc::now());
+
+        assert_eq!(profile.last_quest_refresh(), ahead);
     }
 
     #[test]

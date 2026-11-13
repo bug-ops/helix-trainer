@@ -49,7 +49,8 @@ A "day" is one calendar date in the player's local time zone, recorded in the ty
 |----|------------|----------|
 | FR-001 | THE SYSTEM SHALL define the player's day as a newtype `PlayerDay` over a calendar date in the local time zone. `Clock` provides `player_day()`; the system clock derives it from the local zone, the fake clock from a fixed offset (default UTC) so tests control the zone. Quest, streak, challenge and scenario-history code takes `PlayerDay`, never `NaiveDate` or `date_naive()` of a UTC instant | must |
 | FR-002 | EVERY day-rollover check SHALL be `today > stored` on `PlayerDay` (strictly later): the quest refresh (`should_refresh_quests`), the daily challenge counter reset, and the scenario-history daily rollover. A reset happens only when today is strictly after the stored day | must |
-| FR-003 | A stored day equal to or after today SHALL count as today (no reset), and a stored day only ever moves forward (`max(stored, today)`); a clock or zone moved backward never rewinds it | must |
+| FR-003 | A stored day equal to or after today SHALL count as today (no reset), and a stored day only ever moves forward (`max(stored, today)`); a clock or zone moved backward never rewinds it. EXCEPTION on load: a stored day later than `today + 2` days (2 days is the widest honest zone-change gap, UTC+14 to UTC-12) is not credible and SHALL be clamped to today; a stored day within `today + 2` stays forward-only. This bounds a clock that ran far ahead and was then corrected | must |
+| FR-010 | A stored `last_quest_refresh` later than the current time SHALL never be rewound, including when the quest list is empty (the refresh path must not write an earlier instant over a later one); the FR-003 clamp is the only way a later stored day is reduced | must |
 | FR-004 | THE streak gap SHALL be the number of local player days between the last activity day and today. A gap of 0 or less counts as the same day (the streak continues unchanged, the freeze is not consumed), a gap of 1 extends the streak, a larger gap follows the existing freeze and break rules (`STREAK_FREEZE_MAX_GAP_DAYS`). The last activity day never moves backward. This replaces the "negative gap lower-bounded at 2 days" row of [[arcade-gamification-session-fixes/spec]] | must |
 | FR-005 | PERSISTED instants stay UTC and are converted to a `PlayerDay` at read time with the zone in effect then. The `profile.json` wire format does not change (dates remain `YYYY-MM-DD` strings, instants remain RFC 3339 UTC) | must |
 | FR-006 | UPGRADE: dates stored by the previous version (UTC calendar dates) SHALL be read as local days without migration. Consequences, accepted and stated in the CHANGELOG breaking note: west of UTC, a player who used today's challenge attempts in the evening finds them locked through the following local day, once; east of UTC, the reset comes up to the offset's hours earlier, once | must |
@@ -77,6 +78,21 @@ THEN  the quests are NOT refreshed (they were at 09:00 local under the UTC rule)
 GIVEN the stored challenge day equals tomorrow's local date (written by the previous version west of UTC)
 WHEN  the challenge is attempted today
 THEN  the stored day is treated as today, attempts are not reset, and the stored day does not move backward
+```
+```
+GIVEN the clock ran ahead by 10 days, a day was stored, and the clock is then corrected
+WHEN  the profile loads
+THEN  the stored day (later than today + 2) is clamped to today and daily rules work again the same day
+```
+```
+GIVEN a stored day of today + 1 (zone change west) or today + 2
+WHEN  the profile loads
+THEN  it is kept and nothing resets
+```
+```
+GIVEN a stored last_quest_refresh later than now and an empty quest list
+WHEN  the quest refresh check runs
+THEN  last_quest_refresh is not moved to an earlier instant
 ```
 ```
 GIVEN a zone sequence east, west, east on one real day
@@ -109,6 +125,7 @@ THEN  activity on that date and the next date is a gap of exactly 1 day
 | SC-001 | Fake-clock tests at UTC-8 and UTC+9 for quests, streak, challenge and scenario history (the cases of section 3) | Pass |
 | SC-002 | Upgrade fixtures: stored UTC dates read as local days, including the future-day case | Pass |
 | SC-003 | East-west-east toggle yields exactly one reset; backward zone change keeps the streak | Pass |
+| SC-006 | Tests for the today + 2 clamp boundary (today + 2 kept, today + 3 clamped) and for FR-010 with an empty quest list | Pass |
 | SC-004 | `rg "date_naive\\(\\)" src/` outside `time.rs` and the clock implementations | 0 matches |
 | SC-005 | CHANGELOG carries a breaking-change note for FR-006 | Present |
 
@@ -125,7 +142,7 @@ THEN  activity on that date and the next date is a gap of exactly 1 day
 
 ### Never
 
-- Rewind a stored day or `last_activity`
+- Rewind a stored day or `last_activity` (the FR-003 load clamp of an implausible future day is the only exception)
 - Migrate or rewrite stored dates on upgrade (FR-006)
 
 ## 7. See Also

@@ -253,7 +253,7 @@ pub enum NormalCommand {
     },
     /// A command that enters Insert mode.
     InsertEntry(InsertEntryCommand),
-    /// `.`: repeat the last action.
+    /// `.`: repeat the last Insert session.
     Repeat,
     /// `Q` or `q`.
     Macro(MacroOp),

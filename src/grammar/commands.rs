@@ -166,7 +166,7 @@ pub(crate) const CMD_GOTO_LINE: &str = "G";
 // Special commands
 /// Leave the current mode or cancel a pending command. Key: `Escape`.
 pub(crate) const CMD_ESCAPE: &str = "Escape";
-/// Repeat the last insert or change. Key: `.`.
+/// Repeat the last Insert session (entry command, typed keys, `Escape`), as hx `repeat_last_insert`. Key: `.`.
 pub(crate) const CMD_REPEAT: &str = ".";
 
 // Macro recording and replay

@@ -6,42 +6,77 @@
 //! - Complex scenarios: Real-world usage patterns
 
 use crate::grammar::commands::*;
-use crate::helix::Pos;
 use crate::helix::simulator::AnyModeSimulator;
 
 // ============================================================================
-// Basic Repeat Execution Tests
+// `.` replays only the last Insert session (FR-066, hx `repeat_last_insert`)
 // ============================================================================
 
-#[test]
-fn test_repeat_delete_char() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
+const SNIPPET: &str = "fn add(a: i32, b: i32) -> i32 {\n    let sum = a + b;\n    sum\n}";
 
-    // Execute delete command
+/// Runs `commands` on `SNIPPET`, then `d` to expose the final selection.
+fn run_then_delete(commands: &[&str]) -> String {
+    let mut sim = AnyModeSimulator::new(SNIPPET.to_string());
+    for command in commands {
+        sim.execute_command(command).unwrap();
+    }
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "ello");
-
-    // Repeat delete
-    sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "llo");
+    sim.display().content()
 }
 
+/// Oracle: hx 25.07.1, the same keys on `SNIPPET` followed by `d`.
 #[test]
-fn test_repeat_delete_line() {
-    let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3".to_string());
-
-    // Delete first line using x+d (Helix way)
-    sim.execute_command(CMD_SELECT_LINE).unwrap();
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "line 2\nline 3");
-
-    // Repeat delete - should execute x+d together
-    sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "line 3");
+fn test_dot_never_repeats_non_insert_edits() {
+    let rest = "    let sum = a + b;\n    sum\n}";
+    let cases: [(&[&str], String); 11] = [
+        (
+            &["~", "x", "d", "."],
+            "   let sum = a + b;\n    sum\n}".to_string(),
+        ),
+        (
+            &["~", "x", "d", ".", "."],
+            "   let sum = a + b;\n    sum\n}".to_string(),
+        ),
+        (
+            &["~", "d", "."],
+            format!(" add(a: i32, b: i32) -> i32 {{\n{rest}"),
+        ),
+        (
+            &["~", "w", "d", "."],
+            format!("dd(a: i32, b: i32) -> i32 {{\n{rest}"),
+        ),
+        (
+            &["~", "w", "d", "j", "."],
+            "add(a: i32, b: i32) -> i32 {\n   let sum = a + b;\n    sum\n}".to_string(),
+        ),
+        (
+            &["~", ">", "."],
+            format!("    n add(a: i32, b: i32) -> i32 {{\n{rest}"),
+        ),
+        (
+            &["~", "J", "."],
+            "n add(a: i32, b: i32) -> i32 { let sum = a + b;\n    sum\n}".to_string(),
+        ),
+        (
+            &["~", "y", "p", "."],
+            format!("Fn add(a: i32, b: i32) -> i32 {{\n{rest}"),
+        ),
+        (
+            &["~", "x", "y", "p", "."],
+            format!("Fn add(a: i32, b: i32) -> i32 {{\n{rest}"),
+        ),
+        (
+            &["i", "Z", "Escape", "gg", "x", "d", "."],
+            "Z   let sum = a + b;\n    sum\n}".to_string(),
+        ),
+        (
+            &["~", "r_", "l", "l", "l", "l", "."],
+            format!("_n ad(a: i32, b: i32) -> i32 {{\n{rest}"),
+        ),
+    ];
+    for (commands, expected) in cases {
+        assert_eq!(run_then_delete(commands), expected, "keys: {commands:?}");
+    }
 }
 
 #[test]
@@ -60,175 +95,31 @@ fn test_repeat_with_empty_buffer() {
 fn test_repeat_is_not_recorded() {
     let mut sim = AnyModeSimulator::new("abcd".to_string());
 
-    // Delete a char
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "bcd");
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command("Z").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
+    assert_eq!(sim.display().content(), "Zabcd");
 
-    // Repeat once
     sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "cd");
-
-    // Repeat again - should repeat the ORIGINAL x, not the previous .
     sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "d");
 
-    // Total: 3 deletes (original x + two repeats)
+    // Each `.` replays the original session, not the previous `.`
+    assert_eq!(sim.display().content(), "ZZZabcd");
 }
 
 #[test]
-fn test_repeat_join_lines() {
-    let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3".to_string());
-
-    // Join lines
-    sim.execute_command(CMD_JOIN_LINES).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "line 1 line 2\nline 3");
-
-    // Repeat join
-    sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "line 1 line 2 line 3");
-}
-
-#[test]
-fn test_repeat_indent() {
-    let mut sim = AnyModeSimulator::new("line 1\nline 2".to_string());
-
-    // Indent
-    sim.execute_command(CMD_INDENT).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "    line 1\nline 2");
-
-    // Repeat indent
-    sim.execute_command(".").unwrap();
-    let state = sim.display();
-    // Line should be double-indented
-    assert_eq!(state.content(), "        line 1\nline 2");
-}
-
-#[test]
-fn test_repeat_dedent() {
-    let mut sim = AnyModeSimulator::new("        code".to_string());
-
-    // Dedent
-    sim.execute_command(CMD_DEDENT).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "    code");
-
-    // Repeat dedent
-    sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "code");
-}
-
-#[test]
-fn test_repeat_replace_char() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
-
-    // Replace 'h' with 'x'
-    sim.execute_command("rx").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "xello");
-
-    // Move to next char
-    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-
-    // Repeat replace (should replace 'e' with 'x')
-    sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "xxllo");
-}
-
-/// Regression test: `q` as the *argument* char to `r` (replace) must remain
-/// `.`-repeatable. `is_repeatable_command` is applied per-key to the whole
-/// key sequence, including argument chars, not just the command key.
-#[test]
-fn test_repeat_replace_with_q_argument() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
-
-    // Replace 'h' with 'q'
-    sim.execute_command("rq").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "qello");
-
-    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-
-    // Repeat replace (should replace 'e' with 'q')
-    sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "qqllo");
-}
-
-/// Regression test: `q` as the *argument* char to `f` (find-char) must
-/// remain `.`-repeatable, same rationale as above.
-#[test]
-fn test_repeat_find_char_with_q_argument() {
-    let mut sim = AnyModeSimulator::new("aqbqcq".to_string());
-
-    // The range extends from the old cursor through the found char, so its
-    // head sits one past the char.
-    sim.execute_command("fq").unwrap();
-    let state = sim.display();
-    assert_eq!(state.cursor_position(), Pos::new(0, 2));
-
-    // Repeat find (should move to the next 'q')
-    sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.cursor_position(), Pos::new(0, 4));
-}
-
-#[test]
-fn test_repeat_multiple_times() {
-    let mut sim = AnyModeSimulator::new("xxxxxx".to_string());
-
-    // Delete once
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-
-    // Repeat 4 times
-    for _ in 0..4 {
-        sim.execute_command(".").unwrap();
-    }
-
-    let state = sim.display();
-    assert_eq!(state.content(), "x"); // 5 deletes total
-}
-
-#[test]
-fn test_repeat_after_undo() {
+fn test_repeat_survives_undo_and_movements() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
-    // Delete a char
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-
-    // Undo it
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command("Z").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
     sim.execute_command(CMD_UNDO).unwrap();
-
-    // The repeat buffer should still have 'x'
-    // Repeat should still delete
-    sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "est");
-}
-
-#[test]
-fn test_repeat_preserves_action_across_movements() {
-    let mut sim = AnyModeSimulator::new("hello world".to_string());
-
-    // Delete 'h'
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-
-    // Move around (movements don't change repeat buffer)
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    sim.execute_command(CMD_MOVE_WORD_FORWARD).unwrap();
-    sim.execute_command(CMD_GOTO_LINE_START).unwrap(); // use 'gh' in Helix
+    sim.execute_command(CMD_GOTO_LINE_START).unwrap();
 
-    // Repeat should still delete
     sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "llo world");
+    assert_eq!(sim.display().content(), "Ztest");
 }
 
 // ============================================================================

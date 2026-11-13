@@ -112,37 +112,18 @@ fn test_select_all_then_delete() {
 // ============================================================================
 
 #[test]
-fn test_repeat_select_line_then_delete() {
-    // Scenario: User selects a line with 'x', deletes with 'd', then repeats with '.'
-    // Expected: The repeat should execute both x and d together
+fn test_dot_after_select_line_then_delete_is_noop() {
     let mut sim = AnyModeSimulator::new("line 1\nline 2\nline 3\nline 4\n".to_string());
 
-    // Move to line 2
     sim.execute_command(CMD_MOVE_DOWN).unwrap();
-    let state = sim.display();
-    assert_eq!(state.cursor_position().row(), 1);
-
-    // Select line with x
     sim.execute_command(CMD_SELECT_LINE).unwrap();
-
-    // Delete selection with d
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "line 1\nline 3\nline 4\n");
+    assert_eq!(sim.display().content(), "line 1\nline 3\nline 4\n");
 
-    // Now cursor should be on what was line 3 (now line 2)
-    assert_eq!(state.cursor_position().row(), 1);
-
-    // Repeat with . - should execute x+d together
     sim.execute_command(".").unwrap();
-    let state = sim.display();
-    // Line 3 (now at row 1) should be deleted
-    assert_eq!(state.content(), "line 1\nline 4\n");
-
-    // Repeat again
     sim.execute_command(".").unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "line 1\n");
+
+    assert_eq!(sim.display().content(), "line 1\nline 3\nline 4\n");
 }
 
 #[test]
@@ -170,26 +151,6 @@ fn test_select_line_then_yank() {
     // Verify we're still on same content (yank doesn't delete)
     let state = sim.display();
     assert_eq!(state.content(), "line 1\nline 2\nline 3\n");
-}
-
-#[test]
-fn test_compound_action_overwritten_by_simple_command() {
-    // Test that a simple editing command after x+d overwrites the compound action
-    let mut sim = AnyModeSimulator::new("aaa\nbbb\nccc\n".to_string());
-
-    // Do x+d (compound action)
-    sim.execute_command(CMD_SELECT_LINE).unwrap();
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "bbb\nccc\n");
-
-    // Now do another x+d (still compound, same sequence)
-    sim.execute_command(CMD_SELECT_LINE).unwrap();
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-    let state = sim.display();
-    assert_eq!(state.content(), "ccc\n");
-
-    // Repeat should do x+d again
 }
 
 // Expected buffers in the tests below were recorded from `hx` 25.07.1 on the

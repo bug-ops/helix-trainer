@@ -769,49 +769,25 @@ fn test_delete_selection_noyank_does_not_populate_register() {
 // ============================================================================
 
 #[test]
-fn test_repeat_blackhole_delete() {
-    // Regression: `.` must replay the exact blackhole-delete, not a stale
-    // prior action - `"_d`'s key events were previously dropped entirely by
-    // `NormalCommand::keys`, so nothing got recorded for it.
+fn test_dot_is_noop_after_blackhole_delete() {
     let mut sim = AnyModeSimulator::new("abcabc".to_string());
 
-    sim.execute_command("\"_d").unwrap(); // delete 'a' at index 0, discard it
+    sim.execute_command("\"_d").unwrap();
     assert_eq!(sim.display().content(), "bcabc");
 
-    // "bcabc": b(0) c(1) a(2) b(3) c(4) - two moves lands on the 'a'
-    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    sim.execute_command(CMD_REPEAT).unwrap(); // '.' must replay "_d, deleting 'a' again
+    sim.execute_command(CMD_REPEAT).unwrap();
 
-    assert_eq!(sim.display().content(), "bcbc");
-
-    // The register must still be empty - the repeat must not have yanked
-    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
-    sim.execute_command(CMD_PASTE_AFTER).unwrap();
-    assert_eq!(
-        sim.display().content(),
-        "bcbc",
-        "repeated \"_d must not have written anything to the default register"
-    );
+    assert_eq!(sim.display().content(), "bcabc");
 }
 
 #[test]
-fn test_repeat_named_register_delete() {
+fn test_dot_is_noop_after_named_register_delete() {
     let mut sim = AnyModeSimulator::new("aXaX".to_string());
 
-    sim.execute_command("\"rd").unwrap(); // delete 'a' into register 'r'
-    assert_eq!(sim.display().content(), "XaX");
-
+    sim.execute_command("\"rd").unwrap();
     sim.execute_command(CMD_MOVE_RIGHT).unwrap();
-    sim.execute_command(CMD_REPEAT).unwrap(); // '.' must replay "rd on the second 'a'
+    sim.execute_command(CMD_REPEAT).unwrap();
 
-    assert_eq!(sim.display().content(), "XX");
-
-    // Register 'r' must hold the SECOND deleted 'a' (overwritten by the
-    // repeat), proving the repeat actually re-executed "rd and not a stale
-    // prior action
-    sim.execute_command(CMD_GOTO_FILE_START).unwrap();
-    sim.execute_command("\"rp").unwrap();
     assert_eq!(sim.display().content(), "XaX");
 }
 

@@ -5,165 +5,36 @@
 //! - Insert mode recording: Verify text and movements are captured
 
 use crate::grammar::commands::*;
-use crate::helix::repeat::{InsertAction, InsertKey, Mode, Movement, RepeatableAction};
+use crate::helix::repeat::{InsertAction, InsertKey, Movement, RecordedInsert};
 use crate::helix::simulator::AnyModeSimulator;
 
 // ============================================================================
-// Command Recording Tests
+// Non-insert edits are never recorded (FR-066)
 // ============================================================================
 
 #[test]
-fn test_repeat_buffer_records_delete_char() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
-
-    // Execute delete command
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-
-    // Verify command was recorded
-    let buffer = sim.repeat_buffer();
-    assert!(!buffer.is_empty());
-
-    match buffer.last_action() {
-        Some(RepeatableAction::Command {
-            keys,
-            expected_mode,
-        }) => {
-            assert_eq!(keys.len(), 1);
-            assert_eq!(*expected_mode, Mode::Normal);
+fn test_repeat_buffer_ignores_non_insert_commands() {
+    for (text, commands) in [
+        ("hello", vec![CMD_DELETE_SELECTION]),
+        (
+            "line 1\nline 2",
+            vec![CMD_SELECT_LINE, CMD_DELETE_SELECTION],
+        ),
+        ("hello", vec![CMD_YANK, CMD_PASTE_AFTER]),
+        ("line 1\nline 2", vec![CMD_JOIN_LINES]),
+        ("code", vec![CMD_INDENT]),
+        ("hello", vec!["rx"]),
+        ("hello", vec![CMD_MOVE_LEFT]),
+        ("test", vec![CMD_DELETE_SELECTION, CMD_UNDO]),
+    ] {
+        let mut sim = AnyModeSimulator::new(text.to_string());
+        for command in &commands {
+            sim.execute_command(command).unwrap();
         }
-        _ => panic!("Expected Command action"),
-    }
-}
-
-#[test]
-fn test_repeat_buffer_records_delete_line() {
-    let mut sim = AnyModeSimulator::new("line 1\nline 2".to_string());
-
-    // Execute x+d (select line + delete) - the Helix way
-    sim.execute_command(CMD_SELECT_LINE).unwrap();
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-
-    // Verify x+d was recorded as compound action
-    let buffer = sim.repeat_buffer();
-    assert!(!buffer.is_empty());
-
-    match buffer.last_action() {
-        Some(RepeatableAction::Command {
-            keys,
-            expected_mode,
-        }) => {
-            assert_eq!(keys.len(), 2); // 'x' + 'd' keys
-            assert_eq!(*expected_mode, Mode::Normal);
-        }
-        _ => panic!("Expected Command action with 2 keys"),
-    }
-}
-
-#[test]
-fn test_repeat_buffer_does_not_record_movement() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
-
-    // Execute movement command
-    sim.execute_command(CMD_MOVE_LEFT).unwrap();
-
-    // Verify command was NOT recorded (movement is not repeatable)
-    let buffer = sim.repeat_buffer();
-    assert!(buffer.is_empty());
-}
-
-#[test]
-fn test_repeat_buffer_does_not_record_undo() {
-    let mut sim = AnyModeSimulator::new("test".to_string());
-
-    // Do something first
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-
-    // Undo it
-    sim.execute_command(CMD_UNDO).unwrap();
-
-    // The buffer should still have 'x', not 'u'
-    let buffer = sim.repeat_buffer();
-    match buffer.last_action() {
-        Some(RepeatableAction::Command { keys, .. }) => {
-            assert_eq!(keys.len(), 1);
-            // Should still be 'x', not 'u'
-        }
-        _ => panic!("Expected Command action"),
-    }
-}
-
-#[test]
-fn test_repeat_buffer_records_yank() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
-
-    // Execute yank command
-    sim.execute_command(CMD_YANK).unwrap();
-
-    // Verify yank was recorded
-    let buffer = sim.repeat_buffer();
-    assert!(!buffer.is_empty());
-}
-
-#[test]
-fn test_repeat_buffer_records_paste() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
-
-    // Yank first
-    sim.execute_command(CMD_YANK).unwrap();
-
-    // Then paste
-    sim.execute_command(CMD_PASTE_AFTER).unwrap();
-
-    // Verify paste was recorded (last action)
-    let buffer = sim.repeat_buffer();
-    match buffer.last_action() {
-        Some(RepeatableAction::Command { keys, .. }) => {
-            assert_eq!(keys.len(), 1);
-        }
-        _ => panic!("Expected Command action"),
-    }
-}
-
-#[test]
-fn test_repeat_buffer_records_join_lines() {
-    let mut sim = AnyModeSimulator::new("line 1\nline 2".to_string());
-
-    // Execute join command
-    sim.execute_command(CMD_JOIN_LINES).unwrap();
-
-    // Verify join was recorded
-    let buffer = sim.repeat_buffer();
-    assert!(!buffer.is_empty());
-}
-
-#[test]
-fn test_repeat_buffer_records_indent() {
-    let mut sim = AnyModeSimulator::new("code".to_string());
-
-    // Execute indent command
-    sim.execute_command(CMD_INDENT).unwrap();
-
-    // Verify indent was recorded
-    let buffer = sim.repeat_buffer();
-    assert!(!buffer.is_empty());
-}
-
-#[test]
-fn test_repeat_buffer_records_replace_char() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
-
-    // Execute replace command (r + x)
-    sim.execute_command("rx").unwrap();
-
-    // Verify replace was recorded
-    let buffer = sim.repeat_buffer();
-    assert!(!buffer.is_empty());
-
-    match buffer.last_action() {
-        Some(RepeatableAction::Command { keys, .. }) => {
-            assert_eq!(keys.len(), 2); // 'r' and 'x'
-        }
-        _ => panic!("Expected Command action"),
+        assert!(
+            sim.repeat_buffer().is_empty(),
+            "{commands:?} must not record a repeatable action"
+        );
     }
 }
 
@@ -196,13 +67,11 @@ fn test_insert_mode_recording_simple() {
 
     // Verify insert sequence was recorded
     let buffer = sim.repeat_buffer();
-    match buffer.last_action() {
-        Some(RepeatableAction::InsertSequence { text, keys, .. }) => {
-            assert_eq!(text, "hi");
-            assert!(keys.is_empty());
-        }
-        _ => panic!("Expected InsertSequence action"),
-    }
+    let Some(RecordedInsert { text, keys, .. }) = buffer.last_insert() else {
+        panic!("expected a recorded Insert session");
+    };
+    assert_eq!(text, "hi");
+    assert!(keys.is_empty());
 
     // Verify recording stopped
     assert!(!buffer.insert_recorder().is_recording());
@@ -227,26 +96,24 @@ fn test_insert_mode_recording_with_movements() {
 
     // Verify insert sequence with movements was recorded
     let buffer = sim.repeat_buffer();
-    match buffer.last_action() {
-        Some(RepeatableAction::InsertSequence { text, keys, .. }) => {
-            assert_eq!(text, "hi!");
-            let left = InsertAction::Move(Movement::Left);
-            assert_eq!(
-                keys,
-                &[
-                    InsertKey {
-                        after_chars: 2,
-                        action: left
-                    },
-                    InsertKey {
-                        after_chars: 2,
-                        action: left
-                    },
-                ]
-            );
-        }
-        _ => panic!("Expected InsertSequence action"),
-    }
+    let Some(RecordedInsert { text, keys, .. }) = buffer.last_insert() else {
+        panic!("expected a recorded Insert session");
+    };
+    assert_eq!(text, "hi!");
+    let left = InsertAction::Move(Movement::Left);
+    assert_eq!(
+        keys,
+        &[
+            InsertKey {
+                after_chars: 2,
+                action: left
+            },
+            InsertKey {
+                after_chars: 2,
+                action: left
+            },
+        ]
+    );
 }
 
 #[test]
@@ -270,12 +137,10 @@ fn test_insert_mode_recording_append() {
 
     // Verify recording
     let buffer = sim.repeat_buffer();
-    match buffer.last_action() {
-        Some(RepeatableAction::InsertSequence { text, .. }) => {
-            assert_eq!(text, " world");
-        }
-        _ => panic!("Expected InsertSequence action"),
-    }
+    let Some(RecordedInsert { text, .. }) = buffer.last_insert() else {
+        panic!("expected a recorded Insert session");
+    };
+    assert_eq!(text, " world");
 }
 
 #[test]
@@ -296,12 +161,10 @@ fn test_insert_mode_recording_open_below() {
 
     // Verify recording
     let buffer = sim.repeat_buffer();
-    match buffer.last_action() {
-        Some(RepeatableAction::InsertSequence { text, .. }) => {
-            assert_eq!(text, "new");
-        }
-        _ => panic!("Expected InsertSequence action"),
-    }
+    let Some(RecordedInsert { text, .. }) = buffer.last_insert() else {
+        panic!("expected a recorded Insert session");
+    };
+    assert_eq!(text, "new");
 }
 
 #[test]
@@ -318,33 +181,31 @@ fn test_insert_mode_empty_recording() {
 
     // Verify empty insert sequence was recorded
     let buffer = sim.repeat_buffer();
-    match buffer.last_action() {
-        Some(RepeatableAction::InsertSequence { text, keys, .. }) => {
-            assert!(text.is_empty());
-            assert!(keys.is_empty());
-        }
-        _ => panic!("Expected InsertSequence action"),
-    }
+    let Some(RecordedInsert { text, keys, .. }) = buffer.last_insert() else {
+        panic!("expected a recorded Insert session");
+    };
+    assert!(text.is_empty());
+    assert!(keys.is_empty());
 }
 
 #[test]
-fn test_normal_command_overwrites_previous() {
-    let mut sim = AnyModeSimulator::new("hello".to_string());
+fn test_non_insert_edit_keeps_the_earlier_insert_session() {
+    let mut sim = AnyModeSimulator::new("test".to_string());
+    sim.execute_command(CMD_INSERT).unwrap();
+    sim.execute_command("Z").unwrap();
+    sim.execute_command(CMD_ESCAPE).unwrap();
 
-    // Execute first command
+    sim.execute_command(CMD_SELECT_LINE).unwrap();
     sim.execute_command(CMD_DELETE_SELECTION).unwrap();
 
-    // Execute second command
-    sim.execute_command(CMD_DELETE_SELECTION).unwrap();
-
-    // Verify only last command is recorded
-    let buffer = sim.repeat_buffer();
-    assert!(!buffer.is_empty());
-    // Should have only one action (the second 'x')
+    let Some(RecordedInsert { text, .. }) = sim.repeat_buffer().last_insert() else {
+        panic!("expected a recorded Insert session");
+    };
+    assert_eq!(text, "Z");
 }
 
 #[test]
-fn test_insert_mode_overwrites_normal_command() {
+fn test_insert_mode_after_normal_command_records_the_insert() {
     let mut sim = AnyModeSimulator::new("test".to_string());
 
     // Execute normal command first
@@ -355,14 +216,12 @@ fn test_insert_mode_overwrites_normal_command() {
     sim.execute_command(CMD_APPEND).unwrap();
     sim.execute_command(CMD_ESCAPE).unwrap();
 
-    // Verify insert sequence overwrote the delete command
+    // Verify the insert session is what was recorded
     let buffer = sim.repeat_buffer();
-    match buffer.last_action() {
-        Some(RepeatableAction::InsertSequence { text, .. }) => {
-            assert_eq!(text, "a");
-        }
-        _ => panic!("Expected InsertSequence action, not Command"),
-    }
+    let Some(RecordedInsert { text, .. }) = buffer.last_insert() else {
+        panic!("expected a recorded Insert session");
+    };
+    assert_eq!(text, "a");
 }
 
 #[test]
@@ -384,11 +243,9 @@ fn test_change_command_records_and_enters_insert() {
 
     // Verify insert sequence was recorded
     let buffer = sim.repeat_buffer();
-    match buffer.last_action() {
-        Some(RepeatableAction::InsertSequence { text, .. }) => {
-            // CMD_DELETE_SELECTION is "d", so it types "d" in insert mode
-            assert_eq!(text, "d");
-        }
-        _ => panic!("Expected InsertSequence action"),
-    }
+    let Some(RecordedInsert { text, .. }) = buffer.last_insert() else {
+        panic!("expected a recorded Insert session");
+    };
+    // CMD_DELETE_SELECTION is "d", so it types "d" in insert mode
+    assert_eq!(text, "d");
 }

@@ -18,12 +18,6 @@ pub(crate) const MAX_HINTS: usize = 10;
 /// Maximum command sequence length
 pub(crate) const MAX_COMMAND_SEQUENCE_LENGTH: usize = 100;
 
-/// Maximum number of commands stored in a single `Q`/`q` macro
-///
-/// Recording stops accepting further commands once this cap is hit,
-/// keeping what was already captured rather than failing outright.
-pub(crate) const MAX_MACRO_LENGTH: usize = 100;
-
 /// Maximum length of a single-line prompt buffer
 ///
 /// Shared by every prompt that accumulates text one keystroke at a time

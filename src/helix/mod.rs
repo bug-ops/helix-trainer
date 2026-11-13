@@ -33,9 +33,7 @@ pub use indent::{IndentUnit, TabWidth};
 pub use insert_input::InsertInput;
 pub use language::{Language, LanguageRules, SmartTab};
 pub use position::{CursorRange, Pos};
-pub use repeat::{
-    InsertAction, InsertKey, Movement, RepeatBuffer, RepeatableAction, is_repeatable_command,
-};
+pub use repeat::{InsertAction, InsertKey, Movement, RecordedInsert, RepeatBuffer};
 pub use simulator::{
     AnyModeSimulator, EditorDisplay, EditorMode, EditorSnapshot, HelixSimulator, InsertMode, Mode,
     ModeKind, NormalMode, SelectionBounds, SerializableRange,

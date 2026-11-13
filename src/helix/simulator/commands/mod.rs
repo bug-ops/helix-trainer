@@ -8,7 +8,7 @@ pub mod select_mode;
 pub mod selection;
 pub mod view;
 
-use super::{AnyModeSimulator, HelixSimulator, InsertEntryCommand, InsertMode, Mode, NormalMode};
+use super::{AnyModeSimulator, HelixSimulator, InsertEntryCommand, InsertMode, NormalMode};
 use crate::grammar::commands::CMD_COMMAND_LINE;
 use crate::grammar::find::{FindDirection, FindKind};
 use crate::helix::InsertInput;
@@ -17,8 +17,7 @@ use crate::helix::normal_command::{
     MacroOp, NormalCommand, PromptKind, RegisterOp, SurroundOp, TextObjectScope,
 };
 use crate::helix::registry::{CountBehavior, normal_registry};
-use crate::helix::repeat::{InsertAction, Movement, is_repeatable_command};
-use crossterm::event::KeyEvent;
+use crate::helix::repeat::{InsertAction, Movement};
 
 type ArrowStep = fn(&mut HelixSimulator<InsertMode>, usize) -> Result<(), SimulatorError>;
 
@@ -39,8 +38,8 @@ fn execute_insert_mode_command_internal(
     match input {
         InsertInput::Escape => {
             if !sim.is_repeating {
-                let action = sim.repeat_buffer.insert_recorder_mut().finish();
-                sim.repeat_buffer.set_last_action(action);
+                let session = sim.repeat_buffer.insert_recorder_mut().finish();
+                sim.repeat_buffer.set_last_insert(session);
             }
             Ok(())
         }
@@ -164,26 +163,9 @@ pub(super) fn execute_normal_mode_command(
     }
 }
 
-fn record_command_if_needed_normal(
-    sim: &mut HelixSimulator<NormalMode>,
-    key_events: &[KeyEvent],
-    mode_before: Mode,
-) {
-    let should_record =
-        !key_events.is_empty() && !sim.is_repeating && key_events.iter().all(is_repeatable_command);
-
-    if should_record {
-        sim.repeat_buffer
-            .record_command(key_events.to_vec(), mode_before);
-    }
-}
-
-/// Record a successfully run Insert-entering command for `.`: the command
-/// itself, then the start of the Insert recording that `Escape` finishes.
+/// Start the Insert recording that `Escape` finishes and `.` replays.
 /// Nothing is recorded while a `.` replay is running.
 pub(super) fn record_insert_entry(sim: &mut HelixSimulator<NormalMode>, entry: InsertEntryCommand) {
-    let keys = NormalCommand::InsertEntry(entry).keys();
-    record_command_if_needed_normal(sim, &keys, Mode::Normal);
     if !sim.is_repeating {
         sim.repeat_buffer
             .insert_recorder_mut()
@@ -325,9 +307,6 @@ fn run_normal(
         }
     } else {
         let result = select_mode::execute(&mut normal_sim, command);
-        if result.is_ok() {
-            record_command_if_needed_normal(&mut normal_sim, &command.keys(), Mode::Normal);
-        }
         (result, AnyModeSimulator::Normal(normal_sim))
     };
 

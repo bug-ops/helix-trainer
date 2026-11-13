@@ -37,12 +37,12 @@ commands_taught = ["v", "e"]
 
 [[scenarios]]
 id = "select_mode_002"
-name = "Select two words and delete"
+name = "Extend a selection with two different motions"
 description = "Combine Select mode with a delete"
 
 hints = [
     "'v' enters Select mode",
-    "Each 'w' extends the selection by one word",
+    "'w' extends the selection to the next word, 'e' to the end of a word",
     "'d' deletes the selection and returns to Normal mode",
 ]
 
@@ -51,12 +51,12 @@ file_content = """one two three four"""
 cursor_position = [0, 0]
 
 [scenarios.target]
-file_content = """three four"""
+file_content = """ three four"""
 cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["v", "w", "w", "d"]
-description = "Press 'v', extend with 'w' twice over 'one two ', then 'd' to delete"
+commands = ["v", "w", "e", "d"]
+description = "Press 'v', extend with 'w' and then 'e' over 'one two', then 'd' to delete"
 
 [scenarios.scoring]
 optimal_count = 4
@@ -67,4 +67,4 @@ tolerance = 0
 category = "selection"
 difficulty = "intermediate"
 tags = ["selection", "select-mode", "delete"]
-commands_taught = ["v", "w", "d"]
+commands_taught = ["v", "w", "e", "d"]

@@ -15,14 +15,15 @@ hints = [
 [scenarios.setup]
 file_content = """alpha
 beta
-gamma"""
+gamma
+delta"""
 cursor_position = [0, 0]
 
 [scenarios.target]
 file_content = """alpha
 gamma
 alpha
-"""
+delta"""
 selection = [2, 0, 3, 0]
 
 [scenarios.solution]

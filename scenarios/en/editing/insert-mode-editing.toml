@@ -3,29 +3,28 @@
 
 [[scenarios]]
 id = "insert_delete_word_001"
-name = "Delete a mistyped word with Ctrl-w"
-description = "Remove a wrongly typed word without leaving Insert mode"
+name = "Delete the word part before the cursor with Ctrl-w"
+description = "Remove the text before the cursor up to the word start without leaving Insert mode"
 
 hints = [
-    "'A' appends at the end of the line",
-    "'Ctrl-w' deletes the word before the cursor in Insert mode",
-    "It is shorter than pressing Backspace once per letter",
+    "'i' inserts before the cursor, which sits in the middle of the word",
+    "'Ctrl-w' deletes from the cursor back to the start of the word in Insert mode",
 ]
 
 [scenarios.setup]
-file_content = """total"""
-cursor_position = [0, 0]
+file_content = """oldname"""
+cursor_position = [0, 3]
 
 [scenarios.target]
-file_content = """total ok"""
-cursor_position = [0, 8]
+file_content = """name"""
+cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["A", " ", "w", "r", "o", "n", "g", "Ctrl-w", "o", "k", "Escape"]
-description = "Append ' wrong', erase it with 'Ctrl-w', then type 'ok'"
+commands = ["i", "Ctrl-w", "Escape"]
+description = "Press 'i', erase 'old' with 'Ctrl-w', then Escape"
 
 [scenarios.scoring]
-optimal_count = 11
+optimal_count = 3
 max_points = 100
 tolerance = 0
 
@@ -70,28 +69,28 @@ commands_taught = ["Ctrl-k"]
 
 [[scenarios]]
 id = "insert_alt_backspace_001"
-name = "Delete a mistyped word with Alt-Backspace"
-description = "Remove a wrongly typed word in Insert mode with 'Alt-Backspace'"
+name = "Delete the word part before the cursor with Alt-Backspace"
+description = "Remove the text before the cursor up to the word start with 'Alt-Backspace'"
 
 hints = [
-    "'A' appends at the end of the line",
-    "'Alt-Backspace' deletes the word before the cursor in Insert mode",
+    "'i' inserts before the cursor, which sits in the middle of the word",
+    "'Alt-Backspace' deletes from the cursor back to the start of the word in Insert mode",
 ]
 
 [scenarios.setup]
-file_content = """cargo"""
-cursor_position = [0, 0]
+file_content = """tmpvalue"""
+cursor_position = [0, 3]
 
 [scenarios.target]
-file_content = """cargo done"""
-cursor_position = [0, 10]
+file_content = """value"""
+cursor_position = [0, 0]
 
 [scenarios.solution]
-commands = ["A", " ", "t", "y", "p", "o", "Alt-Backspace", "d", "o", "n", "e", "Escape"]
-description = "Append ' typo', erase it with 'Alt-Backspace', then type 'done'"
+commands = ["i", "Alt-Backspace", "Escape"]
+description = "Press 'i', erase 'tmp' with 'Alt-Backspace', then Escape"
 
 [scenarios.scoring]
-optimal_count = 12
+optimal_count = 3
 max_points = 100
 tolerance = 0
 

@@ -53,29 +53,50 @@ pub(super) fn render_hint_popup(frame: &mut Frame, state: &AppState) {
 }
 
 /// Longest newest-first prefix of `key_history` (capped at
-/// `KEY_HISTORY_DISPLAY_SIZE`) whose big-text rendering fits in `max_cells`.
+/// `KEY_HISTORY_DISPLAY_SIZE`) that is at most `max_chars` characters wide,
+/// keys joined by single spaces.
 ///
-/// Returns `None` when even the newest key alone is too wide, so the caller
-/// can fall back to plain text instead of drawing clipped glyphs.
-fn big_text_fitting(key_history: &VecDeque<String>, max_cells: u16) -> Option<String> {
+/// Returns `None` when even the newest key alone is too wide.
+fn fitting_keys(key_history: &VecDeque<String>, max_chars: usize) -> Option<String> {
     let mut text = String::new();
-    let mut glyphs = 0usize;
+    let mut chars = 0usize;
     for (idx, key) in key_history
         .iter()
         .take(KEY_HISTORY_DISPLAY_SIZE)
         .enumerate()
     {
         let added = key.chars().count() + usize::from(idx > 0);
-        if (glyphs + added) * BIG_TEXT_CHAR_WIDTH_CELLS > usize::from(max_cells) {
+        if chars + added > max_chars {
             break;
         }
-        glyphs += added;
+        chars += added;
         if idx > 0 {
             text.push(' ');
         }
         text.push_str(key);
     }
     (!text.is_empty()).then_some(text)
+}
+
+/// Big-text variant of [`fitting_keys`]: each character takes
+/// `BIG_TEXT_CHAR_WIDTH_CELLS` cells, so the caller can fall back to plain
+/// text instead of drawing clipped glyphs when this returns `None`.
+fn big_text_fitting(key_history: &VecDeque<String>, max_cells: u16) -> Option<String> {
+    fitting_keys(
+        key_history,
+        usize::from(max_cells) / BIG_TEXT_CHAR_WIDTH_CELLS,
+    )
+}
+
+/// Plain-text history that fits `max_cells`: whole newest keys, or as a last
+/// resort the newest key truncated to the width.
+fn plain_text_fitting(key_history: &VecDeque<String>, max_cells: u16) -> String {
+    let max_chars = usize::from(max_cells);
+    fitting_keys(key_history, max_chars).unwrap_or_else(|| {
+        key_history
+            .front()
+            .map_or_else(String::new, |key| key.chars().take(max_chars).collect())
+    })
 }
 
 /// Render key history popup showing last 5 keys pressed with large text
@@ -153,12 +174,7 @@ pub(super) fn render_key_history_popup(
             .build();
         frame.render_widget(big_text, inner_area);
     } else {
-        let plain = key_history
-            .iter()
-            .take(KEY_HISTORY_DISPLAY_SIZE)
-            .map(String::as_str)
-            .collect::<Vec<_>>()
-            .join(" ");
+        let plain = plain_text_fitting(key_history, inner_area.width);
         let row = Rect {
             y: inner_area.y + inner_area.height / 2,
             height: 1,
@@ -535,6 +551,26 @@ mod tests {
             (0..20).any(|y| row_text(&buffer, y).contains("Left")),
             "wide label must be drawn as plain text"
         );
+    }
+
+    /// Five `Escape` labels overflow the plain-text row too: oldest keys are
+    /// dropped so what remains fits the 28-cell interior.
+    #[test]
+    fn test_render_key_history_popup_plain_fallback_fits_the_interior() {
+        let bounds = Rect::new(10, 5, 32, 12);
+        let keys = vec!["Escape".to_string(); 5];
+        let buffer = render_popup(80, 20, bounds, &keys);
+        let row = (0..20)
+            .map(|y| row_text(&buffer, y))
+            .find(|row| row.contains("Escape"))
+            .expect("plain fallback must be drawn");
+        assert_eq!(row.matches("Escape").count(), 4);
+    }
+
+    #[test]
+    fn test_plain_text_fitting_truncates_a_single_overwide_key() {
+        let history: VecDeque<String> = ["abcdefghij".to_string()].into();
+        assert_eq!(plain_text_fitting(&history, 4), "abcd");
     }
 
     #[test]

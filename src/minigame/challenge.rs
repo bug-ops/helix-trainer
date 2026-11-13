@@ -36,11 +36,13 @@ use super::ChallengeConfig;
 /// # Examples
 ///
 /// ```
+/// use chrono::Utc;
 /// use helix_trainer::config::ScenarioLoader;
 /// use helix_trainer::minigame::{ChallengeConfig, select_challenge_scenarios};
+/// use helix_trainer::time::Moment;
 ///
 /// let scenarios = ScenarioLoader::new().load_from_embedded("en")?;
-/// let config = ChallengeConfig::for_date(chrono::Utc::now().date_naive());
+/// let config = ChallengeConfig::for_date(Moment::from(Utc::now()).day());
 /// let selected = select_challenge_scenarios(&scenarios, &config);
 /// assert_eq!(selected.len(), 10);
 /// # Ok::<(), helix_trainer::error::UserError>(())
@@ -75,7 +77,6 @@ mod tests {
 
     use crate::constants::{CHALLENGE_MAX_ATTEMPTS, CHALLENGE_SCENARIO_COUNT};
     use crate::gamification::{ChallengeDay, ChallengeProgress};
-    use chrono::NaiveDate;
 
     use proptest::prelude::*;
 
@@ -104,9 +105,50 @@ mod tests {
         assert_eq!(progress.all_time_best_score, 0);
     }
 
+    /// FR-006/FR-003: a stored day after today (written west of UTC by the previous build)
+    /// counts as today: no reset, and the stored day does not move backward.
+    #[test]
+    fn test_a_stored_day_after_today_is_today() {
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
+        let tomorrow = crate::time::PlayerDay::from_ymd(2026, 1, 16).unwrap();
+        let mut progress = ChallengeProgress::new();
+        progress.last_challenge_date = ChallengeDay::On(tomorrow);
+        progress.attempts_used_today = 3;
+
+        assert!(!progress.can_attempt(today));
+        assert_eq!(progress.attempts_remaining(today), 0);
+        assert!(progress.is_today(today));
+        progress.start_attempt(today);
+        assert_eq!(progress.last_challenge_date, ChallengeDay::On(tomorrow));
+    }
+
+    /// FR-007: east, west, east on one real day resets exactly once.
+    #[test]
+    fn test_zone_toggling_resets_once() {
+        use crate::time::{Clock, FakeClock};
+
+        let clock = FakeClock::at_offset("2026-01-15T20:00:00Z", 9);
+        let mut progress = ChallengeProgress::new();
+        progress.last_challenge_date =
+            ChallengeDay::On(crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap());
+        progress.attempts_used_today = 3;
+
+        let mut resets = 0;
+        for hours in [9, -8, 9] {
+            clock.set_utc_offset_hours(hours);
+            if progress.can_attempt(clock.player_day()) && progress.attempts_used_today == 3 {
+                resets += 1;
+            }
+            progress.start_attempt(clock.player_day());
+            progress.attempts_used_today = 3;
+        }
+
+        assert_eq!(resets, 1);
+    }
+
     #[test]
     fn test_can_attempt_new_day() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let progress = ChallengeProgress::new();
         assert!(progress.can_attempt(today));
         assert_eq!(progress.attempts_remaining(today), CHALLENGE_MAX_ATTEMPTS);
@@ -114,7 +156,7 @@ mod tests {
 
     #[test]
     fn test_can_attempt_after_using_attempts() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
         progress.last_challenge_date = ChallengeDay::On(today);
         progress.attempts_used_today = 2;
@@ -129,10 +171,10 @@ mod tests {
 
     #[test]
     fn test_start_attempt_new_day() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
         progress.last_challenge_date =
-            ChallengeDay::On(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
+            ChallengeDay::On(crate::time::PlayerDay::from_ymd(2020, 1, 1).unwrap());
         progress.attempts_used_today = 3;
         progress.best_score_today = 5000;
         progress.best_scenarios_today = 8;
@@ -148,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_start_attempt_same_day() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
         progress.last_challenge_date = ChallengeDay::On(today);
         progress.attempts_used_today = 1;
@@ -164,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_record_result_updates_daily_best() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
         progress.start_attempt(today);
 
@@ -185,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_record_result_updates_all_time_best() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
         progress.all_time_best_score = 3000;
         progress.all_time_best_scenarios = 8;
@@ -204,7 +246,7 @@ mod tests {
 
     #[test]
     fn test_record_result_tracks_completions() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
         progress.start_attempt(today);
 
@@ -224,7 +266,7 @@ mod tests {
             .collect();
 
         let config =
-            ChallengeConfig::for_date(chrono::NaiveDate::from_ymd_opt(2025, 1, 15).unwrap());
+            ChallengeConfig::for_date(crate::time::PlayerDay::from_ymd(2025, 1, 15).unwrap());
 
         let selected1 = select_challenge_scenarios(&scenarios, &config);
         let selected2 = select_challenge_scenarios(&scenarios, &config);
@@ -243,9 +285,9 @@ mod tests {
             .collect();
 
         let config1 =
-            ChallengeConfig::for_date(chrono::NaiveDate::from_ymd_opt(2025, 1, 15).unwrap());
+            ChallengeConfig::for_date(crate::time::PlayerDay::from_ymd(2025, 1, 15).unwrap());
         let config2 =
-            ChallengeConfig::for_date(chrono::NaiveDate::from_ymd_opt(2025, 1, 16).unwrap());
+            ChallengeConfig::for_date(crate::time::PlayerDay::from_ymd(2025, 1, 16).unwrap());
 
         let selected1 = select_challenge_scenarios(&scenarios, &config1);
         let selected2 = select_challenge_scenarios(&scenarios, &config2);
@@ -262,7 +304,7 @@ mod tests {
             .map(|i| create_test_scenario(&format!("scenario_{i}")))
             .collect();
 
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let config = ChallengeConfig::for_date(today);
         let selected = select_challenge_scenarios(&scenarios, &config);
 
@@ -276,7 +318,7 @@ mod tests {
             .map(|i| create_test_scenario(&format!("scenario_{i}")))
             .collect();
 
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let config = ChallengeConfig::for_date(today);
         let selected = select_challenge_scenarios(&scenarios, &config);
 
@@ -286,7 +328,7 @@ mod tests {
 
     #[test]
     fn test_challenge_max_attempts_enforced() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
 
         // Use all attempts
@@ -303,7 +345,7 @@ mod tests {
     // CR-003: Test ChallengeProgress TOML serialization roundtrip
     #[test]
     fn test_challenge_progress_serialization_roundtrip() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
         progress.start_attempt(today);
         progress.record_result(5000, 8);
@@ -357,7 +399,7 @@ mod tests {
         let p = load_with_date(Some("2026-01-15".into()), 2);
         assert_eq!(
             p.last_challenge_date,
-            ChallengeDay::On(NaiveDate::from_ymd_opt(2026, 1, 15).unwrap())
+            ChallengeDay::On(crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap())
         );
     }
 
@@ -396,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_unreadable_day_never_resets_attempts() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut p = load_with_date(Some("garbage".into()), CHALLENGE_MAX_ATTEMPTS);
         assert!(!p.can_attempt(today));
         assert_eq!(p.attempts_remaining(today), 0);
@@ -419,7 +461,7 @@ mod tests {
     #[test]
     fn test_last_challenge_date_serializes_as_iso_string() {
         let mut p = ChallengeProgress::new();
-        p.start_attempt(NaiveDate::from_ymd_opt(2026, 1, 15).unwrap());
+        p.start_attempt(crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap());
         let json = serde_json::to_value(&p).unwrap();
         assert_eq!(json["last_challenge_date"], "2026-01-15");
     }
@@ -427,7 +469,7 @@ mod tests {
     // CR-008: Test is_today() method
     #[test]
     fn test_challenge_progress_is_today() {
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let mut progress = ChallengeProgress::new();
         assert!(!progress.is_today(today)); // No date set yet
 
@@ -435,7 +477,7 @@ mod tests {
         assert!(progress.is_today(today)); // Now has today's date
 
         progress.last_challenge_date =
-            ChallengeDay::On(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
+            ChallengeDay::On(crate::time::PlayerDay::from_ymd(2020, 1, 1).unwrap());
         assert!(!progress.is_today(today)); // Past date
     }
 
@@ -443,7 +485,7 @@ mod tests {
     #[test]
     fn test_select_challenge_scenarios_empty_input() {
         let scenarios: Vec<Scenario> = vec![];
-        let today = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let today = crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap();
         let config = ChallengeConfig::for_date(today);
         let selected = select_challenge_scenarios(&scenarios, &config);
         assert!(selected.is_empty());
@@ -461,7 +503,7 @@ mod tests {
                 .collect();
 
             let mut config =
-                ChallengeConfig::for_date(NaiveDate::from_ymd_opt(2026, 1, 15).unwrap());
+                ChallengeConfig::for_date(crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap());
             config.scenario_count = scenario_count;
             config.seed = seed;
 
@@ -497,7 +539,7 @@ mod tests {
                 .collect();
 
             let mut config =
-                ChallengeConfig::for_date(NaiveDate::from_ymd_opt(2026, 1, 15).unwrap());
+                ChallengeConfig::for_date(crate::time::PlayerDay::from_ymd(2026, 1, 15).unwrap());
             config.scenario_count = scenario_count;
 
             let outcomes: HashSet<Vec<crate::ids::ScenarioId>> = seeds

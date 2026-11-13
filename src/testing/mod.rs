@@ -62,6 +62,12 @@ fn pos(row: usize, col: usize) -> Pos {
     Pos::try_from([row, col]).expect("valid position fixture")
 }
 
+/// The player's current day in the system's local zone.
+#[must_use]
+pub fn today() -> crate::time::PlayerDay {
+    crate::time::Moment::from(chrono::Utc::now()).day()
+}
+
 /// An easy quest with an explicit XP reward, for tests that assert exact XP.
 #[must_use]
 pub fn quest(

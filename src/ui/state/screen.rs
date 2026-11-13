@@ -702,7 +702,7 @@ impl MiniGameModeKind {
     }
 
     /// The default configuration of this mode; the challenge is seeded from `today`
-    pub fn mode(self, today: chrono::NaiveDate) -> crate::minigame::MiniGameMode {
+    pub fn mode(self, today: crate::time::PlayerDay) -> crate::minigame::MiniGameMode {
         use crate::minigame::{ArcadeConfig, ChallengeConfig, MiniGameMode, SurvivalConfig};
 
         match self {
@@ -753,13 +753,13 @@ impl MiniGameModeSelection {
     /// sync. Name/description text comes from `MiniGameMode`'s own exhaustive
     /// match.
     pub(crate) fn all_modes(
-        today: chrono::NaiveDate,
+        today: crate::time::PlayerDay,
     ) -> [crate::minigame::MiniGameMode; Self::MODE_COUNT] {
         MiniGameModeKind::ALL.map(|kind| kind.mode(today))
     }
 
     /// Get the selected mode configuration
-    pub fn selected_mode(&self, today: chrono::NaiveDate) -> crate::minigame::MiniGameMode {
+    pub fn selected_mode(&self, today: crate::time::PlayerDay) -> crate::minigame::MiniGameMode {
         self.selected.mode(today)
     }
 }
@@ -1079,7 +1079,7 @@ mod tests {
 
     #[test]
     fn test_minigame_mode_selection_valid_modes() {
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         let mut selection = MiniGameModeSelection::new();
         assert!(selection.selected_mode(today).is_arcade());
 
@@ -1093,7 +1093,7 @@ mod tests {
     /// `all_modes` must stay in lockstep with `MiniGameModeKind::ALL`.
     #[test]
     fn test_all_modes_follow_the_kind_order() {
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         let modes = MiniGameModeSelection::all_modes(today);
 
         for (kind, mode) in MiniGameModeKind::ALL.into_iter().zip(&modes) {
@@ -1108,7 +1108,7 @@ mod tests {
     /// variant must appear exactly once in `all_modes`.
     #[test]
     fn test_all_modes_covers_every_known_variant_exactly_once() {
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         let modes = MiniGameModeSelection::all_modes(today);
         assert_eq!(modes.len(), MiniGameModeSelection::MODE_COUNT);
 

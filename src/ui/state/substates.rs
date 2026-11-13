@@ -339,9 +339,19 @@ impl ProgressState {
         self.monotonic.now()
     }
 
-    /// Get the current date from the injected clock
-    pub fn today(&self) -> chrono::NaiveDate {
-        self.clock.today()
+    /// Get the player's current day from the injected clock
+    pub fn today(&self) -> crate::time::PlayerDay {
+        self.clock.player_day()
+    }
+
+    /// The current time with the player's zone, from the injected clock
+    pub fn moment(&self) -> crate::time::Moment {
+        self.clock.moment()
+    }
+
+    /// The player's local day at `instant`, from the injected clock
+    pub fn day_of(&self, instant: chrono::DateTime<chrono::Utc>) -> crate::time::PlayerDay {
+        self.clock.day_of(instant)
     }
 
     /// Get a shared handle to the injected clock, e.g. to construct another clock-consuming

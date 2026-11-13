@@ -8,6 +8,7 @@ use crate::constants::{
     STREAK_FREEZE_MAX_GAP_DAYS, STREAK_MILESTONE_MONTH, STREAK_MILESTONE_QUARTER,
     STREAK_MILESTONE_WEEK, STREAK_MILESTONE_YEAR,
 };
+use crate::time::Moment;
 
 /// Streak change event
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,14 +79,13 @@ impl StreakManager {
     /// assert_eq!(change, StreakChange::Incremented { new_streak: 6 });
     /// assert_eq!(profile.current_streak, 6);
     /// ```
-    pub fn update_streak(profile: &mut UserProfile, now: DateTime<Utc>) -> StreakChange {
-        let last_active = profile.last_activity;
-
-        let days_since_active = Self::days_between(last_active, now);
+    pub fn update_streak(profile: &mut UserProfile, now: impl Into<Moment>) -> StreakChange {
+        let now = now.into();
+        let days_since_active = Self::days_between(&now, profile.last_activity);
 
         let change = match days_since_active {
-            0 => {
-                // Same day - no change
+            ..=0 => {
+                // Same local day, or a clock/zone moved backward - no change
                 StreakChange::Continued
             }
             1 => {
@@ -120,7 +120,8 @@ impl StreakManager {
             }
         };
 
-        profile.last_activity = now;
+        // The last activity never moves backward
+        profile.last_activity = profile.last_activity.max(now.instant());
         change
     }
 
@@ -207,11 +208,9 @@ impl StreakManager {
             && profile.completed_quests_today().count() >= profile.daily_quests.len()
     }
 
-    /// Calculate days between two dates
-    fn days_between(start: DateTime<Utc>, end: DateTime<Utc>) -> i64 {
-        end.date_naive()
-            .signed_duration_since(start.date_naive())
-            .num_days()
+    /// Local player days from the day of `start` to `now`
+    fn days_between(now: &Moment, start: DateTime<Utc>) -> i64 {
+        now.day().days_since(now.day_of(start))
     }
 
     /// Check if streak milestone reached
@@ -254,6 +253,54 @@ mod tests {
         let change = StreakManager::update_streak(&mut profile, clock.now());
         assert_eq!(change, StreakChange::Continued);
         assert_eq!(profile.current_streak, 5);
+    }
+
+    /// #660: two sessions on one local evening are one day apart in no zone.
+    #[test]
+    fn one_local_evening_west_of_utc_is_the_same_day() {
+        let clock = FakeClock::at_offset("2026-01-15T23:30:00Z", -8); // 15:30 local
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.current_streak = 2;
+        profile
+            .daily_quests
+            .push(crate::testing::rewarded_quest("done"));
+
+        clock.advance(Duration::hours(1)); // 16:30 local, next UTC date
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
+
+        assert_eq!(change, StreakChange::Continued);
+        assert_eq!(profile.current_streak, 2);
+    }
+
+    #[test]
+    fn late_evening_to_next_morning_west_of_utc_is_one_day() {
+        let clock = FakeClock::at_offset("2026-01-16T07:00:00Z", -8); // 23:00 local the 15th
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.current_streak = 2;
+        profile
+            .daily_quests
+            .push(crate::testing::rewarded_quest("done"));
+
+        clock.advance(Duration::hours(10)); // 09:00 local the 16th
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
+
+        assert_eq!(change, StreakChange::Incremented { new_streak: 3 });
+    }
+
+    /// FR-007: a zone change that moves local today before the last activity keeps the streak.
+    #[test]
+    fn a_backward_zone_change_keeps_the_streak() {
+        let clock = FakeClock::at_offset("2026-01-15T20:00:00Z", 9); // the 16th, local
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.current_streak = 4;
+        profile.streak_freeze_available = true;
+        clock.set_utc_offset_hours(-8); // the 15th, local
+
+        let change = StreakManager::update_streak(&mut profile, clock.moment());
+
+        assert_eq!(change, StreakChange::Continued);
+        assert_eq!(profile.current_streak, 4);
+        assert!(profile.streak_freeze_available);
     }
 
     #[test]
@@ -436,20 +483,21 @@ mod tests {
         profile.current_streak = 10;
         profile.streak_freeze_available = true;
         // Simulate a backwards clock: last_activity is after `now`.
-        profile.last_activity = clock.now() + Duration::days(1);
+        let last_activity = clock.now() + Duration::days(1);
+        profile.last_activity = last_activity;
 
         let change = StreakManager::update_streak(&mut profile, clock.now());
-        assert_eq!(
-            change,
-            StreakChange::Broken {
-                was_streak: 10,
-                freeze_could_not_cover_gap: false
-            }
-        );
-        assert_eq!(profile.current_streak, 0);
+
+        // FR-004 (#660): a negative gap counts as the same day.
+        assert_eq!(change, StreakChange::Continued);
+        assert_eq!(profile.current_streak, 10);
         assert!(
             profile.streak_freeze_available,
             "freeze must not be consumed on a negative (backwards-clock) gap"
+        );
+        assert_eq!(
+            profile.last_activity, last_activity,
+            "the last activity never moves backward"
         );
     }
 
@@ -630,8 +678,9 @@ mod tests {
         let yesterday = now - Duration::days(1);
         let week_ago = now - Duration::days(7);
 
-        assert_eq!(StreakManager::days_between(now, now), 0);
-        assert_eq!(StreakManager::days_between(yesterday, now), 1);
-        assert_eq!(StreakManager::days_between(week_ago, now), 7);
+        let moment = Moment::from(now);
+        assert_eq!(StreakManager::days_between(&moment, now), 0);
+        assert_eq!(StreakManager::days_between(&moment, yesterday), 1);
+        assert_eq!(StreakManager::days_between(&moment, week_ago), 7);
     }
 }

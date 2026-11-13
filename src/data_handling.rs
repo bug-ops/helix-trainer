@@ -2,7 +2,6 @@
 //!
 //! Processes messages from background data loaders and updates app state.
 
-use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,6 +14,7 @@ use helix_trainer::{
     },
     learning::PerformanceTracker,
     security::error_chain,
+    time::Moment,
     ui::{AppState, Notification, NotificationType, ProfileBackup, state::Quarantine},
 };
 
@@ -43,9 +43,10 @@ fn save_failed_notification() -> Notification {
 
 /// Check if daily quests should be refreshed
 ///
-/// Returns true if the current date differs from the last quest refresh date.
-pub fn should_refresh_quests(profile: &UserProfile, now: DateTime<Utc>) -> bool {
-    now.date_naive() != profile.last_quest_refresh.date_naive()
+/// Returns true if the player's current day is strictly after the day of the last quest
+/// refresh; a refresh stamped on a later day (a clock or zone moved backward) is still today.
+pub fn should_refresh_quests(profile: &UserProfile, now: &Moment) -> bool {
+    now.day() > now.day_of(profile.last_quest_refresh)
 }
 
 /// Regenerate the daily quests when a new day began or none exist.
@@ -58,8 +59,8 @@ fn refresh_daily_quests_if_due(state: &mut AppState) {
     if !state.progress.persistence().is_writable() {
         return;
     }
-    let now = state.progress.now();
-    if !should_refresh_quests(&state.progress.profile, now)
+    let now = state.progress.moment();
+    if !should_refresh_quests(&state.progress.profile, &now)
         && !state.progress.profile.daily_quests.is_empty()
     {
         return;
@@ -70,9 +71,8 @@ fn refresh_daily_quests_if_due(state: &mut AppState) {
     };
 
     tracing::info!("Refreshing daily quests for new day");
-    state.progress.profile.reset_daily_quests(now);
-    let generation =
-        QuestGenerator::generate_quests(&state.progress.profile, &registry, now.date_naive());
+    state.progress.profile.reset_daily_quests(now.instant());
+    let generation = QuestGenerator::generate_quests(&state.progress.profile, &registry, now.day());
     state.progress.profile.daily_quests = generation.quests;
     if generation.unfilled_slots > 0 {
         tracing::warn!(
@@ -176,7 +176,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
             // independently, which could straddle a midnight boundary; this also fixes
             // a latent race where the streak and quest-refresh checks could disagree
             // about what day it is.
-            let now = state.progress.now();
+            let now = state.progress.moment();
 
             // Update streak and refresh quests if needed
             let mut updated_profile = profile;
@@ -297,6 +297,7 @@ pub fn handle_data_message(state: &mut AppState, msg: DataLoadMessage) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use helix_trainer::async_state::{LoaderError, SaveFailure};
     use helix_trainer::config::json_store::QuarantineError;
     use helix_trainer::config::json_store::{Document, StorageError};
@@ -380,6 +381,35 @@ mod tests {
             },
             metadata: ScenarioMetadata::default(),
         }
+    }
+
+    /// #660: quests refresh at the player's local midnight (UTC+9: not at 09:00 local).
+    #[test]
+    fn quests_refresh_at_local_midnight_east_of_utc() {
+        use helix_trainer::time::{Clock, FakeClock};
+
+        let clock = FakeClock::at_offset("2026-01-14T23:00:00Z", 9); // 08:00 local the 15th
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.last_quest_refresh = clock.now();
+
+        clock.advance(chrono::Duration::minutes(90)); // 09:30 local, the next UTC date
+        assert!(!should_refresh_quests(&profile, &clock.moment()));
+
+        clock.advance(chrono::Duration::hours(15)); // 00:30 local the 16th
+        assert!(should_refresh_quests(&profile, &clock.moment()));
+    }
+
+    /// FR-007: east, west, east on one real day refreshes at most once.
+    #[test]
+    fn quests_do_not_refresh_again_when_the_zone_moves_west() {
+        use helix_trainer::time::{Clock, FakeClock};
+
+        let clock = FakeClock::at_offset("2026-01-15T20:00:00Z", 9); // the 16th, local
+        let mut profile = UserProfile::new_at(clock.now());
+        profile.last_quest_refresh = clock.now();
+        clock.set_utc_offset_hours(-8); // the 15th, local
+
+        assert!(!should_refresh_quests(&profile, &clock.moment()));
     }
 
     #[test]

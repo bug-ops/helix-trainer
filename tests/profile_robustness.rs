@@ -35,8 +35,12 @@ fn base_profile() -> UserProfile {
     profile.unlock_achievement(AchievementId::FirstPerfect);
     profile.performance_data = serde_json::from_str(PERFORMANCE_FIXTURE).unwrap();
     let registry = QuestTemplateRegistry::from_embedded("en").unwrap();
-    profile.daily_quests =
-        QuestGenerator::generate_quests(&profile, &registry, now.date_naive()).quests;
+    profile.daily_quests = QuestGenerator::generate_quests(
+        &profile,
+        &registry,
+        helix_trainer::time::Moment::from(now).day(),
+    )
+    .quests;
     profile
 }
 
@@ -154,7 +158,11 @@ fn exercise_consumers(mut profile: UserProfile, clock_selector: usize) {
 
     StreakManager::update_streak(&mut profile, now);
     AchievementEngine::check_and_unlock(&mut profile, &tracker);
-    let generated = QuestGenerator::generate_quests(&profile, &registry, Utc::now().date_naive());
+    let generated = QuestGenerator::generate_quests(
+        &profile,
+        &registry,
+        helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
+    );
     assert!(!generated.quests.is_empty());
     assert_eq!(
         generated.unfilled_slots, 0,

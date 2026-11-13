@@ -437,7 +437,7 @@ mod tests {
         let mut ctx = HandlerContext::new(&mut ui, &mut game, &mut progress, &config);
 
         let mode = crate::minigame::MiniGameMode::Challenge(
-            crate::minigame::ChallengeConfig::for_date(chrono::Utc::now().date_naive()),
+            crate::minigame::ChallengeConfig::for_date(crate::testing::today()),
         );
         let outcome = handle_launch_minigame_mode(&mut ctx, mode);
 

@@ -3,10 +3,10 @@
 //! Attempt limits and best-score tracking for the daily challenge; the
 //! scenario selection itself lives in `minigame::challenge`.
 
-use chrono::NaiveDate;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::constants::{CHALLENGE_MAX_ATTEMPTS, CHALLENGE_SCENARIO_COUNT};
+use crate::time::PlayerDay;
 
 /// The calendar day a daily challenge was last attempted.
 ///
@@ -18,7 +18,7 @@ pub enum ChallengeDay {
     #[default]
     NotStarted,
     /// The last attempt happened on this day.
-    On(NaiveDate),
+    On(PlayerDay),
     /// The stored day could not be read; counters are kept and never reset.
     Unreadable,
 }
@@ -39,7 +39,7 @@ impl<'de> Deserialize<'de> for ChallengeDay {
         if value.is_null() {
             return Ok(Self::NotStarted);
         }
-        Ok(NaiveDate::deserialize(value).map_or(Self::Unreadable, Self::On))
+        Ok(PlayerDay::deserialize(value).map_or(Self::Unreadable, Self::On))
     }
 }
 
@@ -122,7 +122,7 @@ impl ChallengeProgress {
     }
 
     /// Check if player can attempt today's challenge
-    pub fn can_attempt(&self, today: NaiveDate) -> bool {
+    pub fn can_attempt(&self, today: PlayerDay) -> bool {
         if self.is_new_day(today) {
             return true;
         }
@@ -131,7 +131,7 @@ impl ChallengeProgress {
     }
 
     /// Get remaining attempts for today
-    pub fn attempts_remaining(&self, today: NaiveDate) -> u8 {
+    pub fn attempts_remaining(&self, today: PlayerDay) -> u8 {
         if self.is_new_day(today) {
             return CHALLENGE_MAX_ATTEMPTS;
         }
@@ -140,8 +140,8 @@ impl ChallengeProgress {
     }
 
     /// Start a new attempt, resetting if new day
-    pub fn start_attempt(&mut self, today: NaiveDate) {
-        // Reset for new day
+    pub fn start_attempt(&mut self, today: PlayerDay) {
+        // Reset for new day; a stored day at or after today is today (never rewound)
         if self.is_new_day(today) {
             self.last_challenge_date = ChallengeDay::On(today);
             self.attempts_used_today = 0;
@@ -177,25 +177,25 @@ impl ChallengeProgress {
         }
     }
 
-    /// Check whether the calendar day has rolled over since `last_challenge_date`
-    fn is_new_day(&self, today: NaiveDate) -> bool {
+    /// Check whether today is strictly after `last_challenge_date`
+    fn is_new_day(&self, today: PlayerDay) -> bool {
         match self.last_challenge_date {
             ChallengeDay::NotStarted => true,
-            ChallengeDay::On(day) => day != today,
+            ChallengeDay::On(day) => today > day,
             ChallengeDay::Unreadable => false,
         }
     }
 
     /// Counts a [`ChallengeDay::Unreadable`] day as `today`, keeping the used
     /// attempts and best-today score instead of refilling the allowance.
-    pub fn settle_unreadable_day(&mut self, today: NaiveDate) {
+    pub fn settle_unreadable_day(&mut self, today: PlayerDay) {
         if self.last_challenge_date == ChallengeDay::Unreadable {
             self.last_challenge_date = ChallengeDay::On(today);
         }
     }
 
     /// Check if progress is for the given date
-    pub fn is_today(&self, today: NaiveDate) -> bool {
+    pub fn is_today(&self, today: PlayerDay) -> bool {
         !self.is_new_day(today)
     }
 }

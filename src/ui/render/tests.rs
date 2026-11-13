@@ -2014,7 +2014,7 @@ mod mode_selection_extended_tests {
             .iter()
             .map(ratatui::buffer::Cell::symbol)
             .collect();
-        for mode in MiniGameModeSelection::all_modes(chrono::Utc::now().date_naive()) {
+        for mode in MiniGameModeSelection::all_modes(crate::testing::today()) {
             let mode_name = crate::ui::render::mode_selection::mode_label(&mode);
             let mode_name = mode_name.as_str();
             assert!(
@@ -2026,7 +2026,7 @@ mod mode_selection_extended_tests {
 
     #[test]
     fn mode_label_names_each_minigame_mode() {
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         let labels: Vec<String> = MiniGameModeSelection::all_modes(today)
             .iter()
             .map(crate::ui::render::mode_selection::mode_label)

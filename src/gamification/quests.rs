@@ -1,6 +1,6 @@
 //! Daily quest generation and tracking
 
-use chrono::{Datelike, NaiveDate};
+use chrono::Datelike;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,7 @@ use crate::config::quests::{
     QuestDifficulty as TemplateDifficulty, QuestLoader, QuestSpec, QuestTemplate,
 };
 use crate::ids::{NormalizedCommand, QuestId, ScenarioId};
+use crate::time::PlayerDay;
 
 use super::{UserProfile, XPCalculator};
 
@@ -637,17 +638,18 @@ impl QuestGenerator {
     /// ```
     /// use chrono::Utc;
     /// use helix_trainer::gamification::{QuestGenerator, QuestTemplateRegistry, UserProfile};
+    /// use helix_trainer::time::Moment;
     ///
     /// let profile = UserProfile::new(); // Level 1
     /// let registry = QuestTemplateRegistry::from_embedded("en").unwrap();
-    /// let generation = QuestGenerator::generate_quests(&profile, &registry, Utc::now().date_naive());
+    /// let generation = QuestGenerator::generate_quests(&profile, &registry, Moment::from(Utc::now()).day());
     /// assert_eq!(generation.quests.len(), 3); // Beginners get 3 quests
     /// assert_eq!(generation.unfilled_slots, 0);
     ///
     /// let empty = QuestGenerator::generate_quests(
     ///     &profile,
     ///     &QuestTemplateRegistry::new(),
-    ///     Utc::now().date_naive(),
+    ///     Moment::from(Utc::now()).day(),
     /// );
     /// assert!(empty.quests.is_empty());
     /// assert_eq!(empty.unfilled_slots, 3);
@@ -655,15 +657,15 @@ impl QuestGenerator {
     pub fn generate_quests(
         profile: &UserProfile,
         registry: &QuestTemplateRegistry,
-        today: NaiveDate,
+        today: PlayerDay,
     ) -> QuestGeneration {
         let mut rng = Self::create_rng(today);
         QuestDistribution::for_level(profile.level).generate_quests(&mut rng, registry)
     }
 
-    fn create_rng(today: NaiveDate) -> StdRng {
+    fn create_rng(today: PlayerDay) -> StdRng {
         // Seed with current date for consistency within a day
-        let seed = u64::from(today.num_days_from_ce().cast_unsigned());
+        let seed = u64::from(today.date().num_days_from_ce().cast_unsigned());
         StdRng::seed_from_u64(seed)
     }
 
@@ -916,7 +918,7 @@ mod tests {
     fn test_quest_generator_level_based() {
         let registry = test_registry();
 
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
 
         // Level 1 - should get 3 quests (2 easy + 1 medium)
         let mut profile = UserProfile::new();
@@ -938,7 +940,7 @@ mod tests {
     #[test]
     fn generated_quests_are_distinct_templates() {
         let registry = test_registry();
-        let day = |y, m, d| NaiveDate::from_ymd_opt(y, m, d).unwrap();
+        let day = |y, m, d| crate::time::PlayerDay::from_ymd(y, m, d).unwrap();
         let days = [day(2026, 11, 11), day(2026, 1, 1), day(2025, 6, 30)];
         for level in [6, 10, 15, 16, 22, 40] {
             for today in days {
@@ -956,7 +958,8 @@ mod tests {
         let registry = test_registry();
         let mut picked = HashSet::new();
         let templates = registry.get_by_difficulty(crate::config::quests::QuestDifficulty::Easy);
-        let mut rng = QuestGenerator::create_rng(NaiveDate::from_ymd_opt(2026, 11, 11).unwrap());
+        let mut rng =
+            QuestGenerator::create_rng(crate::time::PlayerDay::from_ymd(2026, 11, 11).unwrap());
         for _ in &templates {
             assert!(
                 QuestGenerator::pick_quest(&mut rng, &templates, "easy", &mut picked).is_some()
@@ -971,7 +974,7 @@ mod tests {
         reason = "assert!(x.is_empty()) reads better than the machine fix"
     )]
     fn test_generate_quests_with_empty_registry_leaves_every_slot_unfilled() {
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         for (level, slots) in [(1, 3), (10, 4), (20, 4)] {
             let mut profile = UserProfile::new();
             profile.level = level;
@@ -986,7 +989,7 @@ mod tests {
 
     #[test]
     fn test_generate_quests_with_a_difficulty_missing_fills_only_the_rest() {
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         let mut profile = UserProfile::new();
         profile.level = 10;
         let full = test_registry();

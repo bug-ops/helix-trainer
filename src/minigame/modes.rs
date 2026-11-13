@@ -13,6 +13,7 @@ use crate::constants::{
     CHALLENGE_TIME_PER_SCENARIO, EXTRA_LIFE_SCORE_MILESTONE, SURVIVAL_BASE_TIME, SURVIVAL_MIN_TIME,
     SURVIVAL_TIME_DECREASE_PER_LEVEL,
 };
+use crate::time::PlayerDay;
 
 /// Game mode configuration for mini-game sessions.
 ///
@@ -215,19 +216,23 @@ pub struct ChallengeConfig {
     /// Seed for deterministic scenario selection
     pub seed: u64,
 
-    /// The date this challenge is for (UTC)
-    pub date: chrono::NaiveDate,
+    /// The player day this challenge is for
+    pub date: PlayerDay,
 }
 
 impl ChallengeConfig {
     /// Create a challenge config for a specific date
-    pub fn for_date(date: chrono::NaiveDate) -> Self {
+    pub fn for_date(date: PlayerDay) -> Self {
         // Seed = days since Unix epoch, ensuring same seed for same date
         #[expect(
             clippy::cast_sign_loss,
             reason = "pre-1970 dates wrap to a different but still deterministic seed"
         )]
-        let seed = date.and_time(chrono::NaiveTime::MIN).and_utc().timestamp() as u64;
+        let seed = date
+            .date()
+            .and_time(chrono::NaiveTime::MIN)
+            .and_utc()
+            .timestamp() as u64;
 
         Self {
             scenario_count: CHALLENGE_SCENARIO_COUNT,
@@ -240,7 +245,7 @@ impl ChallengeConfig {
     }
 
     /// Check if this challenge is for the given date
-    pub fn is_today(&self, today: chrono::NaiveDate) -> bool {
+    pub fn is_today(&self, today: PlayerDay) -> bool {
         self.date == today
     }
 }
@@ -273,8 +278,7 @@ mod tests {
 
     #[test]
     fn test_challenge_mode_config() {
-        let mode =
-            MiniGameMode::Challenge(ChallengeConfig::for_date(chrono::Utc::now().date_naive()));
+        let mode = MiniGameMode::Challenge(ChallengeConfig::for_date(crate::testing::today()));
         assert!(mode.is_challenge());
         assert_eq!(mode.starting_lives(), 3);
         assert!(!mode.has_session_timer());
@@ -350,7 +354,7 @@ mod tests {
 
     #[test]
     fn test_challenge_seed_consistency() {
-        let date = chrono::NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+        let date = crate::time::PlayerDay::from_ymd(2025, 1, 15).unwrap();
 
         let config1 = ChallengeConfig::for_date(date);
         let config2 = ChallengeConfig::for_date(date);
@@ -361,8 +365,8 @@ mod tests {
 
     #[test]
     fn test_challenge_different_days_different_seeds() {
-        let date1 = chrono::NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
-        let date2 = chrono::NaiveDate::from_ymd_opt(2025, 1, 16).unwrap();
+        let date1 = crate::time::PlayerDay::from_ymd(2025, 1, 15).unwrap();
+        let date2 = crate::time::PlayerDay::from_ymd(2025, 1, 16).unwrap();
 
         let config1 = ChallengeConfig::for_date(date1);
         let config2 = ChallengeConfig::for_date(date2);
@@ -381,11 +385,11 @@ mod tests {
 
     #[test]
     fn test_challenge_is_today() {
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         let config = ChallengeConfig::for_date(today);
         assert!(config.is_today(today));
 
-        let past = chrono::NaiveDate::from_ymd_opt(2020, 1, 1).unwrap();
+        let past = crate::time::PlayerDay::from_ymd(2020, 1, 1).unwrap();
         let past_config = ChallengeConfig::for_date(past);
         assert!(!past_config.is_today(today));
     }

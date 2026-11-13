@@ -3,7 +3,7 @@
 //! Prevents XP farming by tracking scenario mastery and scaling rewards.
 //! Implements a three-tier mastery system: Learning → Proficient → Mastered
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -13,6 +13,7 @@ use crate::constants::{
 };
 use crate::ids::ScenarioId;
 use crate::numeric::{Rounding, scale_u64};
+use crate::time::{Moment, PlayerDay};
 
 /// Maximum recursion depth for repeat command protection
 const MAX_REPEAT_DEPTH: u32 = 100;
@@ -135,7 +136,7 @@ pub struct ScenarioCompletion {
     /// Attempts made on `last_attempt_date`; resets on a new day.
     pub attempts_today: u32,
     /// Date of the last attempt, used to detect the day change.
-    pub last_attempt_date: NaiveDate,
+    pub last_attempt_date: PlayerDay,
 }
 
 impl ScenarioCompletion {
@@ -154,18 +155,24 @@ impl ScenarioCompletion {
     /// assert_eq!(completion.best_score, 80);
     /// # Ok::<(), helix_trainer::ids::IdError>(())
     /// ```
-    pub fn new(scenario_id: ScenarioId, score: u32, xp_earned: u64, now: DateTime<Utc>) -> Self {
+    pub fn new(
+        scenario_id: ScenarioId,
+        score: u32,
+        xp_earned: u64,
+        now: impl Into<Moment>,
+    ) -> Self {
+        let now = now.into();
         let mut completion = Self {
             scenario_id,
             attempts: 0,
             best_score: 0,
             perfect_count: 0,
             total_xp_earned: 0,
-            first_attempt: now,
-            last_attempt: now,
+            first_attempt: now.instant(),
+            last_attempt: now.instant(),
             mastery_level: ScenarioMastery::Learning,
             attempts_today: 0,
-            last_attempt_date: now.date_naive(),
+            last_attempt_date: now.day(),
         };
 
         // Record the first attempt
@@ -188,7 +195,8 @@ impl ScenarioCompletion {
     /// assert_eq!(completion.best_score, 100);
     /// # Ok::<(), helix_trainer::ids::IdError>(())
     /// ```
-    pub fn record_attempt(&mut self, score: u32, xp_earned: u64, now: DateTime<Utc>) {
+    pub fn record_attempt(&mut self, score: u32, xp_earned: u64, now: impl Into<Moment>) {
+        let now = now.into();
         // Prevent infinite recursion with depth protection
         if self.attempts >= MAX_REPEAT_DEPTH {
             return;
@@ -197,7 +205,7 @@ impl ScenarioCompletion {
         // Single `now` read shared with check_and_reset_daily (previously two independent
         // Utc::now() calls, which could straddle a midnight boundary); this also fixes a
         // latent race where the daily counter reset used a different instant than the attempt.
-        self.check_and_reset_daily(now);
+        self.check_and_reset_daily(&now);
 
         // Update counters using saturating arithmetic
         self.attempts = self.attempts.saturating_add(1);
@@ -207,7 +215,7 @@ impl ScenarioCompletion {
             self.perfect_count = self.perfect_count.saturating_add(1);
         }
         self.total_xp_earned = self.total_xp_earned.saturating_add(xp_earned);
-        self.last_attempt = now;
+        self.last_attempt = now.instant();
 
         // Update mastery level
         self.update_mastery();
@@ -261,9 +269,9 @@ impl ScenarioCompletion {
     }
 
     /// Reset daily attempt counter if new day
-    fn check_and_reset_daily(&mut self, now: DateTime<Utc>) {
-        let today = now.date_naive();
-        if today != self.last_attempt_date {
+    fn check_and_reset_daily(&mut self, now: &Moment) {
+        let today = now.day();
+        if today > self.last_attempt_date {
             self.attempts_today = 0;
             self.last_attempt_date = today;
         }
@@ -343,8 +351,9 @@ impl ScenarioHistory {
         scenario_id: &ScenarioId,
         score: u32,
         base_xp: u64,
-        now: DateTime<Utc>,
+        now: impl Into<Moment>,
     ) -> u64 {
+        let now = now.into();
         // Check if we're at the limit and this is a new scenario
         if !self.completions.contains_key(scenario_id)
             && self.completions.len() >= MAX_SCENARIOS_TRACKED
@@ -689,6 +698,53 @@ mod tests {
         assert_eq!(
             completion.attempts_today, 1,
             "crossing the injected day boundary must reset the daily counter"
+        );
+    }
+
+    /// #660: the daily bucket rolls over at the player's local midnight, not UTC's.
+    #[test]
+    fn daily_bucket_rolls_over_at_local_midnight() {
+        use crate::time::Zone;
+        use chrono::FixedOffset;
+
+        let west = Zone::Fixed(FixedOffset::east_opt(-8 * 3600).unwrap());
+        let at = |rfc3339: &str| {
+            Moment::new(
+                DateTime::parse_from_rfc3339(rfc3339)
+                    .unwrap()
+                    .with_timezone(&Utc),
+                west,
+            )
+        };
+
+        // 15:30 local; 16:30 local the same evening is already the next UTC date.
+        let mut completion =
+            ScenarioCompletion::new(sid("test"), 80, 40, at("2026-01-15T23:30:00Z"));
+        completion.record_attempt(80, 40, at("2026-01-16T00:30:00Z"));
+        assert_eq!(completion.attempts_today, 2, "still the same local day");
+
+        // 09:00 local the next day.
+        completion.record_attempt(80, 40, at("2026-01-16T17:00:00Z"));
+        assert_eq!(completion.attempts_today, 1, "a new local day resets");
+    }
+
+    /// FR-003: a stored day after today counts as today and never moves backward.
+    #[test]
+    fn a_later_stored_day_is_never_reset_or_rewound() {
+        let now = DateTime::parse_from_rfc3339("2026-01-15T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut completion = ScenarioCompletion::new(sid("test"), 80, 40, now);
+        let tomorrow = completion.last_attempt_date;
+        completion.last_attempt_date = PlayerDay::from_ymd(2026, 1, 16).unwrap();
+        assert!(completion.last_attempt_date > tomorrow);
+
+        completion.record_attempt(80, 40, now);
+
+        assert_eq!(completion.attempts_today, 2);
+        assert_eq!(
+            completion.last_attempt_date,
+            PlayerDay::from_ymd(2026, 1, 16).unwrap()
         );
     }
 }

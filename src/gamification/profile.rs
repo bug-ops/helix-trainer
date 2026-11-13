@@ -1035,7 +1035,7 @@ mod tests {
         use crate::gamification::ProfileStorage;
 
         let mut profile = UserProfile::new();
-        let today = chrono::Utc::now().date_naive();
+        let today = crate::testing::today();
         profile.challenge_progress.start_attempt(today);
         profile.challenge_progress.start_attempt(today);
         profile.challenge_progress.record_result(4200, 7);

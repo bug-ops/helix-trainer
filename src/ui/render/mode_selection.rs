@@ -149,7 +149,7 @@ fn render_minigame_mode_submenu(
     frame: &mut Frame,
     parent_area: Rect,
     selection: &MiniGameModeSelection,
-    today: chrono::NaiveDate,
+    today: crate::time::PlayerDay,
     challenge_progress: &crate::gamification::ChallengeProgress,
 ) {
     const ICONS: [&str; MiniGameModeSelection::MODE_COUNT] = ["🎮", "💀", "📅"];

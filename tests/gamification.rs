@@ -45,9 +45,12 @@ fn test_complete_user_flow() {
     let registry = test_registry();
 
     // Day 1: Generate quests
-    let mut quests =
-        QuestGenerator::generate_quests(&profile, &registry, chrono::Utc::now().date_naive())
-            .quests;
+    let mut quests = QuestGenerator::generate_quests(
+        &profile,
+        &registry,
+        helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
+    )
+    .quests;
     assert_eq!(quests.len(), 3); // Beginner gets 3 quests
 
     // Complete a command quest
@@ -117,23 +120,32 @@ fn test_quest_generation_adapts_to_level() {
     // Level 1: Easy quests
     let mut profile = UserProfile::new();
     profile.level = 1;
-    let quests =
-        QuestGenerator::generate_quests(&profile, &registry, chrono::Utc::now().date_naive())
-            .quests;
+    let quests = QuestGenerator::generate_quests(
+        &profile,
+        &registry,
+        helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
+    )
+    .quests;
     assert_eq!(quests.len(), 3); // 2 easy + 1 medium
 
     // Level 10: Mixed difficulty
     profile.level = 10;
-    let quests =
-        QuestGenerator::generate_quests(&profile, &registry, chrono::Utc::now().date_naive())
-            .quests;
+    let quests = QuestGenerator::generate_quests(
+        &profile,
+        &registry,
+        helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
+    )
+    .quests;
     assert_eq!(quests.len(), 4); // 1 easy + 2 medium + 1 hard
 
     // Level 20: Hard quests
     profile.level = 20;
-    let quests =
-        QuestGenerator::generate_quests(&profile, &registry, chrono::Utc::now().date_naive())
-            .quests;
+    let quests = QuestGenerator::generate_quests(
+        &profile,
+        &registry,
+        helix_trainer::time::Moment::from(chrono::Utc::now()).day(),
+    )
+    .quests;
     assert_eq!(quests.len(), 4); // 1 medium + 2 hard + 1 exploration
 }
 
@@ -160,7 +172,7 @@ fn test_quest_type_variations() {
     let registry = test_registry();
 
     // Generate multiple times and check variety
-    let today = chrono::Utc::now().date_naive();
+    let today = helix_trainer::time::Moment::from(chrono::Utc::now()).day();
     let quests1 = QuestGenerator::generate_quests(&profile, &registry, today).quests;
     let quests2 = QuestGenerator::generate_quests(&profile, &registry, today).quests;
 

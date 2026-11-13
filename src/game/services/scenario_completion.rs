@@ -12,7 +12,7 @@ use crate::ids::{CommandId, ScenarioId};
 use crate::learning::{
     AttemptOutcome, MasteryLevel, PerformanceTracker, ReferenceTime, ScenarioMastery, Scheduler,
 };
-use chrono::{DateTime, Utc};
+use crate::time::Moment;
 use std::time::Duration;
 
 /// Result of completing a scenario
@@ -96,7 +96,7 @@ impl ScenarioCompletionService {
         scenario_id: &ScenarioId,
         score: u32,
         base_xp: u64,
-        now: DateTime<Utc>,
+        now: impl Into<Moment>,
     ) -> XPScalingResult {
         // Capture multipliers BEFORE recording (what will be applied)
         let (_pre_mastery_level, pre_mastery_factor, pre_repeat_penalty) = profile
@@ -278,6 +278,7 @@ mod tests {
     use super::*;
     use crate::game::PerformanceRating;
     use crate::testing::{cid, sid};
+    use chrono::Utc;
 
     fn create_test_feedback(score: u32, max_points: u32) -> Feedback {
         Feedback {

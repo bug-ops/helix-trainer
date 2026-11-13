@@ -1,0 +1,272 @@
+# Selection Manipulation
+# Scenarios for ';', 'Alt-;', 'Alt-,', 'Alt--', 'Alt-_', '&', 'K' and 'Alt-K'.
+
+[[scenarios]]
+id = "collapse_selection_001"
+name = "Collapse a selection to a cursor"
+description = "Use ';' to collapse the selection to a single cursor"
+
+hints = [
+    "';' drops the selection and keeps only the cursor",
+    "The cursor stays on the last character of the old selection",
+]
+
+[scenarios.setup]
+file_content = """let value = 1;"""
+selection = [0, 4, 0, 9]
+
+[scenarios.target]
+file_content = """let value = 1;"""
+cursor_position = [0, 8]
+
+[scenarios.solution]
+commands = [";"]
+description = "Press ';' to collapse the selection to its cursor"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "beginner"
+tags = ["selection", "collapse"]
+commands_taught = [";"]
+
+[[scenarios]]
+id = "flip_selections_001"
+name = "Flip the selection direction"
+description = "Use 'Alt-;' to swap the anchor and the cursor end of a selection"
+
+hints = [
+    "A motion extends the selection from its cursor end, which is the far end of the selection",
+    "'Alt-;' flips which end of the selection holds the cursor",
+    "After flipping, a backward motion grows the selection to the left",
+]
+
+[scenarios.setup]
+file_content = """let value = 1;"""
+selection = [0, 4, 0, 9]
+
+[scenarios.target]
+file_content = """let value = 1;"""
+selection = [0, 0, 0, 4]
+
+[scenarios.solution]
+commands = ["Alt-;", "b"]
+description = "Press 'Alt-;' so the cursor sits at the start of 'value', then 'b' moves it back to the previous word start"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["selection", "flip", "anchor"]
+commands_taught = ["Alt-;"]
+
+[[scenarios]]
+id = "remove_primary_selection_001"
+name = "Drop the primary selection"
+description = "Use 'Alt-,' to remove the primary selection and keep the others"
+
+hints = [
+    "'%' then 's foo' selects every 'foo'",
+    "'Alt-,' removes the primary selection only, leaving the other selections",
+]
+
+[scenarios.setup]
+file_content = """foo bar foo baz foo"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """foo bar foo baz foo"""
+selections = [[0, 8, 0, 11], [0, 16, 0, 19]]
+
+[scenarios.solution]
+commands = ["%", "s foo", "Alt-,"]
+description = "Select every 'foo', then press 'Alt-,' to drop the primary one"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["selection", "multi-cursor", "primary"]
+commands_taught = ["Alt-,"]
+
+[[scenarios]]
+id = "merge_selections_001"
+name = "Merge selections into one"
+description = "Use 'Alt--' to merge all selections into a single selection"
+
+hints = [
+    "'%' then 's foo' selects both 'foo' words",
+    "'Alt--' merges every selection into one that spans from the first to the last",
+]
+
+[scenarios.setup]
+file_content = """start foo middle foo end"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """start foo middle foo end"""
+selection = [0, 6, 0, 20]
+
+[scenarios.solution]
+commands = ["%", "s foo", "Alt--"]
+description = "Select both 'foo' words, then press 'Alt--' to merge them into one selection"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["selection", "merge", "multi-cursor"]
+commands_taught = ["Alt--"]
+
+[[scenarios]]
+id = "merge_consecutive_selections_001"
+name = "Merge adjacent selections"
+description = "Use 'Alt-_' to merge only selections that touch each other"
+
+hints = [
+    "'%' then 's [a-z]' selects every letter as its own selection",
+    "'Alt--' would merge everything, including across the space",
+    "'Alt-_' merges only the selections that touch, so each word becomes one selection",
+]
+
+[scenarios.setup]
+file_content = """abc def"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """abc def"""
+selections = [[0, 0, 0, 3], [0, 4, 0, 7]]
+
+[scenarios.solution]
+commands = ["%", "s [a-z]", "Alt-_"]
+description = "Select every letter, then press 'Alt-_' to join the touching ones into words"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["selection", "merge", "multi-cursor"]
+commands_taught = ["Alt-_"]
+
+[[scenarios]]
+id = "align_selections_001"
+name = "Align selections in columns"
+description = "Use '&' to pad text so the selections line up in a column"
+
+hints = [
+    "'%' then 's =' puts a selection on every equals sign",
+    "'&' inserts spaces so the selections start in the same column",
+]
+
+[scenarios.setup]
+file_content = """x = 1
+long_name = 2
+mid = 3"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """x         = 1
+long_name = 2
+mid       = 3"""
+selections = [[0, 10, 0, 11], [1, 10, 1, 11], [2, 10, 2, 11]]
+
+[scenarios.solution]
+commands = ["%", "s =", "&"]
+description = "Select every '=', then press '&' to align them"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "advanced"
+tags = ["selection", "align", "multi-cursor"]
+commands_taught = ["&"]
+
+[[scenarios]]
+id = "keep_selections_001"
+name = "Keep matching selections"
+description = "Use 'K' to keep only the selections that match a pattern"
+
+hints = [
+    "'%' then 's \\w+' selects every word",
+    "'K' with a pattern keeps only the selections that match it",
+]
+
+[scenarios.setup]
+file_content = """foo1 bar foo2 baz"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """foo1 bar foo2 baz"""
+selections = [[0, 0, 0, 4], [0, 9, 0, 13]]
+
+[scenarios.solution]
+commands = ["%", "s \\w+", "K foo"]
+description = "Select every word, then keep only those that match 'foo'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["selection", "keep", "regex", "multi-cursor"]
+commands_taught = ["K"]
+
+[[scenarios]]
+id = "remove_selections_001"
+name = "Remove matching selections"
+description = "Use 'Alt-K' to drop the selections that match a pattern"
+
+hints = [
+    "'%' then 's \\w+' selects every word",
+    "'Alt-K' with a pattern removes the selections that match it",
+]
+
+[scenarios.setup]
+file_content = """foo1 bar foo2 baz"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """foo1 bar foo2 baz"""
+selections = [[0, 5, 0, 8], [0, 14, 0, 17]]
+
+[scenarios.solution]
+commands = ["%", "s \\w+", "Alt-K foo"]
+description = "Select every word, then drop those that match 'foo'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["selection", "remove", "regex", "multi-cursor"]
+commands_taught = ["Alt-K"]

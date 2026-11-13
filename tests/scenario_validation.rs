@@ -223,15 +223,13 @@ fn validate_commands_ui_style(commands: &[String]) -> Result<(), String> {
             continue;
         }
 
-        // Handle "s <pattern>" / "S <pattern>" regex-selection prompt
-        // invocations - assembled atomically by `RegexPromptPending` (also
-        // not resolved char-by-char through the KeyTrie), so validate by
-        // checking the pattern compiles as a regex directly instead.
-        let regex_pattern = cmd
-            .strip_prefix(CMD_SELECT_REGEX)
-            .and_then(|rest| rest.strip_prefix(' '))
-            .or_else(|| {
-                cmd.strip_prefix(CMD_SPLIT_SELECTION)
+        // Handle "<prompt-command> <pattern>" invocations (s, S, K, Alt-K, ?) - assembled
+        // atomically by `RegexPromptPending` (not resolved char-by-char through the
+        // KeyTrie), so validate by checking the pattern compiles as a regex directly.
+        let regex_pattern = [CMD_SELECT_REGEX, CMD_SPLIT_SELECTION, "K", "Alt-K", "?"]
+            .into_iter()
+            .find_map(|prompt| {
+                cmd.strip_prefix(prompt)
                     .and_then(|rest| rest.strip_prefix(' '))
             });
         if let Some(pattern) = regex_pattern {
@@ -645,84 +643,9 @@ struct Untaught {
 /// the list can only shrink as the coverage issues land.
 const UNTAUGHT: &[Untaught] = &[
     Untaught {
-        key: "&",
-        name: "align_selections",
-        reason: "#643",
-    },
-    Untaught {
-        key: ";",
-        name: "collapse_selection",
-        reason: "#643",
-    },
-    Untaught {
-        key: "?",
-        name: "rsearch",
-        reason: "#644",
-    },
-    Untaught {
-        key: "Alt-*",
-        name: "search_selection",
-        reason: "#644",
-    },
-    Untaught {
-        key: "Alt-,",
-        name: "remove_primary_selection",
-        reason: "#643",
-    },
-    Untaught {
-        key: "Alt--",
-        name: "merge_selections",
-        reason: "#643",
-    },
-    Untaught {
-        key: "Alt-;",
-        name: "flip_selections",
-        reason: "#643",
-    },
-    Untaught {
-        key: "Alt-K",
-        name: "remove_selections",
-        reason: "#643",
-    },
-    Untaught {
-        key: "Alt-_",
-        name: "merge_consecutive_selections",
-        reason: "#643",
-    },
-    Untaught {
-        key: "Alt-`",
-        name: "switch_to_uppercase",
-        reason: "#645",
-    },
-    Untaught {
-        key: "Alt-c",
-        name: "change_selection_noyank",
-        reason: "#645",
-    },
-    Untaught {
-        key: "Alt-d",
-        name: "delete_selection_noyank",
-        reason: "#645",
-    },
-    Untaught {
         key: "Alt-x",
         name: "shrink_to_line_bounds",
         reason: "tracked by #141",
-    },
-    Untaught {
-        key: "Ctrl-c",
-        name: "toggle_comments",
-        reason: "#645",
-    },
-    Untaught {
-        key: "K",
-        name: "keep_selections",
-        reason: "#643",
-    },
-    Untaught {
-        key: "v",
-        name: "select_mode",
-        reason: "#644",
     },
     Untaught {
         key: "zb",

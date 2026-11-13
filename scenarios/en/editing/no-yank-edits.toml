@@ -1,0 +1,80 @@
+# No-Yank Edits
+# Scenarios for Alt-d and Alt-c (delete/change without touching the default register)
+
+[[scenarios]]
+id = "no_yank_delete_001"
+name = "Delete without overwriting the yank"
+description = "Yank a line, delete another with 'Alt-d', then paste the yanked line"
+
+hints = [
+    "'x' selects a line and 'y' yanks it",
+    "'d' would replace the yanked text; 'Alt-d' deletes without touching the register",
+    "'p' pastes the line that was yanked first",
+]
+
+[scenarios.setup]
+file_content = """alpha
+beta
+gamma"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """alpha
+gamma
+alpha
+"""
+selection = [2, 0, 3, 0]
+
+[scenarios.solution]
+commands = ["x", "y", "j", "x", "Alt-d", "p"]
+description = "Yank 'alpha', delete 'beta' with 'Alt-d' so the yank survives, then paste after 'gamma'"
+
+[scenarios.scoring]
+optimal_count = 6
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["delete", "register", "no-yank", "editing"]
+commands_taught = ["Alt-d", "y", "p"]
+
+[[scenarios]]
+id = "no_yank_change_001"
+name = "Change without overwriting the yank"
+description = "Yank a line, replace another with 'Alt-c', then paste the yanked line"
+
+hints = [
+    "'x' selects a line and 'y' yanks it",
+    "'c' would replace the yanked text; 'Alt-c' changes without touching the register",
+    "Type the replacement, press Escape, then 'p' pastes the yanked line",
+]
+
+[scenarios.setup]
+file_content = """alpha
+beta
+gamma"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """alpha
+X
+alpha
+gamma"""
+selection = [2, 0, 3, 0]
+
+[scenarios.solution]
+commands = ["x", "y", "j", "x", "Alt-c", "X", "Escape", "p"]
+description = "Yank 'alpha', change 'beta' to 'X' with 'Alt-c' so the yank survives, then paste after it"
+
+[scenarios.scoring]
+optimal_count = 8
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "editing"
+difficulty = "intermediate"
+tags = ["change", "register", "no-yank", "editing"]
+commands_taught = ["Alt-c", "y", "p"]

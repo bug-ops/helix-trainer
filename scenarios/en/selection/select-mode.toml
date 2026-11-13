@@ -1,0 +1,70 @@
+# Select Mode Commands
+# Scenarios for v (select mode)
+
+[[scenarios]]
+id = "select_mode_001"
+name = "Extend a selection in Select mode"
+description = "Enter Select mode with 'v', extend with a motion, then leave with Escape"
+
+hints = [
+    "'v' enters Select mode: motions extend the selection instead of moving it",
+    "'e' extends to the end of the word",
+    "Escape leaves Select mode and keeps the selection",
+]
+
+[scenarios.setup]
+file_content = """alpha beta gamma"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """alpha beta gamma"""
+selection = [0, 0, 0, 5]
+
+[scenarios.solution]
+commands = ["v", "e"]
+description = "Press 'v', then extend with 'e' to the end of 'alpha'; Escape would leave Select mode"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "beginner"
+tags = ["selection", "select-mode"]
+commands_taught = ["v", "e"]
+
+[[scenarios]]
+id = "select_mode_002"
+name = "Select two words and delete"
+description = "Combine Select mode with a delete"
+
+hints = [
+    "'v' enters Select mode",
+    "Each 'w' extends the selection by one word",
+    "'d' deletes the selection and returns to Normal mode",
+]
+
+[scenarios.setup]
+file_content = """one two three four"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """three four"""
+cursor_position = [0, 0]
+
+[scenarios.solution]
+commands = ["v", "w", "w", "d"]
+description = "Press 'v', extend with 'w' twice over 'one two ', then 'd' to delete"
+
+[scenarios.scoring]
+optimal_count = 4
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "selection"
+difficulty = "intermediate"
+tags = ["selection", "select-mode", "delete"]
+commands_taught = ["v", "w", "d"]

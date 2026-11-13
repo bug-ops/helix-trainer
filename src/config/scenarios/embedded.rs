@@ -23,12 +23,16 @@ const CLIPBOARD_YANK_PASTE: &str = include_str!("../../../scenarios/en/clipboard
 // ============================================================================
 
 const EDITING_ADVANCED: &str = include_str!("../../../scenarios/en/editing/advanced-editing.toml");
+const EDITING_COMMENTS: &str = include_str!("../../../scenarios/en/editing/comments.toml");
 const EDITING_DELETE_SELECTION: &str =
     include_str!("../../../scenarios/en/editing/delete-selection.toml");
 const EDITING_INDENTATION: &str = include_str!("../../../scenarios/en/editing/indentation.toml");
 const EDITING_INDENTATION_PYTHON: &str =
     include_str!("../../../scenarios/en/editing/indentation-python.toml");
 const EDITING_JOIN: &str = include_str!("../../../scenarios/en/editing/join.toml");
+const EDITING_INSERT_MODE: &str =
+    include_str!("../../../scenarios/en/editing/insert-mode-editing.toml");
+const EDITING_NO_YANK: &str = include_str!("../../../scenarios/en/editing/no-yank-edits.toml");
 const EDITING_SURROUND: &str = include_str!("../../../scenarios/en/editing/surround.toml");
 
 // ============================================================================
@@ -87,8 +91,12 @@ const SEARCH_BASIC: &str = include_str!("../../../scenarios/en/search/basic-sear
 const SELECTION_ADVANCED: &str =
     include_str!("../../../scenarios/en/selection/advanced-selection.toml");
 const SELECTION_LINE: &str = include_str!("../../../scenarios/en/selection/line-selection.toml");
+const SELECTION_SELECT_MODE: &str =
+    include_str!("../../../scenarios/en/selection/select-mode.toml");
 const SELECTION_ALL_REPLACE: &str =
     include_str!("../../../scenarios/en/selection/select-all-replace.toml");
+const SELECTION_MANIPULATION: &str =
+    include_str!("../../../scenarios/en/selection/selection-manipulation.toml");
 const SELECTION_TEXT_OBJECTS: &str =
     include_str!("../../../scenarios/en/selection/text-objects.toml");
 
@@ -121,10 +129,13 @@ const EN_SCENARIOS: &[&str] = &[
     CLIPBOARD_YANK_PASTE,
     // Editing
     EDITING_ADVANCED,
+    EDITING_COMMENTS,
     EDITING_DELETE_SELECTION,
     EDITING_INDENTATION,
     EDITING_INDENTATION_PYTHON,
     EDITING_JOIN,
+    EDITING_INSERT_MODE,
+    EDITING_NO_YANK,
     EDITING_SURROUND,
     // Movement
     MOVEMENT_BASIC,
@@ -155,6 +166,8 @@ const EN_SCENARIOS: &[&str] = &[
     SELECTION_ADVANCED,
     SELECTION_LINE,
     SELECTION_ALL_REPLACE,
+    SELECTION_SELECT_MODE,
+    SELECTION_MANIPULATION,
     SELECTION_TEXT_OBJECTS,
     // Writing
     WRITING_EMPHASIS,

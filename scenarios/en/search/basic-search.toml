@@ -176,3 +176,104 @@ difficulty = "beginner"
 tags = ["search", "word", "backward", "prev"]
 commands_taught = ["*", "N"]
 
+
+[[scenarios]]
+id = "search_backward_001"
+name = "Search backward"
+description = "Use '?' to search backward for a pattern from the cursor"
+
+hints = [
+    "'?' opens a backward search prompt",
+    "Type the pattern and confirm with Enter",
+    "The previous match before the cursor is selected",
+]
+
+[scenarios.setup]
+file_content = """foo bar foo baz foo"""
+cursor_position = [0, 13]
+
+[scenarios.target]
+file_content = """foo bar foo baz foo"""
+selection = [0, 8, 0, 11]
+
+[scenarios.solution]
+commands = ["? foo"]
+description = "Press '?', type 'foo' and confirm to select the match before the cursor"
+
+[scenarios.scoring]
+optimal_count = 1
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "intermediate"
+tags = ["search", "backward"]
+commands_taught = ["?"]
+
+[[scenarios]]
+id = "search_backward_002"
+name = "Backward search, then forward"
+description = "Search backward with '?', then use 'n' to go forward past the cursor"
+
+hints = [
+    "'?' searches backward and selects the previous match",
+    "'n' always searches forward, even after a backward search",
+]
+
+[scenarios.setup]
+file_content = """foo bar foo baz foo"""
+cursor_position = [0, 13]
+
+[scenarios.target]
+file_content = """foo bar foo baz foo"""
+selection = [0, 16, 0, 19]
+
+[scenarios.solution]
+commands = ["? foo", "n"]
+description = "Press '?' and confirm 'foo' to select the previous match, then 'n' to move forward to the last one"
+
+[scenarios.scoring]
+optimal_count = 2
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "intermediate"
+tags = ["search", "backward", "next"]
+commands_taught = ["?", "n"]
+
+[[scenarios]]
+id = "search_selection_001"
+name = "Search for a selection as a substring"
+description = "Use 'Alt-*' to search for the selection without word boundaries"
+
+hints = [
+    "'miw' selects the word under the cursor",
+    "'Alt-*' uses the selection as the search pattern exactly, without word boundaries",
+    "'n' jumps to the next match, even inside a longer word",
+]
+
+[scenarios.setup]
+file_content = """count discount counter"""
+cursor_position = [0, 0]
+
+[scenarios.target]
+file_content = """count discount counter"""
+selection = [0, 9, 0, 14]
+
+[scenarios.solution]
+commands = ["miw", "Alt-*", "n"]
+description = "Select 'count' with 'miw', press 'Alt-*' to search for it as a substring, then 'n' to reach the match inside 'discount'"
+
+[scenarios.scoring]
+optimal_count = 3
+max_points = 100
+tolerance = 0
+
+[scenarios.metadata]
+category = "search"
+difficulty = "intermediate"
+tags = ["search", "selection", "substring"]
+commands_taught = ["Alt-*", "n"]

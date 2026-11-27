@@ -13,6 +13,7 @@ ignore = [
     # helix-core (smartstring -> helix-core -> helix-trainer); helix-core is
     # vendored at upstream tag 25.07.1 and has no safe upgrade path off it
     "RUSTSEC-2026-0249",
+    "RUSTSEC-2026-0543"
 ]
 
 [licenses]
